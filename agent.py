@@ -2,13 +2,52 @@ import os
 import json
 import requests
 import subprocess
+import threading
 from web3 import Web3
 from dotenv import load_dotenv
 import anthropic
+from flask import Flask, jsonify
 
 load_dotenv()
 
-# Config
+# ── HEALTH SERVER ──────────────────────────
+app = Flask(__name__)
+
+@app.route("/")
+def root():
+    return jsonify({
+        "name": "Mantis Pro",
+        "status": "online",
+        "version": "1.0.0",
+        "description": "Autonomous AI agent on Abstract Chain"
+    })
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "healthy", "agent": "Mantis Pro"})
+
+@app.route("/mcp")
+def mcp():
+    return jsonify({
+        "name": "Mantis Pro",
+        "version": "1.0.0",
+        "description": "Autonomous Litany battle and trading agent on Abstract Chain",
+        "tools": [
+            {"name": "scan_market", "description": "Scan Litany card listings on OpenSea"},
+            {"name": "get_floor_price", "description": "Get current Litany card floor price"},
+            {"name": "get_wallet_status", "description": "Get wallet balance and card count"}
+        ]
+    })
+
+def run_server():
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
+
+# Start health server in background thread
+server_thread = threading.Thread(target=run_server, daemon=True)
+server_thread.start()
+
+# ── CONFIG ─────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 OPENSEA_API_KEY   = os.getenv("OPENSEA_API_KEY")
 WALLET_ADDRESS    = os.getenv("WALLET_ADDRESS")
@@ -55,8 +94,8 @@ def read_skill(filename):
     except:
         return f"[{filename} not found]"
 
-litany_skill  = read_skill("LITANY_SKILL.txt")
-opensea_skill = read_skill("OPENSEA_SKILL.txt")
+litany_skill   = read_skill("LITANY_SKILL.txt")
+opensea_skill  = read_skill("OPENSEA_SKILL.txt")
 abstract_skill = read_skill("ABSTRACT_SKILL.txt")
 
 # System prompt with all skills loaded
@@ -273,3 +312,6 @@ except Exception as e:
 separator("SESSION COMPLETE")
 print(f"Final balance: {get_eth_balance()} ETH")
 print("=" * 40)
+
+# Keep server alive after agent logic completes
+server_thread.join()
