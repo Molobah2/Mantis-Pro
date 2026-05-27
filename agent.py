@@ -144,7 +144,7 @@ def get_floor_price():
         f"https://api.opensea.io/api/v2/collections/{COLLECTION_SLUG}/stats",
         headers=headers
     ).json()
-    return stats["total"]["floor_price"]
+    return stats.get("total", {}).get("floor_price", 0)
 
 def scan_listings():
     response = requests.get(
