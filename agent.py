@@ -40,8 +40,8 @@ def mcp():
     })
 
 def run_server():
-    port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, use_reloader=False)
 
 # Start health server in background thread
 server_thread = threading.Thread(target=run_server, daemon=True)
