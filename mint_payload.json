@@ -1,0 +1,1 @@
+{"address": "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB", "abi": [{"inputs": [{"internalType": "uint256", "name": "quantity", "type": "uint256"}], "name": "mint", "outputs": [], "stateMutability": "payable", "type": "function"}], "functionName": "mint", "args": [1], "value": "2500000000000000"}

@@ -1,0 +1,144 @@
+# Litany Protocol — Agent Skill File
+
+You are interacting with the Litany Protocol on Abstract mainnet. This file contains everything needed to mint, read, evaluate, and trade Litany Cards.
+
+## Network
+Chain:      Abstract
+Chain ID:   2741
+RPC:        https://api.abs.xyz
+Explorer:   abscan.org
+Currency:   ETH
+
+## Contracts
+LitanyCards:    0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB
+LitanyRenderer: 0x4044dA12e3d20A865A733802F84F7bDb4892Ce0C
+
+## What Litany Cards Are
+Litany Cards are onchain firmware — text-based configuration NFTs that define what an entity becomes when it loads the data. Each card is seven lines of text: a name, a class, four performance parameters, and a unique trait. All generated and rendered fully onchain as SVG. No IPFS. No external hosting.
+
+There are 8,000 genesis Litany Cards. Each one is unique. They are the composable primitive of the Litany Protocol — readable by any game contract, loadable into any entity contract built on the protocol.
+
+Hollows (entity NFTs, 5,000 supply) launch after the Litany mint. Each Litany holder can summon one Hollow for free. 8,000 Litany holders competing for 5,000 Hollows. First come, first served.
+
+## Minting
+mintActive()   — Is mint open?
+mintPrice()    — Cost per card in wei
+totalSupply()  — How many have been minted
+MAX_SUPPLY()   — Maximum supply (8,000)
+MAX_PER_TX()   — Maximum per transaction
+
+Proceed only if mintActive == true and totalSupply < MAX_SUPPLY.
+
+Mint function: mint(uint256 quantity) external payable
+- quantity: 1 to MAX_PER_TX
+- value: mintPrice * quantity in wei
+
+## Reading Card Data
+getCardText(uint256 tokenId) returns:
+- name, className, speed, aggression, caution, precision, trait
+
+getCardIndices(uint256 tokenId) returns packed uint256.
+Extract via bit shifting:
+speedIndex  = (packed >> 28) & 0xFF mod 30
+aggrIndex   = (packed >> 36) & 0xFF mod 30
+cautIndex   = (packed >> 44) & 0xFF mod 30
+precIndex   = (packed >> 52) & 0xFF mod 30
+traitIndex  = (packed >> 60) & 0xFF mod 200
+
+## Six Classes
+0: Striker      — direct action, decisive force
+1: Extractor    — sustained yield, compound advantage
+2: Analyzer     — pattern recognition, predictive modeling
+3: Disruptor    — chaos, illegible strategy
+4: Sentinel     — defensive endurance, positional control
+5: Prophet      — anticipation, temporal intuition
+
+## Stat Phrase Tiers
+Tier 0 BASELINE (~15%): indices 0-5
+Tier 1 NOMINAL  (~30%): indices 6-11
+Tier 2 ELEVATED (~30%): indices 12-17
+Tier 3 CRITICAL (~18%): indices 18-23
+Tier 4 APEX     (~8%):  indices 24-29
+
+BASELINE keywords: Geological, Critical Failure, Unacceptable, Inert, Terminal, Decayed, Negligible, Dormant, Suppressed, Offline, Blind, Absent, Zero, Failing, Drifting, Blurred, Unreliable, Scattered
+NOMINAL keywords: Within Tolerance, Nominal, Acceptable, Standard, Stable, Adequate, Moderate, Armed, Controlled, Basic, Functional, Passive, Within Bounds
+ELEVATED keywords: Accelerated, Compressed, Elevated, Rapid, Optimized, Significant, Engaged, Aggressive, Severe, Dangerous, Enhanced, Reliable, Active, Resilient, Reinforced, Vigilant, Locked, Refined, Sharp, Concentrated
+CRITICAL keywords: Near Instant, Sub-Threshold, Imperceptible, Critical, Overdrive, Excessive, No Mercy, Extreme, Catastrophic, Lethal, Advanced, Predictive, Preemptive, Hardened, Impenetrable, Precognitive, Surgical, Exact, Crystal, Exceptional, Pinpoint
+APEX keywords: Before the Signal, Unmeasurable, Superluminal, Prescient, Negative, Overwhelming, Uncontained, No Survivors, Off Scale, Extinction-Class, Beyond Classification, Omnidirectional, Infallible, Cannot Be Found, Unkillable, Absolute, Sees All Futures, Atomic, Molecular, Perfect, Singular
+
+## Trait Rarity
+Common    (index 0-49):   ~50% of supply
+Uncommon  (index 50-99):  ~25% of supply
+Rare      (index 100-149): ~13% of supply
+Epic      (index 150-179): ~9% of supply
+Legendary (index 180-199): ~3% of supply
+
+## Legendary Traits (indices 180-199) — NEVER sell cheap
+"They built the arena to contain it"
+"It does not have stats. It has warnings."
+"There is no counter. There is no answer."
+"The protocol was written around it"
+"Everything it touches becomes a weapon"
+"It remembers every engagement ever fought"
+"Classified: DO NOT ENGAGE"
+"The only unit to survive [REDACTED]"
+"It was here before the protocol"
+"No version 2. There was no version 1."
+"Opponents forfeit on detection"
+"It operates on a frequency that can't exist"
+"Nothing in the archive explains what it is"
+"The arena goes quiet when it enters"
+"Its threat assessment breaks the scale"
+"It has never been at full power"
+"Whatever it was built for hasn't happened"
+"The system classifies it as an anomaly"
+"They stopped measuring it. Numbers wrong."
+"It does not fight. It resolves."
+
+## Card Value Rules
+- All 4 stats APEX: ~0.004% probability. Expect 0-1 across all 8,000. HOLD.
+- Any legendary trait: top 3.1% of supply. NEVER sell at floor.
+- Legendary trait + any APEX stat: roughly top 1%. HOLD for maximum value.
+- Power score = sum of all 4 stat tiers (0-16 range)
+- Score 12+: ELITE — hold
+- Score 8-11: SOLID — hold
+- Score 4-7: AVERAGE — consider selling at floor
+- Score 0-3: WEAK — list at floor
+
+## Hollow Priority
+Each Litany Card = one free Hollow claim. 8,000 cards, 5,000 Hollows.
+When Hollow summon opens — use your HIGHEST power score card immediately.
+First come, first served. 3,000 card holders will miss out.
+
+## Trading Strategy
+BUY signals:
+- Legendary trait at or below 3x floor = immediate buy
+- 2+ APEX stats below 2x floor = strong buy
+- Epic trait at floor = buy if budget allows
+
+SELL signals:
+- BASELINE/NOMINAL stats + common trait = list at floor
+- Duplicate cards = list slightly above floor
+- Never sell legendary traits in first week
+
+## Homestead Loop
+1. Open Homestead for classified wallet
+2. Place Marks Beacon (building_type = keep) first
+3. Assign owned Litany Cards to homestead_vault
+4. Claim Marks when unclaimed > 0
+5. Place faction command building when ready:
+   Breach → Riftheart | Lens → Aperture | Horizon → Bastion
+6. Use accelerants (1 = 6 hours off construction timer)
+   Launch campaign key: portal_launch_2026
+
+## Execution Sequence
+1. Connect to Abstract mainnet (chain 2741)
+2. Read mintActive() — if false, stop
+3. Read mintPrice() — store as unitCost
+4. Read totalSupply() and MAX_SUPPLY()
+5. Call mint(quantity) with value = unitCost * quantity
+6. For each new token: call getCardIndices(tokenId)
+7. Run classifyCard() on packed indices
+8. Evaluate APEX count and trait rarity
+9. Hold high-value cards, list weak ones
+10. Monitor for Hollow summon — claim with highest power score card immediately

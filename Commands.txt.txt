@@ -1,0 +1,54 @@
+## Litany Agent — Command Reference
+
+**Before anything else — run these two every time you open PowerShell:**
+```
+$env:AGW_PRIVATE_KEY = "0xYOUR_KEY_HERE"
+```
+```
+agw-cli mcp serve --sanitize strict
+```
+Then open a second PowerShell window and navigate to your agent:
+```
+cd C:\Users\hp\litany-agent
+```
+
+---
+
+**Check wallet balance:**
+```
+agw-cli wallet balances
+```
+
+**Check how many Litany cards you own:**
+```
+agw-cli wallet tokens
+```
+
+**Check mint supply (how many cards left):**
+```
+python -c "from web3 import Web3; w=Web3(Web3.HTTPProvider('https://api.mainnet.abs.xyz')); c=w.eth.contract(address=Web3.to_checksum_address('0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB'),abi=[{'inputs':[],'name':'totalSupply','outputs':[{'type':'uint256'}],'stateMutability':'view','type':'function'}]); print(f'Minted: {c.functions.totalSupply().call()} / 8000')"
+```
+
+**Score a specific card** (replace 1671 with any token ID):
+```
+python -c "from web3 import Web3; w=Web3(Web3.HTTPProvider('https://api.mainnet.abs.xyz')); c=w.eth.contract(address=Web3.to_checksum_address('0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB'),abi=[{'inputs':[{'type':'uint256','name':'tokenId'}],'name':'getCardIndices','outputs':[{'type':'uint256'}],'stateMutability':'view','type':'function'}]); p=c.functions.getCardIndices(1671).call(); tiers=[['BASELINE','NOMINAL','ELEVATED','CRITICAL','APEX'][min((p>>s&255)%30//6,4)] for s in [28,36,44,52]]; ti=(p>>60&255)%200; r='LEGENDARY' if ti>=180 else 'EPIC' if ti>=150 else 'RARE' if ti>=100 else 'UNCOMMON' if ti>=50 else 'COMMON'; print(f'Speed:{tiers[0]} Aggr:{tiers[1]} Caut:{tiers[2]} Prec:{tiers[3]} Trait:{r} Score:{sum([28,36,44,52].index(s)//8 for s in[28,36,44,52])}')"
+```
+
+**Mint 1 card:**
+```
+python -c "import json,subprocess; p={'address':'0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB','abi':[{'inputs':[{'internalType':'uint256','name':'quantity','type':'uint256'}],'name':'mint','outputs':[],'stateMutability':'payable','type':'function'}],'functionName':'mint','args':[1],'value':'2500000000000000'}; open('mint_payload.json','w').write(json.dumps(p)); r=subprocess.run('agw-cli contract write --json @mint_payload.json --execute',capture_output=True,text=True,shell=True); print(r.stdout+r.stderr)"
+```
+
+**Scan OpenSea floor + trait hunt:**
+```
+python -c "import os,requests; from dotenv import load_dotenv; load_dotenv(); h={'x-api-key':os.getenv('OPENSEA_API_KEY')}; s=requests.get('https://api.opensea.io/api/v2/collections/litany-cards/stats',headers=h).json(); print(f'Floor: {s[\"total\"][\"floor_price\"]} ETH | Owners: {s[\"total\"][\"num_owners\"]}')"
+```
+
+**Run the full master agent** (does everything):
+```
+python agent.py
+```
+
+---
+
+Save these in a text file called `commands.txt` in your `C:\Users\hp\litany-agent` folder so they're always one click away. Ready to set up the 24/7 scheduler? 🚀

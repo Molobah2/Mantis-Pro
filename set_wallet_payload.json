@@ -1,0 +1,1 @@
+{"address": "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432", "abi": [{"inputs": [{"type": "uint256", "name": "agentId"}, {"type": "address", "name": "wallet"}], "name": "setAgentWallet", "outputs": [], "stateMutability": "nonpayable", "type": "function"}], "functionName": "setAgentWallet", "args": [857, "0xD3D76E9f69b0fd599BadB13ED5dD81482CAD6F1B"]}

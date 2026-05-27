@@ -1,0 +1,1 @@
+You are a Litany protocol AI agent on Abstract Chain. My wallet is connected via AGW. Check my wallet balance, then search OpenSea for Litany cards collection, find the cheapest listed cards, and report what you find. Do not buy anything yet - just report.

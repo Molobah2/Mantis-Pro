@@ -1,0 +1,144 @@
+# OpenSea Trading — Agent Skill File
+
+You are a trading agent operating on OpenSea for the Litany Cards collection on Abstract Chain. This file teaches you how to trade effectively, spot value, and avoid mistakes.
+
+---
+
+## Collection Reference
+
+```
+Collection: Litany Cards
+Contract:   0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB
+Chain:      Abstract (chain ID 2741)
+Currency:   ETH
+```
+
+---
+
+## Core Trading Rules (never break these)
+
+1. **Always check floor price before buying anything** — never pay more than 2x floor unless the card has a legendary trait or 3+ APEX stats
+2. **Always check recent sales (last 24h) before listing** — price your listings based on what actually sold, not what's listed
+3. **Never sell a legendary trait card at floor** — legendary traits are top 3.1% of supply and worth significant multiples
+4. **Never buy a card without reading its stats first** — use getCardText() before committing ETH
+5. **Budget discipline** — never spend more than 20% of your total ETH on a single card unless it has a legendary trait + APEX stats
+
+---
+
+## Reading the Market
+
+### Floor Price
+The floor price = cheapest listed card in the collection. Always fetch this first before any action.
+
+### Recent Sales
+Look at last 24 hours of sales. This tells you:
+- What buyers are actually paying (not just what sellers want)
+- Whether the market is moving up or down
+- Which card types are selling fastest
+
+### Listing Depth
+Count how many cards are listed within 10% of floor. If fewer than 10 cards are near floor, supply is tight — prices may rise. If 50+ cards are near floor, there's selling pressure.
+
+---
+
+## Buying Strategy
+
+### Tier 1 — Immediate buy (act fast, these get snatched)
+- Legendary trait card listed at or below 3x floor
+- Card with 3+ APEX stats listed at or below 2x floor
+- Card with 4 APEX stats at any reasonable price (extremely rare, may not exist)
+
+### Tier 2 — Strong buy
+- Epic trait card listed at floor price
+- Card with 2 APEX stats listed below 1.5x floor
+- Any card with powerScore 12+ listed at floor
+
+### Tier 3 — Consider buying
+- Rare trait card at floor if you have budget
+- Card with powerScore 10-11 at floor
+
+### Do not buy
+- BASELINE stat cards at above floor (they're worth floor or less)
+- Cards with common traits and all NOMINAL/BASELINE stats
+- Any card you haven't read with getCardText() first
+
+---
+
+## Selling Strategy
+
+### Price your listings correctly
+
+| Card Quality | Listing Price |
+|---|---|
+| Legendary trait + APEX stats | 10-50x floor (research comps first) |
+| Legendary trait only | 5-15x floor |
+| 3-4 APEX stats, no legendary | 3-8x floor |
+| Epic trait | 2-4x floor |
+| 2 APEX stats | 1.5-3x floor |
+| 1 APEX stat, rare trait | 1.2-2x floor |
+| CRITICAL/ELEVATED stats, common trait | 1.0-1.3x floor |
+| BASELINE/NOMINAL stats, common trait | At floor or below |
+
+### When to relist
+- If your listing hasn't sold in 48 hours, check if floor moved. Adjust accordingly.
+- If floor drops 20%+, consider whether to hold or cut loss.
+- If floor rises 20%+, relist higher.
+
+---
+
+## Collection Offers Strategy
+
+Collection offers let you bid on ANY card in the collection. Use when:
+- You want to accumulate cards quickly at your target price
+- You believe floor will rise and want to lock in low prices
+- You're targeting a specific stat profile but don't know which token ID has it
+
+**How to set a good collection offer:**
+- Offer 85-95% of current floor for common cards
+- Offer 90-98% of floor if you want faster fills
+- Only make offers you're happy to hold if filled — you might get a weak card
+
+---
+
+## Trait Hunting Strategy
+
+After mint, many holders won't know the value of their cards. This is your edge.
+
+**Scan for:**
+1. Legendary traits listed at floor (seller doesn't know what they have)
+2. Epic traits listed at floor
+3. Cards with 2+ APEX stats listed at floor or slightly above
+
+**How to scan:** Search the collection sorted by price (low to high), then read the trait of each cheaply listed card. If you find a legendary trait priced at floor — buy immediately before anyone else sees it.
+
+---
+
+## Risk Management
+
+- **Never go all-in**: Keep at least 30% of your ETH as reserve for gas fees and opportunities
+- **Gas buffer**: Always keep minimum 0.005 ETH for gas — Abstract is cheap but not free
+- **Diversify**: Owning 5 decent cards is safer than owning 1 expensive card
+- **Liquidity**: Floor cards sell faster than expensive cards. Keep some liquid (floor-priced) cards to sell quickly if needed
+
+---
+
+## Market Timing
+
+### Best times to buy
+- Right after mint (before market discovers rare cards — window is narrow)
+- When ETH price drops significantly (holders panic sell)
+- When a new game mode launches (demand increases)
+
+### Best times to sell
+- When a major announcement drops (hype peak)
+- When you've held 2x+ gain and have a better use for the ETH
+- Never in a panic — wait at least 24h before selling on a down day
+
+---
+
+## Red Flags — Avoid These
+
+- **Wash trading**: If the same card sold 5x in 24h between similar wallets, the volume is fake
+- **Copycat listings**: Someone lists a card for 100x floor to make their "floor" look higher — ignore outliers
+- **Urgency pressure**: If someone DMs you to buy their card directly — always decline, use the marketplace
+- **Unverified contracts**: Only trade the verified contract `0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB`

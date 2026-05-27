@@ -1,0 +1,1 @@
+{"address": "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432", "abi": [{"inputs": [{"type": "string", "name": "agentURI"}], "name": "register", "outputs": [{"type": "uint256"}], "stateMutability": "nonpayable", "type": "function"}], "functionName": "register", "args": ["https://gist.githubusercontent.com/Molobah2/7ca6f6f5d60a548ba0e2602e19d846c8/raw/mantis-pro.json"]}

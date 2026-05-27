@@ -1,0 +1,275 @@
+import os
+import json
+import requests
+import subprocess
+from web3 import Web3
+from dotenv import load_dotenv
+import anthropic
+
+load_dotenv()
+
+# Config
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+OPENSEA_API_KEY   = os.getenv("OPENSEA_API_KEY")
+WALLET_ADDRESS    = os.getenv("WALLET_ADDRESS")
+LITANY_CONTRACT   = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"
+COLLECTION_SLUG   = "litany-cards"
+RPC_URL           = "https://api.mainnet.abs.xyz"
+MINT_PRICE_WEI    = "2500000000000000"
+MAX_SPEND_PER_RUN = 0.05
+
+client  = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+w3      = Web3(Web3.HTTPProvider(RPC_URL))
+headers = {"x-api-key": OPENSEA_API_KEY, "Content-Type": "application/json"}
+
+ABI = [
+    {
+        "inputs": [{"type": "uint256", "name": "tokenId"}],
+        "name": "getCardIndices",
+        "outputs": [{"type": "uint256", "name": ""}],
+        "stateMutability": "view", "type": "function"
+    },
+    {
+        "inputs": [{"type": "address", "name": "owner"}],
+        "name": "balanceOf",
+        "outputs": [{"type": "uint256", "name": ""}],
+        "stateMutability": "view", "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "totalSupply",
+        "outputs": [{"type": "uint256", "name": ""}],
+        "stateMutability": "view", "type": "function"
+    }
+]
+
+contract = w3.eth.contract(
+    address=Web3.to_checksum_address(LITANY_CONTRACT), abi=ABI
+)
+
+# Read skill files
+def read_skill(filename):
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            return f.read()
+    except:
+        return f"[{filename} not found]"
+
+litany_skill  = read_skill("LITANY_SKILL.txt")
+opensea_skill = read_skill("OPENSEA_SKILL.txt")
+abstract_skill = read_skill("ABSTRACT_SKILL.txt")
+
+# System prompt with all skills loaded
+SYSTEM_PROMPT = f"""You are a Litany Protocol AI agent on Abstract Chain.
+
+Before doing ANYTHING, you have read and fully understand these three skill files. Apply this knowledge automatically to every task without being asked.
+
+=== LITANY SKILL ===
+{litany_skill}
+
+=== OPENSEA SKILL ===
+{opensea_skill}
+
+=== ABSTRACT SKILL ===
+{abstract_skill}
+
+You are an expert on Litany cards, hollows, trading, and the Abstract blockchain. Use this knowledge in every decision you make. Respond with a JSON object only. No explanation. No markdown.
+Keys: mint (bool), reason (string), alerts (list of token ids to flag)"""
+
+LEGENDARY_TRAITS = [
+    "They built the arena to contain it",
+    "It does not have stats. It has warnings.",
+    "There is no counter. There is no answer.",
+    "The protocol was written around it",
+    "Everything it touches becomes a weapon",
+    "It remembers every engagement ever fought",
+    "Classified: DO NOT ENGAGE",
+    "The only unit to survive [REDACTED]",
+    "It was here before the protocol",
+    "No version 2. There was no version 1.",
+    "Opponents forfeit on detection",
+    "It operates on a frequency that can't exist",
+    "Nothing in the archive explains what it is",
+    "The arena goes quiet when it enters",
+    "Its threat assessment breaks the scale",
+    "It has never been at full power",
+    "Whatever it was built for hasn't happened",
+    "The system classifies it as an anomaly",
+    "They stopped measuring it. Numbers wrong.",
+    "It does not fight. It resolves."
+]
+
+def separator(title):
+    print("\n" + "=" * 40)
+    print(title)
+    print("=" * 40)
+
+def get_eth_balance():
+    balance_wei = w3.eth.get_balance(
+        Web3.to_checksum_address(WALLET_ADDRESS)
+    )
+    return round(w3.from_wei(balance_wei, "ether"), 6)
+
+def get_card_count():
+    return contract.functions.balanceOf(
+        Web3.to_checksum_address(WALLET_ADDRESS)
+    ).call()
+
+def get_total_supply():
+    return contract.functions.totalSupply().call()
+
+def score_card(token_id):
+    packed   = contract.functions.getCardIndices(token_id).call()
+    speed_i  = ((packed >> 28) & 0xFF) % 30
+    aggr_i   = ((packed >> 36) & 0xFF) % 30
+    caut_i   = ((packed >> 44) & 0xFF) % 30
+    prec_i   = ((packed >> 52) & 0xFF) % 30
+    trait_i  = ((packed >> 60) & 0xFF) % 200
+    tier     = lambda i: i // 6
+    tiers    = [tier(speed_i), tier(aggr_i), tier(caut_i), tier(prec_i)]
+    if trait_i >= 180:   rarity = "LEGENDARY"
+    elif trait_i >= 150: rarity = "EPIC"
+    elif trait_i >= 100: rarity = "RARE"
+    elif trait_i >= 50:  rarity = "UNCOMMON"
+    else:                rarity = "COMMON"
+    return {
+        "power_score": sum(tiers),
+        "apex_count":  sum(1 for t in tiers if t == 4),
+        "trait":       rarity,
+        "trait_index": trait_i
+    }
+
+def get_floor_price():
+    stats = requests.get(
+        f"https://api.opensea.io/api/v2/collections/{COLLECTION_SLUG}/stats",
+        headers=headers
+    ).json()
+    return stats["total"]["floor_price"]
+
+def scan_listings():
+    response = requests.get(
+        f"https://api.opensea.io/api/v2/listings/collection/{COLLECTION_SLUG}/best",
+        headers=headers,
+        params={"limit": 50}
+    ).json()
+    results = []
+    if "listings" in response:
+        for listing in response["listings"]:
+            try:
+                price_wei = int(listing["price"]["current"]["value"])
+                price_eth = price_wei / 10**18
+                token_id  = int(listing["protocol_data"]["parameters"]["offer"][0]["identifierOrCriteria"])
+                card      = score_card(token_id)
+                results.append({
+                    "token_id":    token_id,
+                    "price_eth":   price_eth,
+                    "power_score": card["power_score"],
+                    "trait":       card["trait"],
+                    "apex_count":  card["apex_count"]
+                })
+            except:
+                pass
+    return results
+
+def mint_card():
+    payload = {
+        "address": LITANY_CONTRACT,
+        "abi": [{
+            "inputs": [{"internalType": "uint256", "name": "quantity", "type": "uint256"}],
+            "name": "mint", "outputs": [],
+            "stateMutability": "payable", "type": "function"
+        }],
+        "functionName": "mint",
+        "args": [1],
+        "value": MINT_PRICE_WEI
+    }
+    with open("mint_payload.json", "w") as f:
+        json.dump(payload, f)
+    result = subprocess.run(
+        "agw-cli contract write --json @mint_payload.json --execute",
+        capture_output=True, text=True, shell=True
+    )
+    return result.stdout + result.stderr
+
+def ask_claude(situation):
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1000,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {"role": "user", "content": situation}
+        ]
+    )
+    text = response.content[0].text
+    text = text.replace("```json", "").replace("```", "").strip()
+    return json.loads(text)
+
+# ── MAIN LOOP ──────────────────────────────
+separator("LITANY MASTER AGENT — SESSION START")
+print("Reading skill files...")
+print(f"  LITANY_SKILL.txt:   {'OK' if litany_skill != '[LITANY_SKILL.txt not found]' else 'MISSING'}")
+print(f"  OPENSEA_SKILL.txt:  {'OK' if opensea_skill != '[OPENSEA_SKILL.txt not found]' else 'MISSING'}")
+print(f"  ABSTRACT_SKILL.txt: {'OK' if abstract_skill != '[ABSTRACT_SKILL.txt not found]' else 'MISSING'}")
+
+balance   = get_eth_balance()
+cards     = get_card_count()
+supply    = get_total_supply()
+floor     = get_floor_price()
+listings  = scan_listings()
+remaining = 8000 - supply
+
+separator("WALLET & MARKET STATUS")
+print(f"ETH balance:     {balance} ETH")
+print(f"Cards owned:     {cards}")
+print(f"Supply minted:   {supply} / 8000")
+print(f"Cards remaining: {remaining}")
+print(f"Floor price:     {floor} ETH")
+print(f"Listings found:  {len(listings)}")
+
+separator("MARKET SCAN RESULTS")
+alerts = []
+for card in listings:
+    flag = ""
+    if card["trait"] == "LEGENDARY":
+        flag = "🚨 BUY NOW"
+        alerts.append(card)
+    elif card["trait"] == "EPIC":
+        flag = "💜 STRONG BUY"
+        alerts.append(card)
+    elif card["apex_count"] >= 2:
+        flag = "⚡ CONSIDER"
+    print(f"Card #{card['token_id']} — {card['price_eth']:.4f} ETH — {card['trait']} trait — Score {card['power_score']}/16 {flag}")
+
+separator("AI DECISION")
+situation = f"""
+Current wallet: {balance} ETH
+Cards owned: {cards}
+Supply minted: {supply}/8000 ({remaining} remaining)
+Floor price: {floor} ETH
+Mint price: 0.0025 ETH
+Max spend this run: {MAX_SPEND_PER_RUN} ETH
+Listings on market: {json.dumps(listings, indent=2)}
+Alerts: {len(alerts)} high-value cards spotted
+Should I mint a new card right now? Consider balance, supply, and market conditions.
+"""
+
+try:
+    decision = ask_claude(situation)
+    print(f"Mint recommendation: {decision['mint']}")
+    print(f"Reason: {decision['reason']}")
+    if decision.get("alerts"):
+        print(f"Flagged cards: {decision['alerts']}")
+
+    if decision["mint"] and balance >= 0.003:
+        separator("MINTING NEW CARD")
+        result = mint_card()
+        print(result)
+    else:
+        separator("NO MINT THIS SESSION")
+        print("Conditions not met or AI advised against minting.")
+except Exception as e:
+    print(f"AI decision error: {e}")
+
+separator("SESSION COMPLETE")
+print(f"Final balance: {get_eth_balance()} ETH")
+print("=" * 40)

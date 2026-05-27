@@ -1,0 +1,17 @@
+2026/05/26-19:06:47.919 2ff4 Reusing MANIFEST C:\Users\hp\litany-agent\browser-profile\Default\Local Storage\leveldb/MANIFEST-000001
+2026/05/26-19:06:47.925 2ff4 Recovering log #2076
+2026/05/26-19:06:47.927 2ff4 Level-0 table #2079: started
+2026/05/26-19:06:47.936 2ff4 Level-0 table #2079: 48195 bytes OK
+2026/05/26-19:06:47.940 2ff4 Delete type=0 #2076
+2026/05/26-19:07:47.958 7510 Level-0 table #2082: started
+2026/05/26-19:07:47.990 7510 Level-0 table #2082: 48834 bytes OK
+2026/05/26-19:07:47.995 7510 Delete type=0 #2080
+2026/05/26-19:07:47.996 7510 Compacting 4@0 + 1@1 files
+2026/05/26-19:07:48.008 7510 Generated table #2083@0: 31 keys, 53763 bytes
+2026/05/26-19:07:48.009 7510 Compacted 4@0 + 1@1 files => 53763 bytes
+2026/05/26-19:07:48.010 7510 compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/05/26-19:07:48.012 7510 Delete type=2 #2073
+2026/05/26-19:07:48.012 7510 Delete type=2 #2075
+2026/05/26-19:07:48.012 7510 Delete type=2 #2077
+2026/05/26-19:07:48.012 7510 Delete type=2 #2079
+2026/05/26-19:07:48.012 7510 Delete type=2 #2082
