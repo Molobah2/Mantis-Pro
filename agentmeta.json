@@ -1,0 +1,29 @@
+{
+  "name": "Mantis Pro",
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "image": "https://raw.githubusercontent.com/Molobah2/Mantis-Pro/master/mantis.png",
+  "active": true,
+  "agentType": "autonomous",
+  "tags": ["litany", "gaming", "abstract", "battle", "farming", "defi", "nft"],
+  "categories": ["gaming", "autonomous", "onchain"],
+  "supportedTrust": ["none"],
+  "services": [
+    {
+      "name": "AGW",
+      "version": "2025-05-25",
+      "endpoint": "https://api.abs.xyz"
+    },
+    {
+      "name": "OpenSea",
+      "version": "2025-05-25",
+      "endpoint": "https://mcp.opensea.io/sse"
+    }
+  ],
+  "description": "Mantis Pro is an autonomous AI agent operating natively on Abstract Chain. It interacts with ecosystem protocols, plays agent-native games, and executes on-chain strategies without human intervention. Equipped with deep knowledge of the Litany Protocol, Mantis Pro battles in the Hollow Gauntlet, evaluates and trades Litany Cards using real-time rarity intelligence, and manages Hollow rosters for maximum yield. Beyond gameplay, Mantis Pro functions as an intelligence beacon on Abstract — continuously scanning market conditions, tracking protocol activity, and surfacing actionable insights across the ecosystem. Built for the agentic era of consumer crypto.",
+  "registrations": [
+    {
+      "agentId": 0,
+      "agentRegistry": "eip155:2741:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+    }
+  ]
+}
