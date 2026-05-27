@@ -3,6 +3,7 @@ import json
 import requests
 import subprocess
 import threading
+import time
 from web3 import Web3
 from dotenv import load_dotenv
 import anthropic
@@ -10,7 +11,7 @@ from flask import Flask, jsonify
 
 load_dotenv()
 
-# ── HEALTH SERVER ──────────────────────────
+# ── FLASK HEALTH SERVER ─────────────────────
 app = Flask(__name__)
 
 @app.route("/")
@@ -39,15 +40,7 @@ def mcp():
         ]
     })
 
-def run_server():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, use_reloader=False)
-
-# Start health server in background thread
-server_thread = threading.Thread(target=run_server, daemon=True)
-server_thread.start()
-
-# ── CONFIG ─────────────────────────────────
+# ── CONFIG ──────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 OPENSEA_API_KEY   = os.getenv("OPENSEA_API_KEY")
 WALLET_ADDRESS    = os.getenv("WALLET_ADDRESS")
@@ -86,7 +79,6 @@ contract = w3.eth.contract(
     address=Web3.to_checksum_address(LITANY_CONTRACT), abi=ABI
 )
 
-# Read skill files
 def read_skill(filename):
     try:
         with open(filename, "r", encoding="utf-8") as f:
@@ -98,7 +90,6 @@ litany_skill   = read_skill("LITANY_SKILL.txt")
 opensea_skill  = read_skill("OPENSEA_SKILL.txt")
 abstract_skill = read_skill("ABSTRACT_SKILL.txt")
 
-# System prompt with all skills loaded
 SYSTEM_PROMPT = f"""You are a Litany Protocol AI agent on Abstract Chain.
 
 Before doing ANYTHING, you have read and fully understand these three skill files. Apply this knowledge automatically to every task without being asked.
@@ -144,28 +135,24 @@ def separator(title):
     print("=" * 40)
 
 def get_eth_balance():
-    balance_wei = w3.eth.get_balance(
-        Web3.to_checksum_address(WALLET_ADDRESS)
-    )
+    balance_wei = w3.eth.get_balance(Web3.to_checksum_address(WALLET_ADDRESS))
     return round(w3.from_wei(balance_wei, "ether"), 6)
 
 def get_card_count():
-    return contract.functions.balanceOf(
-        Web3.to_checksum_address(WALLET_ADDRESS)
-    ).call()
+    return contract.functions.balanceOf(Web3.to_checksum_address(WALLET_ADDRESS)).call()
 
 def get_total_supply():
     return contract.functions.totalSupply().call()
 
 def score_card(token_id):
-    packed   = contract.functions.getCardIndices(token_id).call()
-    speed_i  = ((packed >> 28) & 0xFF) % 30
-    aggr_i   = ((packed >> 36) & 0xFF) % 30
-    caut_i   = ((packed >> 44) & 0xFF) % 30
-    prec_i   = ((packed >> 52) & 0xFF) % 30
-    trait_i  = ((packed >> 60) & 0xFF) % 200
-    tier     = lambda i: i // 6
-    tiers    = [tier(speed_i), tier(aggr_i), tier(caut_i), tier(prec_i)]
+    packed  = contract.functions.getCardIndices(token_id).call()
+    speed_i = ((packed >> 28) & 0xFF) % 30
+    aggr_i  = ((packed >> 36) & 0xFF) % 30
+    caut_i  = ((packed >> 44) & 0xFF) % 30
+    prec_i  = ((packed >> 52) & 0xFF) % 30
+    trait_i = ((packed >> 60) & 0xFF) % 200
+    tier    = lambda i: i // 6
+    tiers   = [tier(speed_i), tier(aggr_i), tier(caut_i), tier(prec_i)]
     if trait_i >= 180:   rarity = "LEGENDARY"
     elif trait_i >= 150: rarity = "EPIC"
     elif trait_i >= 100: rarity = "RARE"
@@ -235,52 +222,51 @@ def ask_claude(situation):
         model="claude-sonnet-4-6",
         max_tokens=1000,
         system=SYSTEM_PROMPT,
-        messages=[
-            {"role": "user", "content": situation}
-        ]
+        messages=[{"role": "user", "content": situation}]
     )
     text = response.content[0].text
     text = text.replace("```json", "").replace("```", "").strip()
     return json.loads(text)
 
-# ── MAIN LOOP ──────────────────────────────
-separator("LITANY MASTER AGENT — SESSION START")
-print("Reading skill files...")
-print(f"  LITANY_SKILL.txt:   {'OK' if litany_skill != '[LITANY_SKILL.txt not found]' else 'MISSING'}")
-print(f"  OPENSEA_SKILL.txt:  {'OK' if opensea_skill != '[OPENSEA_SKILL.txt not found]' else 'MISSING'}")
-print(f"  ABSTRACT_SKILL.txt: {'OK' if abstract_skill != '[ABSTRACT_SKILL.txt not found]' else 'MISSING'}")
+# ── AGENT SESSION ───────────────────────────
+def agent_session():
+    separator("LITANY MASTER AGENT — SESSION START")
+    print("Reading skill files...")
+    print(f"  LITANY_SKILL.txt:   {'OK' if litany_skill != '[LITANY_SKILL.txt not found]' else 'MISSING'}")
+    print(f"  OPENSEA_SKILL.txt:  {'OK' if opensea_skill != '[OPENSEA_SKILL.txt not found]' else 'MISSING'}")
+    print(f"  ABSTRACT_SKILL.txt: {'OK' if abstract_skill != '[ABSTRACT_SKILL.txt not found]' else 'MISSING'}")
 
-balance   = get_eth_balance()
-cards     = get_card_count()
-supply    = get_total_supply()
-floor     = get_floor_price()
-listings  = scan_listings()
-remaining = 8000 - supply
+    balance   = get_eth_balance()
+    cards     = get_card_count()
+    supply    = get_total_supply()
+    floor     = get_floor_price()
+    listings  = scan_listings()
+    remaining = 8000 - supply
 
-separator("WALLET & MARKET STATUS")
-print(f"ETH balance:     {balance} ETH")
-print(f"Cards owned:     {cards}")
-print(f"Supply minted:   {supply} / 8000")
-print(f"Cards remaining: {remaining}")
-print(f"Floor price:     {floor} ETH")
-print(f"Listings found:  {len(listings)}")
+    separator("WALLET & MARKET STATUS")
+    print(f"ETH balance:     {balance} ETH")
+    print(f"Cards owned:     {cards}")
+    print(f"Supply minted:   {supply} / 8000")
+    print(f"Cards remaining: {remaining}")
+    print(f"Floor price:     {floor} ETH")
+    print(f"Listings found:  {len(listings)}")
 
-separator("MARKET SCAN RESULTS")
-alerts = []
-for card in listings:
-    flag = ""
-    if card["trait"] == "LEGENDARY":
-        flag = "🚨 BUY NOW"
-        alerts.append(card)
-    elif card["trait"] == "EPIC":
-        flag = "💜 STRONG BUY"
-        alerts.append(card)
-    elif card["apex_count"] >= 2:
-        flag = "⚡ CONSIDER"
-    print(f"Card #{card['token_id']} — {card['price_eth']:.4f} ETH — {card['trait']} trait — Score {card['power_score']}/16 {flag}")
+    separator("MARKET SCAN RESULTS")
+    alerts = []
+    for card in listings:
+        flag = ""
+        if card["trait"] == "LEGENDARY":
+            flag = "BUY NOW"
+            alerts.append(card)
+        elif card["trait"] == "EPIC":
+            flag = "STRONG BUY"
+            alerts.append(card)
+        elif card["apex_count"] >= 2:
+            flag = "CONSIDER"
+        print(f"Card #{card['token_id']} — {card['price_eth']:.4f} ETH — {card['trait']} trait — Score {card['power_score']}/16 {flag}")
 
-separator("AI DECISION")
-situation = f"""
+    separator("AI DECISION")
+    situation = f"""
 Current wallet: {balance} ETH
 Cards owned: {cards}
 Supply minted: {supply}/8000 ({remaining} remaining)
@@ -291,27 +277,45 @@ Listings on market: {json.dumps(listings, indent=2)}
 Alerts: {len(alerts)} high-value cards spotted
 Should I mint a new card right now? Consider balance, supply, and market conditions.
 """
+    try:
+        decision = ask_claude(situation)
+        print(f"Mint recommendation: {decision['mint']}")
+        print(f"Reason: {decision['reason']}")
+        if decision.get("alerts"):
+            print(f"Flagged cards: {decision['alerts']}")
 
-try:
-    decision = ask_claude(situation)
-    print(f"Mint recommendation: {decision['mint']}")
-    print(f"Reason: {decision['reason']}")
-    if decision.get("alerts"):
-        print(f"Flagged cards: {decision['alerts']}")
+        if decision["mint"] and balance >= 0.003:
+            separator("MINTING NEW CARD")
+            result = mint_card()
+            print(result)
+        else:
+            separator("NO MINT THIS SESSION")
+            print("Conditions not met or AI advised against minting.")
+    except Exception as e:
+        print(f"AI decision error: {e}")
 
-    if decision["mint"] and balance >= 0.003:
-        separator("MINTING NEW CARD")
-        result = mint_card()
-        print(result)
-    else:
-        separator("NO MINT THIS SESSION")
-        print("Conditions not met or AI advised against minting.")
-except Exception as e:
-    print(f"AI decision error: {e}")
+    separator("SESSION COMPLETE")
+    print(f"Final balance: {get_eth_balance()} ETH")
+    print("=" * 40)
 
-separator("SESSION COMPLETE")
-print(f"Final balance: {get_eth_balance()} ETH")
-print("=" * 40)
+# ── AGENT LOOP (background thread) ──────────
+def run_agent():
+    # Wait for Flask to fully start first
+    time.sleep(3)
+    while True:
+        try:
+            agent_session()
+        except Exception as e:
+            print(f"Agent loop error: {e}")
+        print("Sleeping 30 minutes before next session...")
+        time.sleep(30 * 60)
 
-# Keep server alive after agent logic completes
-server_thread.join()
+# Start agent in background
+agent_thread = threading.Thread(target=run_agent, daemon=True)
+agent_thread.start()
+
+# ── START FLASK (main process, keeps app alive) ──
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    print(f"Starting Mantis Pro server on port {port}")
+    app.run(host="0.0.0.0", port=port, use_reloader=False)
