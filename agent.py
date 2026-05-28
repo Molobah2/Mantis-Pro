@@ -47,8 +47,9 @@ def metadata():
 # ── CONFIG ──────────────────────────────────
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
 OPENSEA_API_KEY    = os.getenv("OPENSEA_API_KEY")
-WALLET_ADDRESS     = os.getenv("WALLET_ADDRESS")
-OWNER_PRIVATE_KEY  = os.getenv("OWNER_PRIVATE_KEY")
+WALLET_ADDRESS      = os.getenv("WALLET_ADDRESS")
+OWNER_PRIVATE_KEY   = os.getenv("OWNER_PRIVATE_KEY")
+CREATOR_PRIVATE_KEY = os.getenv("CREATOR_PRIVATE_KEY")
 LITANY_CONTRACT    = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"
 REGISTRY_CONTRACT  = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
 COLLECTION_SLUG    = "litany-cards"
@@ -136,26 +137,26 @@ AGENT_METADATA = {
 
 def update_agent_uri():
     try:
-        if not OWNER_PRIVATE_KEY:
-            print("No private key set, skipping URI update")
+        if not CREATOR_PRIVATE_KEY:
+            print("No creator key set, skipping URI update")
             return
 
-        owner_account = w3.eth.account.from_key(OWNER_PRIVATE_KEY)
-        owner_address = owner_account.address
-        print(f"Updating agent URI from wallet: {owner_address}")
+        creator_account = w3.eth.account.from_key(CREATOR_PRIVATE_KEY)
+        creator_address = creator_account.address
+        print(f"Updating agent URI from creator wallet: {creator_address}")
 
         uri = "https://mantis-pro-production.up.railway.app/metadata"
 
-        nonce = w3.eth.get_transaction_count(owner_address)
+        nonce = w3.eth.get_transaction_count(creator_address)
         tx = registry.functions.setAgentURI(AGENT_ID, uri).build_transaction({
-            'from': owner_address,
+            'from': creator_address,
             'nonce': nonce,
             'gas': 200000,
             'gasPrice': w3.eth.gas_price,
             'chainId': CHAIN_ID
         })
 
-        signed = w3.eth.account.sign_transaction(tx, OWNER_PRIVATE_KEY)
+        signed = w3.eth.account.sign_transaction(tx, CREATOR_PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
         print(f"Agent URI updated! TX: {tx_hash.hex()}")
