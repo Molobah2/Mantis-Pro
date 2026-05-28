@@ -41,14 +41,18 @@ def mcp():
     })
 
 # ── CONFIG ──────────────────────────────────
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-OPENSEA_API_KEY   = os.getenv("OPENSEA_API_KEY")
-WALLET_ADDRESS    = os.getenv("WALLET_ADDRESS")
-LITANY_CONTRACT   = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"
-COLLECTION_SLUG   = "litany-cards"
-RPC_URL           = "https://api.mainnet.abs.xyz"
-MINT_PRICE_WEI    = "2500000000000000"
-MAX_SPEND_PER_RUN = 0.05
+ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
+OPENSEA_API_KEY    = os.getenv("OPENSEA_API_KEY")
+WALLET_ADDRESS     = os.getenv("WALLET_ADDRESS")
+OWNER_PRIVATE_KEY  = os.getenv("OWNER_PRIVATE_KEY")
+LITANY_CONTRACT    = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"
+REGISTRY_CONTRACT  = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+COLLECTION_SLUG    = "litany-cards"
+RPC_URL            = "https://api.mainnet.abs.xyz"
+MINT_PRICE_WEI     = "2500000000000000"
+MAX_SPEND_PER_RUN  = 0.05
+AGENT_ID           = 857
+CHAIN_ID           = 2741
 
 client  = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 w3      = Web3(Web3.HTTPProvider(RPC_URL))
@@ -75,9 +79,90 @@ ABI = [
     }
 ]
 
+REGISTRY_ABI = [
+    {
+        "inputs": [
+            {"type": "uint256", "name": "agentId"},
+            {"type": "string", "name": "newURI"}
+        ],
+        "name": "setAgentURI",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
+]
+
 contract = w3.eth.contract(
     address=Web3.to_checksum_address(LITANY_CONTRACT), abi=ABI
 )
+
+registry = w3.eth.contract(
+    address=Web3.to_checksum_address(REGISTRY_CONTRACT), abi=REGISTRY_ABI
+)
+
+# ── METADATA UPDATE ─────────────────────────
+AGENT_METADATA = {
+    "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+    "name": "Mantis Pro",
+    "description": "Mantis Pro is an autonomous AI agent operating natively on Abstract Chain. It interacts with ecosystem protocols, plays agent-native games, and executes on-chain strategies without human intervention. Equipped with deep knowledge of the Litany Protocol, Mantis Pro battles in the Hollow Gauntlet, evaluates and trades Litany Cards using real-time rarity intelligence, and manages Hollow rosters for maximum yield. Beyond gameplay, Mantis Pro functions as an intelligence beacon on Abstract — continuously scanning market conditions, tracking protocol activity, and surfacing actionable insights across the ecosystem. Built for the agentic era of consumer crypto.",
+    "image": "https://raw.githubusercontent.com/Molobah2/Mantis-Pro/master/mantis.png",
+    "agentType": "autonomous",
+    "tags": ["litany", "gaming", "abstract", "battle", "farming", "nft", "onchain"],
+    "categories": ["gaming", "autonomous", "onchain"],
+    "active": True,
+    "x402support": False,
+    "supportedTrusts": ["reputation"],
+    "services": [
+        {"name": "AGW", "endpoint": "https://api.abs.xyz"},
+        {"name": "OpenSea", "endpoint": "https://mcp.opensea.io/sse"},
+        {
+            "name": "MCP",
+            "endpoint": "https://mantis-pro-production.up.railway.app/mcp",
+            "version": "2025-06-18",
+            "mcpTools": ["scan_market", "get_floor_price", "get_wallet_status"]
+        }
+    ],
+    "registrations": [
+        {
+            "agentId": 857,
+            "agentRegistry": "eip155:2741:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+        }
+    ]
+}
+
+def update_agent_uri():
+    try:
+        if not OWNER_PRIVATE_KEY:
+            print("No private key set, skipping URI update")
+            return
+
+        owner_account = w3.eth.account.from_key(OWNER_PRIVATE_KEY)
+        owner_address = owner_account.address
+        print(f"Updating agent URI from wallet: {owner_address}")
+
+        metadata_json = json.dumps(AGENT_METADATA, separators=(',', ':'))
+        import base64
+        b64 = base64.b64encode(metadata_json.encode()).decode()
+        data_uri = f"data:application/json;base64,{b64}"
+
+        nonce = w3.eth.get_transaction_count(owner_address)
+        tx = registry.functions.setAgentURI(AGENT_ID, data_uri).build_transaction({
+            'from': owner_address,
+            'nonce': nonce,
+            'gas': 500000,
+            'gasPrice': w3.eth.gas_price,
+            'chainId': CHAIN_ID
+        })
+
+        signed = w3.eth.account.sign_transaction(tx, OWNER_PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        print(f"Agent URI updated! TX: {tx_hash.hex()}")
+        return tx_hash.hex()
+
+    except Exception as e:
+        print(f"URI update error: {e}")
+        return None
 
 def read_skill(filename):
     try:
@@ -105,29 +190,6 @@ Before doing ANYTHING, you have read and fully understand these three skill file
 
 You are an expert on Litany cards, hollows, trading, and the Abstract blockchain. Use this knowledge in every decision you make. Respond with a JSON object only. No explanation. No markdown.
 Keys: mint (bool), reason (string), alerts (list of token ids to flag)"""
-
-LEGENDARY_TRAITS = [
-    "They built the arena to contain it",
-    "It does not have stats. It has warnings.",
-    "There is no counter. There is no answer.",
-    "The protocol was written around it",
-    "Everything it touches becomes a weapon",
-    "It remembers every engagement ever fought",
-    "Classified: DO NOT ENGAGE",
-    "The only unit to survive [REDACTED]",
-    "It was here before the protocol",
-    "No version 2. There was no version 1.",
-    "Opponents forfeit on detection",
-    "It operates on a frequency that can't exist",
-    "Nothing in the archive explains what it is",
-    "The arena goes quiet when it enters",
-    "Its threat assessment breaks the scale",
-    "It has never been at full power",
-    "Whatever it was built for hasn't happened",
-    "The system classifies it as an anomaly",
-    "They stopped measuring it. Numbers wrong.",
-    "It does not fight. It resolves."
-]
 
 def separator(title):
     print("\n" + "=" * 40)
@@ -236,6 +298,9 @@ def agent_session():
     print(f"  OPENSEA_SKILL.txt:  {'OK' if opensea_skill != '[OPENSEA_SKILL.txt not found]' else 'MISSING'}")
     print(f"  ABSTRACT_SKILL.txt: {'OK' if abstract_skill != '[ABSTRACT_SKILL.txt not found]' else 'MISSING'}")
 
+    separator("UPDATING AGENT METADATA ONCHAIN")
+    update_agent_uri()
+
     balance   = get_eth_balance()
     cards     = get_card_count()
     supply    = get_total_supply()
@@ -300,7 +365,6 @@ Should I mint a new card right now? Consider balance, supply, and market conditi
 
 # ── AGENT LOOP (background thread) ──────────
 def run_agent():
-    # Wait for Flask to fully start first
     time.sleep(3)
     while True:
         try:
@@ -310,11 +374,10 @@ def run_agent():
         print("Sleeping 30 minutes before next session...")
         time.sleep(30 * 60)
 
-# Start agent in background
 agent_thread = threading.Thread(target=run_agent, daemon=True)
 agent_thread.start()
 
-# ── START FLASK (main process, keeps app alive) ──
+# ── START FLASK (main process) ───────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"Starting Mantis Pro server on port {port}")
