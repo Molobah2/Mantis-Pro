@@ -1,18 +1,16 @@
 """
 bunny_agent.py — Bunny Button session logic for Mantis Pro
 ----------------------------------------------------------
-Sends an email alert to smolobah21@gmail.com when energy is full.
+Uses Resend API for email alerts (works on Railway — HTTPS only).
 
 Required Railway env vars:
     BUNNY_SESSION_COOKIE   — session cookie from bunnybutton.xyz
-    ALERT_EMAIL_FROM       — Gmail address to send from
-    ALERT_EMAIL_PASSWORD   — Gmail App Password (16 chars)
+    RESEND_API_KEY         — from resend.com dashboard
 """
 
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import json
+import urllib.request
 from bunny_button import BunnyButton, RateLimitError, AuthError
 
 ALERT_TO = "smolobah21@gmail.com"
@@ -23,49 +21,53 @@ def separator(label=""):
 
 
 def send_email_alert(subject: str, body: str):
-    sender = os.environ.get("ALERT_EMAIL_FROM")
-    password = os.environ.get("ALERT_EMAIL_PASSWORD")
+    api_key = os.environ.get("RESEND_API_KEY")
 
-    if not sender or not password:
-        print("  [Email] ALERT_EMAIL_FROM or ALERT_EMAIL_PASSWORD not set — skipping email.")
+    if not api_key:
+        print("  [Email] RESEND_API_KEY not set — skipping email.")
         return
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = sender
-        msg["To"] = ALERT_TO
-
-        # Plain text version
-        text_part = MIMEText(body, "plain")
-
-        # HTML version
-        html_body = f"""
-        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;background:#0f1a0f;border-radius:12px;border:1px solid #2a5a2a;">
-            <div style="text-align:center;margin-bottom:20px;">
-                <span style="font-size:36px;">🥕</span>
-                <h2 style="color:#7fff7f;margin:8px 0;font-size:20px;">Mantis Pro Alert</h2>
-            </div>
-            <div style="background:#1a2e1a;border-radius:8px;padding:16px;margin-bottom:16px;">
-                <p style="color:#ffffff;font-size:16px;margin:0;line-height:1.6;">{body.replace(chr(10), '<br>')}</p>
-            </div>
-            <div style="text-align:center;">
-                <a href="https://bunnybutton.xyz" style="background:#4caf50;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px;">Go Play Now →</a>
-            </div>
-            <p style="color:#555;font-size:11px;text-align:center;margin-top:16px;">Mantis Pro · Abstract Chain Agent</p>
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;background:#0f1a0f;border-radius:12px;border:1px solid #2a5a2a;">
+        <div style="text-align:center;margin-bottom:20px;">
+            <span style="font-size:36px;">🥕</span>
+            <h2 style="color:#7fff7f;margin:8px 0;font-size:20px;">Mantis Pro Alert</h2>
         </div>
-        """
-        html_part = MIMEText(html_body, "html")
+        <div style="background:#1a2e1a;border-radius:8px;padding:16px;margin-bottom:16px;">
+            <p style="color:#ffffff;font-size:16px;margin:0;line-height:1.6;">{body.replace(chr(10), '<br>')}</p>
+        </div>
+        <div style="text-align:center;">
+            <a href="https://bunnybutton.xyz" style="background:#4caf50;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px;">Go Play Now →</a>
+        </div>
+        <p style="color:#555;font-size:11px;text-align:center;margin-top:16px;">Mantis Pro · Abstract Chain Agent</p>
+    </div>
+    """
 
-        msg.attach(text_part)
-        msg.attach(html_part)
+    payload = json.dumps({
+        "from": "Mantis Pro <onboarding@resend.dev>",
+        "to": [ALERT_TO],
+        "subject": subject,
+        "html": html_body,
+        "text": body
+    }).encode("utf-8")
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(sender, password)
-            server.sendmail(sender, ALERT_TO, msg.as_string())
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
 
-        print(f"  [Email] ✅ Alert sent to {ALERT_TO}")
-
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+            print(f"  [Email] ✅ Alert sent to {ALERT_TO} (id: {result.get('id', '?')})")
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        print(f"  [Email] ❌ Resend error {e.code}: {error_body}")
     except Exception as e:
         print(f"  [Email] ❌ Failed to send: {e}")
 
@@ -140,7 +142,6 @@ def bunny_session():
         if farm.get("capWarning"):
             print("  ⚠️  FARM CAP WARNING — less than 1hr until 8h offline cap hits!")
             print("  Log in to the game and claim your farm carrots now.")
-            # Only send farm alert if energy alert wasn't already sent this session
             if not energy_full:
                 send_email_alert(
                     subject="⚠️ Bunny Button — Farm Cap Almost Full!",
