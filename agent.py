@@ -40,6 +40,10 @@ def mcp():
         ]
     })
 
+@app.route("/metadata")
+def metadata():
+    return jsonify(AGENT_METADATA)
+
 # ── CONFIG ──────────────────────────────────
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
 OPENSEA_API_KEY    = os.getenv("OPENSEA_API_KEY")
@@ -140,16 +144,13 @@ def update_agent_uri():
         owner_address = owner_account.address
         print(f"Updating agent URI from wallet: {owner_address}")
 
-        metadata_json = json.dumps(AGENT_METADATA, separators=(',', ':'))
-        import base64
-        b64 = base64.b64encode(metadata_json.encode()).decode()
-        data_uri = f"data:application/json;base64,{b64}"
+        uri = "https://mantis-pro-production.up.railway.app/metadata"
 
         nonce = w3.eth.get_transaction_count(owner_address)
-        tx = registry.functions.setAgentURI(AGENT_ID, data_uri).build_transaction({
+        tx = registry.functions.setAgentURI(AGENT_ID, uri).build_transaction({
             'from': owner_address,
             'nonce': nonce,
-            'gas': 2000000,
+            'gas': 200000,
             'gasPrice': w3.eth.gas_price,
             'chainId': CHAIN_ID
         })
