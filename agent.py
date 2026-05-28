@@ -149,7 +149,7 @@ def update_agent_uri():
         tx = registry.functions.setAgentURI(AGENT_ID, data_uri).build_transaction({
             'from': owner_address,
             'nonce': nonce,
-            'gas': 500000,
+            'gas': 2000000,
             'gasPrice': w3.eth.gas_price,
             'chainId': CHAIN_ID
         })
