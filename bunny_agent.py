@@ -1,73 +1,107 @@
 """
 bunny_agent.py — Bunny Button session logic for Mantis Pro
 ----------------------------------------------------------
-Uses Resend API for email alerts (works on Railway — HTTPS only).
+Uses Gmail OAuth API for email alerts (works on Railway — HTTPS only).
 
 Required Railway env vars:
     BUNNY_SESSION_COOKIE   — session cookie from bunnybutton.xyz
-    RESEND_API_KEY         — from resend.com dashboard
+    GMAIL_CLIENT_ID        — from Google Cloud Console
+    GMAIL_CLIENT_SECRET    — from Google Cloud Console
+    GMAIL_REFRESH_TOKEN    — from OAuth Playground
 """
 
 import os
 import json
+import base64
 import urllib.request
+import urllib.parse
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from bunny_button import BunnyButton, RateLimitError, AuthError
 
 ALERT_TO = "smolobah21@gmail.com"
+ALERT_FROM = "smolobah21@gmail.com"
 
 
 def separator(label=""):
     print(f"\n{'─' * 10} {label} {'─' * 10}")
 
 
-def send_email_alert(subject: str, body: str):
-    api_key = os.environ.get("RESEND_API_KEY")
+def get_access_token():
+    client_id = os.environ.get("GMAIL_CLIENT_ID")
+    client_secret = os.environ.get("GMAIL_CLIENT_SECRET")
+    refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN")
 
-    if not api_key:
-        print("  [Email] RESEND_API_KEY not set — skipping email.")
-        return
+    if not all([client_id, client_secret, refresh_token]):
+        raise Exception("Missing GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, or GMAIL_REFRESH_TOKEN env vars")
 
-    html_body = f"""
-    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;background:#0f1a0f;border-radius:12px;border:1px solid #2a5a2a;">
-        <div style="text-align:center;margin-bottom:20px;">
-            <span style="font-size:36px;">🥕</span>
-            <h2 style="color:#7fff7f;margin:8px 0;font-size:20px;">Mantis Pro Alert</h2>
-        </div>
-        <div style="background:#1a2e1a;border-radius:8px;padding:16px;margin-bottom:16px;">
-            <p style="color:#ffffff;font-size:16px;margin:0;line-height:1.6;">{body.replace(chr(10), '<br>')}</p>
-        </div>
-        <div style="text-align:center;">
-            <a href="https://bunnybutton.xyz" style="background:#4caf50;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px;">Go Play Now →</a>
-        </div>
-        <p style="color:#555;font-size:11px;text-align:center;margin-top:16px;">Mantis Pro · Abstract Chain Agent</p>
-    </div>
-    """
-
-    payload = json.dumps({
-        "from": "Mantis Pro <onboarding@resend.dev>",
-        "to": [ALERT_TO],
-        "subject": subject,
-        "html": html_body,
-        "text": body
+    payload = urllib.parse.urlencode({
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token"
     }).encode("utf-8")
 
     req = urllib.request.Request(
-        "https://api.resend.com/emails",
+        "https://oauth2.googleapis.com/token",
         data=payload,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
         method="POST"
     )
 
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        result = json.loads(resp.read())
+        return result["access_token"]
+
+
+def send_email_alert(subject: str, body: str):
     try:
+        access_token = get_access_token()
+
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;background:#0f1a0f;border-radius:12px;border:1px solid #2a5a2a;">
+            <div style="text-align:center;margin-bottom:20px;">
+                <span style="font-size:36px;">🥕</span>
+                <h2 style="color:#7fff7f;margin:8px 0;font-size:20px;">Mantis Pro Alert</h2>
+            </div>
+            <div style="background:#1a2e1a;border-radius:8px;padding:16px;margin-bottom:16px;">
+                <p style="color:#ffffff;font-size:16px;margin:0;line-height:1.6;">{body.replace(chr(10), '<br>')}</p>
+            </div>
+            <div style="text-align:center;">
+                <a href="https://bunnybutton.xyz" style="background:#4caf50;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:14px;">Go Play Now →</a>
+            </div>
+            <p style="color:#555;font-size:11px;text-align:center;margin-top:16px;">Mantis Pro · Abstract Chain Agent</p>
+        </div>
+        """
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = ALERT_FROM
+        msg["To"] = ALERT_TO
+        msg.attach(MIMEText(body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
+
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
+
+        payload = json.dumps({"raw": raw}).encode("utf-8")
+
+        req = urllib.request.Request(
+            f"https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read())
             print(f"  [Email] ✅ Alert sent to {ALERT_TO} (id: {result.get('id', '?')})")
+
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
-        print(f"  [Email] ❌ Resend error {e.code}: {error_body}")
+        print(f"  [Email] ❌ Gmail API error {e.code}: {error_body}")
     except Exception as e:
         print(f"  [Email] ❌ Failed to send: {e}")
 
