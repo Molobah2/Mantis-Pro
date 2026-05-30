@@ -99,6 +99,48 @@ def bunny_tasks():
         "tasks_done": list(_daily_state.get("tasks_done", set())),
     })
 
+# ── SUBSCRIBER STORAGE ──────────────────────────────────────────────────
+import json as _json
+
+SUBSCRIBERS_FILE = os.path.join(os.path.dirname(__file__), "bunny_subscribers.json")
+
+def load_subscribers():
+    try:
+        with open(SUBSCRIBERS_FILE, "r") as f:
+            return _json.load(f)
+    except:
+        return {}
+
+def save_subscribers(subs):
+    try:
+        with open(SUBSCRIBERS_FILE, "w") as f:
+            _json.dump(subs, f, indent=2)
+    except Exception as e:
+        print(f"Failed to save subscribers: {e}")
+
+@app.route("/bunny/register", methods=["POST"])
+def bunny_register():
+    from flask import request as freq
+    data = freq.get_json(silent=True) or {}
+    wallet = data.get("wallet", "").strip().lower()
+    email = data.get("email", "").strip().lower()
+
+    if not wallet or len(wallet) < 10:
+        return jsonify({"error": "Invalid wallet address"}), 400
+    if not email or "@" not in email:
+        return jsonify({"error": "Invalid email address"}), 400
+
+    subs = load_subscribers()
+    subs[wallet] = {"email": email, "wallet": wallet, "registered_at": str(__import__("datetime").datetime.utcnow())}
+    save_subscribers(subs)
+    print(f"[Mantis] New subscriber: {email} ({wallet[:10]}...)")
+    return jsonify({"status": "registered", "message": f"Alerts will be sent to {email}"})
+
+@app.route("/bunny/subscribers")
+def bunny_subscribers():
+    subs = load_subscribers()
+    return jsonify({"count": len(subs), "subscribers": [{"wallet": w[:10]+"...", "email": v["email"]} for w,v in subs.items()]})
+
 @app.route("/bunny/dashboard")
 def bunny_dashboard():
     import os

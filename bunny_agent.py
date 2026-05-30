@@ -18,8 +18,27 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from bunny_button import BunnyButton, RateLimitError, AuthError
 
-ALERT_TO = "smolobah21@gmail.com"
 ALERT_FROM = "smolobah21@gmail.com"
+OWNER_EMAIL = "smolobah21@gmail.com"  # always gets alerts
+
+def get_all_recipients():
+    """Returns list of {email, wallet} for all subscribers + owner."""
+    import json, os
+    subs_file = os.path.join(os.path.dirname(__file__), "bunny_subscribers.json")
+    recipients = []
+    try:
+        with open(subs_file, "r") as f:
+            subs = json.load(f)
+        for wallet, data in subs.items():
+            recipients.append({"email": data["email"], "wallet": wallet})
+    except:
+        pass
+    # Always include owner
+    owner_wallets = [r["wallet"] for r in recipients]
+    owner_cookie = os.environ.get("WALLET_ADDRESS", "").lower()
+    if not any(r["email"] == OWNER_EMAIL for r in recipients):
+        recipients.insert(0, {"email": OWNER_EMAIL, "wallet": owner_cookie or ""})
+    return recipients
 
 # ── IN-MEMORY STATE (tracks what's been done today) ────────────────────────
 _daily_state = {

@@ -376,41 +376,45 @@
   <div class="tab-content" id="tab-automation">
     <div class="panel" style="padding:20px 24px;">
 
-      <div class="guide-section-title">🤖 What is Mantis Pro?</div>
-      <div class="guide-tip">Mantis Pro is an autonomous AI agent (Agent #857) running 24/7 on Abstract Chain. It monitors your Bunny Button game and other Abstract ecosystem protocols, then sends you smart alerts and coaching emails so you never miss a session or reward.</div>
+      <div class="guide-section-title">🤖 Mantis Pro — Bunny Button AI Assistant</div>
+      <div class="guide-tip">Mantis Pro is an AI agent running 24/7 that monitors your Bunny Button game and sends you smart email alerts so you never miss energy, farm carrots, or daily tasks. Register your email and wallet below to get started.</div>
 
-      <div class="guide-section-title">⚡ Live Automations</div>
+      <!-- EMAIL SIGNUP FORM -->
+      <div style="background:rgba(46,204,113,0.06);border:1px solid rgba(46,204,113,0.25);border-radius:10px;padding:20px;margin:16px 0;">
+        <div style="font-size:14px;font-weight:700;color:var(--white);margin-bottom:6px;">📬 Get Bunny Button Email Alerts</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6;">Enter your wallet address and email. Mantis Pro will send you personalised alerts every hour — energy full notifications, farm cap warnings, daily task coaching, and leaderboard updates.</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <input id="signup-wallet" type="text" placeholder="0x... your wallet address" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:10px 14px;color:var(--white);font-size:13px;font-family:'Space Mono',monospace;outline:none;" />
+          <input id="signup-email" type="email" placeholder="your@email.com" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:10px 14px;color:var(--white);font-size:13px;font-family:'Space Mono',monospace;outline:none;" />
+          <button onclick="registerAlerts()" style="background:var(--green);color:white;border:none;border-radius:6px;padding:11px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;transition:all 0.2s;">Register for Alerts →</button>
+        </div>
+        <div id="signup-status" style="margin-top:10px;font-size:12px;font-family:'Space Mono',monospace;"></div>
+      </div>
+
+      <div class="guide-section-title">⚡ What Alerts You Get</div>
 
       <div class="auto-row">
         <div class="auto-icon">⚡</div>
-        <div><div class="auto-title">Energy Full Alert <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis checks your energy every hour. The moment it hits 100% you get an email telling you to go press the button — with your current stats, next quest, and daily potion reminder.</div></div>
+        <div><div class="auto-title">Energy Full Alert <span class="auto-badge live">LIVE</span></div><div class="auto-desc">The moment your energy hits 100% you get an email — with your current stats, next quest, daily potion reminder, and a direct link to go play.</div></div>
       </div>
       <div class="auto-row">
         <div class="auto-icon">📋</div>
-        <div><div class="auto-title">Hourly Coaching Email <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Every hour Mantis sends a personalised task list — exactly what you should do to climb the leaderboard. Tasks update based on what you have already done that day. Resets every midnight.</div></div>
+        <div><div class="auto-title">Hourly Coaching Email <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Every hour Mantis sends a personalised task list — exactly what to do next to climb the leaderboard. Free path and paid path separated. Tasks update based on your real progress. Resets at midnight.</div></div>
       </div>
       <div class="auto-row">
         <div class="auto-icon">🌾</div>
-        <div><div class="auto-title">Farm Cap Warning <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis monitors your farm. When it is within 1 hour of hitting the 8-hour offline cap, you get an urgent email to go claim before you lose yield.</div></div>
+        <div><div class="auto-title">Farm Cap Warning <span class="auto-badge live">LIVE</span></div><div class="auto-desc">When your farm is within 1 hour of hitting the 8-hour offline cap, you get an urgent email to go collect before you lose passive yield.</div></div>
       </div>
       <div class="auto-row">
-        <div class="auto-icon">🏎️</div>
-        <div><div class="auto-title">Moody Madness 12hr Alert <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis tracks when you last woke your AI assistants on Moody Madness. Exactly 12 hours later it emails you step-by-step instructions to wake them again.</div></div>
+        <div class="auto-icon">🏆</div>
+        <div><div class="auto-title">Leaderboard Rank Updates <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Every hourly email shows your current rank and the gap to the top player so you always know where you stand and how many carrots you need to climb.</div></div>
       </div>
       <div class="auto-row">
-        <div class="auto-icon">📊</div>
-        <div><div class="auto-title">Litany Card Market Scanner <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis scans OpenSea every 30 minutes for Litany card listings on Abstract Chain. It flags EPIC and LEGENDARY trait cards and advises whether to mint or buy.</div></div>
-      </div>
-      <div class="auto-row">
-        <div class="auto-icon">🔄</div>
-        <div><div class="auto-title">On-Chain Token Swaps <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis can execute live token swaps on Abstract mainnet using the AGW CLI — no private key exposure. Used for PENGU and other Abstract-native token strategies.</div></div>
+        <div class="auto-icon">🎯</div>
+        <div><div class="auto-title">Quest & Milestone Alerts <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis tracks your quest progress and carrot milestones. When you are close to a reward — like the free Jackalope breed at 25,000 carrots — it tells you exactly how many more you need.</div></div>
       </div>
 
-      <div class="guide-section-title">🚀 How to Set Up Mantis Pro</div>
-      <div class="guide-tip"><b>Step 1:</b> Mantis Pro is open source. View the repo at <a href="https://github.com/Molobah2/Mantis-Pro" target="_blank" style="color:var(--green-light);">github.com/Molobah2/Mantis-Pro</a></div>
-      <div class="guide-tip"><b>Step 2:</b> Deploy to Railway (free tier works). Set your BUNNY_SESSION_COOKIE, Gmail OAuth env vars.</div>
-      <div class="guide-tip"><b>Step 3:</b> Mantis runs 24/7 automatically. Hourly Bunny Button coaching, 30-min Litany scans, Moody Madness 12hr reminders.</div>
-      <div class="guide-tip orange"><b>Built by</b> <a href="https://x.com/newguy_gn" target="_blank" style="color:var(--orange);">@newguy_gn</a> — Agent #857 on Abstract Chain. Building in public.</div>
+      <div class="guide-tip orange" style="margin-top:16px;"><b>Built by</b> <a href="https://x.com/newguy_gn" target="_blank" style="color:var(--orange);">@newguy_gn</a> — Agent #857 on Abstract Chain. Building in public.</div>
 
     </div>
   </div>
@@ -847,6 +851,46 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, 60000);
+
+// Register for alerts
+async function registerAlerts() {
+  const wallet = document.getElementById('signup-wallet').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const status = document.getElementById('signup-status');
+
+  if (!wallet || wallet.length < 10) {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Please enter a valid wallet address.';
+    return;
+  }
+  if (!email || !email.includes('@')) {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Please enter a valid email address.';
+    return;
+  }
+
+  status.style.color = 'var(--muted)';
+  status.textContent = 'Registering...';
+
+  try {
+    const res = await fetch('/bunny/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet, email })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      status.style.color = 'var(--green-light)';
+      status.textContent = '✅ Registered! You will receive your first email within the hour.';
+    } else {
+      status.style.color = 'var(--red)';
+      status.textContent = 'Error: ' + (data.error || 'Something went wrong.');
+    }
+  } catch(e) {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Error: ' + e.message;
+  }
+}
 
 // Tab switching
 function switchTab(name) {
