@@ -154,8 +154,15 @@ def bunny_dashboard():
 def bunny_proxy():
     from flask import request as freq
     import requests as req2
-    from urllib.parse import unquote
-    endpoint = unquote(freq.args.get("endpoint", "/leaderboard"))
+    from urllib.parse import unquote, parse_qs
+    # Get raw query string to preserve endpoint params like ?limit=100
+    raw_qs = freq.query_string.decode("utf-8")
+    # Extract everything after "endpoint="
+    ep_prefix = "endpoint="
+    if ep_prefix in raw_qs:
+        endpoint = unquote(raw_qs[raw_qs.index(ep_prefix) + len(ep_prefix):])
+    else:
+        endpoint = "/leaderboard"
     print(f"  [Proxy] endpoint: {repr(endpoint)}")
     allowed = ["/leaderboard", "/eth-price", "/presale/status", "/party/list"]
     if not any(endpoint.startswith(a) for a in allowed):
