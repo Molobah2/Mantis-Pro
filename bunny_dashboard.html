@@ -262,16 +262,7 @@
     </div>
   </div>
 
-  <!-- WALLET INPUT -->
-  <div class="wallet-box">
-    <h3>🎯 Get Your Personalised To-Do List</h3>
-    <p>Enter your wallet address to see exactly what you should do next — personalised to your rank, carrots, upgrades and quests. Free path and paid path clearly separated.</p>
-    <div class="wallet-input-row">
-      <input class="wallet-input" id="wallet-input" type="text" placeholder="0x... your wallet address" />
-      <button class="wallet-btn" onclick="loadPlayer()">Check My Tasks →</button>
-    </div>
-    <div class="wallet-status" id="wallet-status"></div>
-  </div>
+
 
   <!-- TABS -->
   <div class="tabs">
@@ -295,17 +286,258 @@
 
   <!-- TAB: MY TASKS -->
   <div class="tab-content" id="tab-tasks">
-    <div class="panel tasks-panel">
-      <div class="panel-header">
-        <span class="panel-title">📋 Your Personalised To-Do List</span>
-        <span class="panel-badge" id="tasks-badge">Enter wallet above</span>
+    <div class="panel" style="padding:20px 24px;">
+
+      <div style="margin-bottom:18px;">
+        <div class="guide-section-title" style="margin-top:0;">How to use this guide</div>
+        <div class="guide-tip">Follow the steps below in order. Each section builds on the last. Check off tasks as you complete them — your progress saves in your browser automatically.</div>
       </div>
-      <div id="tasks-body">
-        <div class="tasks-placeholder">
-          <div class="icon">👆</div>
-          Enter your wallet address above and click Check My Tasks to get a personalised guide based on your actual game progress.
+
+      <!-- PHASE 1 -->
+      <div class="guide-section-title">🟢 Phase 1 — First Day (Do These First)</div>
+
+      <div class="task-item" id="row_p1_press">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Press the button for the first time</div>
+          <div class="task-desc">Go to <a href="https://bunnybutton.xyz" target="_blank" class="task-link">bunnybutton.xyz</a> and press the big button. Keep pressing until your energy hits 0. Each press earns carrots.</div>
+          <button id="btn_p1_press" class="mark-done-btn" onclick="toggleTask('p1_press')">Mark as done</button>
         </div>
       </div>
+
+      <div class="task-item" id="row_p1_steal">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Buy your first Steal upgrade</div>
+          <div class="task-desc">Go to <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal</a>. This is the most important upgrade — it directly multiplies every carrot you earn per press. Do this before anything else.</div>
+          <button id="btn_p1_steal" class="mark-done-btn" onclick="toggleTask('p1_steal')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p1_regen">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Buy your first Regen upgrade</div>
+          <div class="task-desc"><a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Regen</a>. Faster energy refill = more presses per day = more carrots. Buy Steal and Regen alternately.</div>
+          <button id="btn_p1_regen" class="mark-done-btn" onclick="toggleTask('p1_regen')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p1_farm">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Buy Farm Level 1 — passive income while you sleep</div>
+          <div class="task-desc"><a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → buy Level 1</a>. The farm earns carrots automatically even while offline. Do this before more than 2–3 stat upgrades.</div>
+          <button id="btn_p1_farm" class="mark-done-btn" onclick="toggleTask('p1_farm')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p1_x">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Connect your X (Twitter) account</div>
+          <div class="task-desc"><a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu → connect X</a>. Your handle shows on the leaderboard instead of a wallet address. Also completes the "Blue Check Toll Bridge" quest.</div>
+          <button id="btn_p1_x" class="mark-done-btn" onclick="toggleTask('p1_x')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p1_discord">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Connect your Discord account</div>
+          <div class="task-desc"><a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu → connect Discord</a>. Unlocks in-game username, Discord commands, and leaderboard sync.</div>
+          <button id="btn_p1_discord" class="mark-done-btn" onclick="toggleTask('p1_discord')">Mark as done</button>
+        </div>
+      </div>
+
+      <!-- PHASE 2 -->
+      <div class="guide-section-title" style="margin-top:24px;">🔵 Phase 2 — Daily Routine (Do Every Day)</div>
+
+      <div class="task-item" id="row_p2_press">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Press the button until energy hits 0</div>
+          <div class="task-desc">This resets every day. Drain energy completely, then let it refill. <a href="https://bunnybutton.xyz" target="_blank" class="task-link">Go press now →</a></div>
+          <button id="btn_p2_press" class="mark-done-btn" onclick="toggleTask('p2_press')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p2_potion">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Use your free daily Energy Potion</div>
+          <div class="task-desc">After energy hits 0 → <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Energy Potion</a>. Fully refills energy once per day for free. That is a whole extra session at zero cost.</div>
+          <button id="btn_p2_potion" class="mark-done-btn" onclick="toggleTask('p2_potion')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p2_farm">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Collect your farm carrots</div>
+          <div class="task-desc">Farm caps at 8 hours offline — after that it stops earning until you collect. Go to <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → claim carrots</a>. Do this at least twice a day.</div>
+          <button id="btn_p2_farm" class="mark-done-btn" onclick="toggleTask('p2_farm')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p2_streak">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Log in daily to keep your streak</div>
+          <div class="task-desc">Just signing in counts. <a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab</a>: 7-day streak = 500 carrots, 30-day = 2,500 carrots, 100-day = 10,000 carrots. Don't break it.</div>
+          <button id="btn_p2_streak" class="mark-done-btn" onclick="toggleTask('p2_streak')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p2_upgrades">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Buy at least one upgrade per day</div>
+          <div class="task-desc">Alternate: Steal → Regen → Steal → Regen → Farm upgrade. Every upgrade compounds. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop →</a></div>
+          <button id="btn_p2_upgrades" class="mark-done-btn" onclick="toggleTask('p2_upgrades')">Mark as done</button>
+        </div>
+      </div>
+
+      <!-- PHASE 3 -->
+      <div class="guide-section-title" style="margin-top:24px;">🟡 Phase 3 — Mid Game (When You Have Carrots)</div>
+
+      <div class="task-item" id="row_p3_steal1">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Reach 1.0x steal multiplier</div>
+          <div class="task-desc">Keep buying Steal upgrades in <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal</a> until your multiplier hits 1.0x. At this point each press earns 5x more than the starting 0.2x.</div>
+          <button id="btn_p3_steal1" class="mark-done-btn" onclick="toggleTask('p3_steal1')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p3_farm2">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Upgrade Farm to Level 2</div>
+          <div class="task-desc"><a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Upgrades → Level 2</a>. More passive income per second. Do this when you have surplus carrots after stat upgrades.</div>
+          <button id="btn_p3_farm2" class="mark-done-btn" onclick="toggleTask('p3_farm2')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p3_refer">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Refer 2 friends to unlock Parties</div>
+          <div class="task-desc">Get your referral code from <a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu</a> and share it on X or Discord. 2 sign-ups = Parties unlock. A full 5-person party gives everyone +5% bonus per press. You also earn 8% of their carrot earnings.</div>
+          <button id="btn_p3_refer" class="mark-done-btn" onclick="toggleTask('p3_refer')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p3_party">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Join a party for the group bonus</div>
+          <div class="task-desc"><a href="https://bunnybutton.xyz/party" target="_blank" class="task-link">Party tab → browse parties</a> or ask in the Bunny Button Discord. Full 5-person party = +5% per press for everyone.</div>
+          <button id="btn_p3_party" class="mark-done-btn" onclick="toggleTask('p3_party')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p3_milestone1">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Claim your 1,000 carrot and 1K click milestone rewards</div>
+          <div class="task-desc">Go to <a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab → Milestones</a>. Claim any completed milestones — they give free carrot rewards. Check after every big session.</div>
+          <button id="btn_p3_milestone1" class="mark-done-btn" onclick="toggleTask('p3_milestone1')">Mark as done</button>
+        </div>
+      </div>
+
+      <!-- PHASE 4 -->
+      <div class="guide-section-title" style="margin-top:24px;">🟠 Phase 4 — Late Game (Climb to Top 10)</div>
+
+      <div class="task-item" id="row_p4_jackalope">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Earn 25,000 total carrots → unlock Jackalope breed FREE (1.5x steal)</div>
+          <div class="task-desc">Just keep pressing daily. No spending needed. When you hit 25,000 total carrots the Jackalope breed unlocks automatically — giving you 1.5x steal for free. That is a massive upgrade over Sprout's 0.2x.</div>
+          <button id="btn_p4_jackalope" class="mark-done-btn" onclick="toggleTask('p4_jackalope')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p4_moonburrow">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Reach 2.25x steal → unlock Moonburrow breed FREE (1.25x steal)</div>
+          <div class="task-desc">Buy Steal upgrades until your total multiplier hits 2.25x. Moonburrow breed unlocks automatically. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal →</a></div>
+          <button id="btn_p4_moonburrow" class="mark-done-btn" onclick="toggleTask('p4_moonburrow')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p4_burn">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Burn 50,000 carrots on upgrades → earn 5,000 carrot reward</div>
+          <div class="task-desc">Keep buying upgrades in the Shop — burned carrots count automatically. At 50,000 burned, the Burnt Offerings quest completes and rewards you 5,000 carrots. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop →</a></div>
+          <button id="btn_p4_burn" class="mark-done-btn" onclick="toggleTask('p4_burn')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p4_farm3">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Upgrade Farm to Level 3+</div>
+          <div class="task-desc">Higher farm levels increase passive carrot income significantly. <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Upgrades</a>. Alternate with stat upgrades.</div>
+          <button id="btn_p4_farm3" class="mark-done-btn" onclick="toggleTask('p4_farm3')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p4_crate">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Open a Carrot Crate for gear bonus</div>
+          <div class="task-desc">Wait until steal is at level 3+ before opening. <a href="https://bunnybutton.xyz/gacha" target="_blank" class="task-link">Gacha page → open a Crate</a>. Get Cape (+steal), Boots (+regen), or Hat (+energy). Gear stacks on top of all your other upgrades.</div>
+          <button id="btn_p4_crate" class="mark-done-btn" onclick="toggleTask('p4_crate')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p4_stake">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Stake surplus carrots for APY rewards</div>
+          <div class="task-desc">Once your balance exceeds 2,000 and you don't need it for upgrades soon — <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Stake</a>. Lock for 30/90/365 days. Longer = higher APY. Idle carrots should always be working.</div>
+          <button id="btn_p4_stake" class="mark-done-btn" onclick="toggleTask('p4_stake')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p4_creator">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Submit content to the Creator Program</div>
+          <div class="task-desc">Make an X post about Bunny Button, then submit it at <a href="https://bunnybutton.xyz/creator-program" target="_blank" class="task-link">Creator Program</a>. Rewards: carrot crates, CARROT tokens, unique items. Takes 10 minutes and costs nothing.</div>
+          <button id="btn_p4_creator" class="mark-done-btn" onclick="toggleTask('p4_creator')">Mark as done</button>
+        </div>
+      </div>
+
+      <!-- PHASE 5 PAID -->
+      <div class="guide-section-title" style="margin-top:24px;">⚡ Paid Path — Accelerate Fast (Optional)</div>
+      <div class="guide-tip orange" style="margin-bottom:14px;"><b>These cost real money but dramatically speed up your climb. Skip if free path only.</b></div>
+
+      <div class="task-item" id="row_p5_bandit">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Upgrade to Bandit breed (~$15) — instantly 1.8x steal</div>
+          <div class="task-desc">Best value paid breed. Combined with Warrior class (+15% steal) = effectively 2.07x steal day one. <a href="https://bunnybutton.xyz/profile" target="_blank" class="task-link orange">Profile → Change Breed →</a></div>
+          <button id="btn_p5_bandit" class="mark-done-btn" onclick="toggleTask('p5_bandit')">Mark as done</button>
+        </div>
+      </div>
+
+      <div class="task-item" id="row_p5_presale">
+        <div class="task-check">🔲</div>
+        <div class="task-body">
+          <div class="task-title">Buy CARROT in presale — 1.4x more than launch price</div>
+          <div class="task-desc">Presale: 350,000 CARROT per ETH. Launch price: 250,000 per ETH. Buying now = 40% more CARROT for same ETH. Ends June 27, 2026. Min 0.01 ETH (~$20). <a href="https://bunnybutton.xyz/presale" target="_blank" class="task-link orange">Join Presale →</a></div>
+          <button id="btn_p5_presale" class="mark-done-btn" onclick="toggleTask('p5_presale')">Mark as done</button>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;padding:14px;background:rgba(255,255,255,0.03);border-radius:8px;text-align:center;font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;">
+        ✅ Progress saves in your browser automatically · Resets only if you clear browser data
+      </div>
+
     </div>
   </div>
 
@@ -1083,10 +1315,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   event.target.classList.add('active');
-  // Auto-switch tasks tab when wallet checked
-  if (name === 'tasks' && document.getElementById('wallet-input').value) {
-    loadPlayer();
-  }
+
 }
 
 // Auto-switch to tasks tab after wallet load — patched after definition
