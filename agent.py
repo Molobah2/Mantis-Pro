@@ -123,7 +123,9 @@ def bunny_proxy():
             timeout=8
         )
         from flask import Response
-        return Response(resp.content, status=resp.status_code, content_type="application/json")
+        r = Response(resp.content, status=resp.status_code, content_type="application/json")
+        r.headers['Access-Control-Allow-Origin'] = '*'
+        return r
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -256,11 +256,9 @@ async function fetchProxy(endpoint) {
 }
 
 async function fetchDirect(endpoint, wallet) {
-  // For wallet-specific public endpoints
-  const url = `${BASE_URL}/api${endpoint}${wallet ? (endpoint.includes('?') ? '&' : '?') + 'wallet=' + wallet : ''}`;
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  // Route through Mantis Pro proxy to avoid CORS
+  const ep = endpoint + (wallet ? (endpoint.includes('?') ? '&' : '?') + 'wallet=' + encodeURIComponent(wallet) : '');
+  return fetchProxy(ep);
 }
 
 function fmt(n) { return Number(n).toLocaleString(); }
@@ -358,9 +356,12 @@ async function loadPlayer() {
   document.getElementById('tasks-badge').textContent = 'Loading...';
 
   try {
-    // Fetch presale data for this wallet (public endpoint)
-    const presale = await fetchDirect('/presale/status', wallet);
-    const leaderboard = await fetchProxy('/leaderboard?limit=100');
+    // Fetch leaderboard and presale via proxy
+    const [presaleResp, leaderboard] = await Promise.all([
+      fetchProxy('/presale/status'),
+      fetchProxy('/leaderboard?limit=100')
+    ]);
+    const presale = presaleResp;
     const lb = leaderboard.leaderboard || [];
 
     // Find player in leaderboard
