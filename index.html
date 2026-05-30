@@ -343,6 +343,45 @@
   }
 
   footer a { color: var(--green-light); text-decoration: none; }
+  /* GOOGLE TRANSLATE */
+  #google_translate_element select {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px;
+    color: var(--white);
+    font-size: 12px;
+    padding: 5px 10px;
+    outline: none;
+    cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif;
+    width: 100%;
+  }
+  #google_translate_element select option { background: #0a1a10; color: var(--white); }
+  .goog-te-banner-frame { display: none !important; }
+  body { top: 0 !important; }
+  .goog-te-gadget { color: transparent !important; font-size: 0 !important; }
+  .goog-te-gadget select { font-size: 12px !important; }
+  .translate-bar {
+    position: relative; z-index: 2;
+    background: rgba(10,26,16,0.8);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    padding: 8px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    backdrop-filter: blur(10px);
+  }
+  .translate-label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    white-space: nowrap;
+  }
+  .translate-bar #google_translate_element { flex: 1; max-width: 300px; }
 </style>
 </head>
 <body>
@@ -455,5 +494,16 @@
   <a href="https://x.com/newguy_gn" target="_blank">@NEWGUY_GN</a>
 </footer>
 
+<script type="text/javascript">
+function googleTranslateElementInit() {
+  new google.translate.TranslateElement({
+    pageLanguage: 'en',
+    includedLanguages: 'ar,zh-CN,zh-TW,fr,de,hi,id,it,ja,ko,ms,pt,ru,es,th,tl,tr,vi,yo,sw,ha',
+    layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+    autoDisplay: false
+  }, 'google_translate_element');
+}
+</script>
+<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 </body>
 </html>
