@@ -138,6 +138,43 @@
 
   footer { text-align:center; padding:20px; font-size:11px; color:var(--muted); letter-spacing:2px; border-top:1px solid rgba(255,255,255,0.07); font-family:'Space Mono',monospace; position:relative; z-index:2; }
 
+  /* TABS */
+  .tabs { display:flex; gap:0; margin-bottom:20px; border:1px solid var(--card-border); border-radius:8px; overflow:hidden; background:var(--card-bg); backdrop-filter:blur(8px); }
+  .tab-btn { flex:1; padding:11px 8px; font-size:12px; font-weight:600; cursor:pointer; border:none; background:transparent; color:var(--muted); letter-spacing:1px; transition:all 0.2s; font-family:'Space Grotesk',sans-serif; border-right:1px solid var(--card-border); }
+  .tab-btn:last-child { border-right:none; }
+  .tab-btn:hover { color:var(--white); background:rgba(255,255,255,0.04); }
+  .tab-btn.active { background:rgba(46,204,113,0.12); color:var(--green-light); border-bottom:2px solid var(--green-light); }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  /* GUIDE CARDS */
+  .guide-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+  .guide-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:18px; backdrop-filter:blur(8px); transition:all 0.2s; }
+  .guide-card:hover { border-color:var(--card-hover-border); background:var(--card-hover); }
+  .guide-card-icon { font-size:24px; margin-bottom:10px; }
+  .guide-card-title { font-size:14px; font-weight:700; color:var(--white); margin-bottom:6px; }
+  .guide-card-desc { font-size:13px; color:var(--muted); line-height:1.6; }
+  .guide-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .guide-table th { text-align:left; padding:8px 12px; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--green-light); border-bottom:1px solid var(--card-border); font-family:'Space Mono',monospace; }
+  .guide-table td { padding:9px 12px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--white); vertical-align:top; }
+  .guide-table td:first-child { color:var(--green-light); font-weight:600; white-space:nowrap; }
+  .guide-table tr:last-child td { border-bottom:none; }
+  .guide-section-title { font-size:13px; font-weight:700; color:var(--green-light); letter-spacing:1px; text-transform:uppercase; margin:20px 0 10px; font-family:'Space Mono',monospace; }
+  .guide-tip { background:rgba(46,204,113,0.06); border:1px solid rgba(46,204,113,0.2); border-radius:8px; padding:12px 14px; margin:10px 0; font-size:13px; color:var(--white); line-height:1.6; }
+  .guide-tip.orange { background:rgba(255,140,0,0.06); border-color:rgba(255,140,0,0.2); }
+  .guide-tip b { color:var(--green-light); }
+  .guide-tip.orange b { color:var(--orange); }
+
+  /* AUTOMATION SECTION */
+  .auto-row { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .auto-row:last-child { border-bottom:none; }
+  .auto-icon { font-size:20px; flex-shrink:0; margin-top:2px; }
+  .auto-title { font-size:14px; font-weight:600; color:var(--white); margin-bottom:3px; }
+  .auto-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+  .auto-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-family:'Space Mono',monospace; margin-left:8px; }
+  .auto-badge.live { background:rgba(46,204,113,0.15); color:var(--green-light); border:1px solid rgba(46,204,113,0.3); }
+  .auto-badge.soon { background:rgba(255,140,0,0.1); color:var(--orange); border:1px solid rgba(255,140,0,0.2); }
+
   /* MARK DONE BUTTON */
   .mark-done-btn {
     display: inline-block;
@@ -218,41 +255,164 @@
     <div class="wallet-status" id="wallet-status"></div>
   </div>
 
-  <!-- MAIN GRID -->
-  <div class="main-grid">
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
+    <button class="tab-btn" onclick="switchTab('tasks')">📋 My Tasks</button>
+    <button class="tab-btn" onclick="switchTab('presale')">🥕 Presale</button>
+    <button class="tab-btn" onclick="switchTab('guide')">📖 Game Guide</button>
+    <button class="tab-btn" onclick="switchTab('automation')">🤖 Mantis Bot</button>
+  </div>
 
-    <!-- LEADERBOARD -->
+  <!-- TAB: LEADERBOARD -->
+  <div class="tab-content active" id="tab-leaderboard">
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">🏆 Leaderboard</span>
+        <span class="panel-title">🏆 Top Players</span>
         <span class="panel-badge" id="lb-updated">—</span>
       </div>
       <div id="leaderboard-body"><div class="loading">FETCHING...</div></div>
     </div>
+  </div>
 
-    <!-- TASK LIST -->
+  <!-- TAB: MY TASKS -->
+  <div class="tab-content" id="tab-tasks">
     <div class="panel tasks-panel">
       <div class="panel-header">
-        <span class="panel-title">📋 Your To-Do List</span>
+        <span class="panel-title">📋 Your Personalised To-Do List</span>
         <span class="panel-badge" id="tasks-badge">Enter wallet above</span>
       </div>
       <div id="tasks-body">
         <div class="tasks-placeholder">
           <div class="icon">👆</div>
-          Enter your wallet address above to get a personalised task list based on your actual game progress.
+          Enter your wallet address above and click Check My Tasks to get a personalised guide based on your actual game progress.
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- PRESALE -->
+  <!-- TAB: PRESALE -->
+  <div class="tab-content" id="tab-presale">
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">🥕 Presale Details</span>
+        <span class="panel-title">🥕 CARROT Presale Details</span>
         <span class="panel-badge">LIVE</span>
       </div>
       <div class="presale-body" id="presale-body"><div class="loading">FETCHING...</div></div>
     </div>
+  </div>
 
+  <!-- TAB: GAME GUIDE -->
+  <div class="tab-content" id="tab-guide">
+    <div class="panel" style="padding:20px 24px;">
+
+      <div class="guide-section-title">🎮 What is Bunny Button?</div>
+      <div class="guide-tip">Bunny Button is a click-to-earn game on Abstract Chain. You press a button, spend energy, and earn carrots. The more you upgrade your steal multiplier, the more carrots you earn per press. Carrots can be spent on upgrades, staked for yield, or used to unlock better breeds.</div>
+
+      <div class="guide-section-title">⚡ Core Game Loop</div>
+      <div class="guide-grid" style="margin-bottom:16px;">
+        <div class="guide-card"><div class="guide-card-icon">1️⃣</div><div class="guide-card-title">Press the Button</div><div class="guide-card-desc">Each press costs 1 energy and earns carrots based on your steal multiplier. Keep pressing until energy hits 0.</div></div>
+        <div class="guide-card"><div class="guide-card-icon">2️⃣</div><div class="guide-card-title">Wait for Energy</div><div class="guide-card-desc">Energy regens over time based on your regen stat. Use the free daily Energy Potion to get an extra session.</div></div>
+        <div class="guide-card"><div class="guide-card-icon">3️⃣</div><div class="guide-card-title">Spend Carrots</div><div class="guide-card-desc">Buy Steal, Regen, and Energy upgrades from the Shop. Also upgrade your Farm for passive offline income.</div></div>
+        <div class="guide-card"><div class="guide-card-icon">4️⃣</div><div class="guide-card-title">Get Stronger</div><div class="guide-card-desc">Unlock better breeds, join a party, open crates for gear, stake surplus carrots, and climb the leaderboard.</div></div>
+      </div>
+
+      <div class="guide-section-title">🐰 Breeds Comparison</div>
+      <table class="guide-table">
+        <thead><tr><th>Breed</th><th>Steal</th><th>Energy</th><th>Regen/hr</th><th>How to get</th></tr></thead>
+        <tbody>
+          <tr><td>Sprout</td><td>0.2x</td><td>500</td><td>20/hr</td><td>Free starter</td></tr>
+          <tr><td>Meadow</td><td>1.0x</td><td>1000</td><td>42/hr</td><td>~$15 ETH</td></tr>
+          <tr><td>Spark</td><td>1.0x</td><td>600</td><td>58/hr</td><td>~$15 ETH</td></tr>
+          <tr><td>Burrow</td><td>1.0x</td><td>1500</td><td>31/hr</td><td>~$15 ETH</td></tr>
+          <tr><td>Bandit</td><td>1.8x</td><td>500</td><td>20/hr</td><td>~$15 ETH — best value</td></tr>
+          <tr><td>Moonburrow</td><td>1.25x</td><td>880</td><td>37/hr</td><td>FREE — reach 2.25x steal</td></tr>
+          <tr><td>Jackalope</td><td>1.5x</td><td>700</td><td>29/hr</td><td>FREE — earn 25,000 carrots</td></tr>
+        </tbody>
+      </table>
+
+      <div class="guide-section-title">⚔️ Classes Comparison</div>
+      <table class="guide-table">
+        <thead><tr><th>Class</th><th>Bonus</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td>Warrior</td><td>+15% steal</td><td>Max carrots per press</td></tr>
+          <tr><td>Mage</td><td>+15% regen</td><td>Frequent short sessions</td></tr>
+          <tr><td>Knight</td><td>+15% max energy</td><td>Long sessions, fewer logins</td></tr>
+          <tr><td>Shaman</td><td>1.4x lucky carrot</td><td>High variance, fun</td></tr>
+        </tbody>
+      </table>
+
+      <div class="guide-section-title">🎯 Quests Roadmap</div>
+      <table class="guide-table">
+        <thead><tr><th>Quest</th><th>How to complete</th><th>Reward</th></tr></thead>
+        <tbody>
+          <tr><td>First Hop</td><td>Press the button once</td><td>XP</td></tr>
+          <tr><td>Carrot Pickpocket</td><td>Earn first carrots</td><td>XP</td></tr>
+          <tr><td>Goblin Diplomacy</td><td>Refer 2 friends</td><td>Parties unlocked</td></tr>
+          <tr><td>Blue Check Toll Bridge</td><td>Connect X account</td><td>XP + leaderboard handle</td></tr>
+          <tr><td>Ratcatchers</td><td>Join a party</td><td>XP</td></tr>
+          <tr><td>Five Bunnies Walk Into A Pub</td><td>Fill party to 5 members</td><td>XP</td></tr>
+          <tr><td>Wizards Hate This Bunny</td><td>Reach 2.25x steal</td><td>Moonburrow breed FREE</td></tr>
+          <tr><td>The Carrot Cartel</td><td>Earn 25,000 total carrots</td><td>Jackalope breed FREE</td></tr>
+          <tr><td>Burnt Offerings</td><td>Burn 50,000 carrots on upgrades</td><td>5,000 carrots</td></tr>
+          <tr><td>Recipe For Disaster</td><td>Complete all 19 quests</td><td>Quest cape + 20,000 carrots</td></tr>
+        </tbody>
+      </table>
+
+      <div class="guide-section-title">💡 Tips to Climb the Leaderboard Fast</div>
+      <div class="guide-tip"><b>Priority order:</b> Steal upgrades first → Buy Farm Level 1 → Regen upgrades → Farm upgrades → repeat</div>
+      <div class="guide-tip"><b>Free path to top:</b> Earn 25K carrots → Jackalope (1.5x steal) → keep upgrading steal → Moonburrow at 2.25x → join party for +5%</div>
+      <div class="guide-tip orange"><b>Paid shortcut:</b> Buy Bandit breed (~$15) → instantly 1.8x steal → combine with Warrior class for +15% = effectively 2.07x steal day one</div>
+      <div class="guide-tip"><b>Daily must-dos:</b> Press until energy = 0 → use Energy Potion → collect farm → repeat. Consistency beats big one-time sessions.</div>
+      <div class="guide-tip"><b>8-hour farm rule:</b> Farm stops earning after 8 hours offline. Log in at least twice a day to keep passive income flowing.</div>
+
+      <div style="margin-top:20px;text-align:center;">
+        <a href="https://bunnybutton.xyz/docs" target="_blank" style="display:inline-block;padding:10px 28px;background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.3);border-radius:6px;color:var(--green-light);text-decoration:none;font-size:13px;font-weight:600;">Read Full Docs →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: MANTIS BOT -->
+  <div class="tab-content" id="tab-automation">
+    <div class="panel" style="padding:20px 24px;">
+
+      <div class="guide-section-title">🤖 What is Mantis Pro?</div>
+      <div class="guide-tip">Mantis Pro is an autonomous AI agent (Agent #857) running 24/7 on Abstract Chain. It monitors your Bunny Button game and other Abstract ecosystem protocols, then sends you smart alerts and coaching emails so you never miss a session or reward.</div>
+
+      <div class="guide-section-title">⚡ Live Automations</div>
+
+      <div class="auto-row">
+        <div class="auto-icon">⚡</div>
+        <div><div class="auto-title">Energy Full Alert <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis checks your energy every hour. The moment it hits 100% you get an email telling you to go press the button — with your current stats, next quest, and daily potion reminder.</div></div>
+      </div>
+      <div class="auto-row">
+        <div class="auto-icon">📋</div>
+        <div><div class="auto-title">Hourly Coaching Email <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Every hour Mantis sends a personalised task list — exactly what you should do to climb the leaderboard. Tasks update based on what you have already done that day. Resets every midnight.</div></div>
+      </div>
+      <div class="auto-row">
+        <div class="auto-icon">🌾</div>
+        <div><div class="auto-title">Farm Cap Warning <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis monitors your farm. When it is within 1 hour of hitting the 8-hour offline cap, you get an urgent email to go claim before you lose yield.</div></div>
+      </div>
+      <div class="auto-row">
+        <div class="auto-icon">🏎️</div>
+        <div><div class="auto-title">Moody Madness 12hr Alert <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis tracks when you last woke your AI assistants on Moody Madness. Exactly 12 hours later it emails you step-by-step instructions to wake them again.</div></div>
+      </div>
+      <div class="auto-row">
+        <div class="auto-icon">📊</div>
+        <div><div class="auto-title">Litany Card Market Scanner <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis scans OpenSea every 30 minutes for Litany card listings on Abstract Chain. It flags EPIC and LEGENDARY trait cards and advises whether to mint or buy.</div></div>
+      </div>
+      <div class="auto-row">
+        <div class="auto-icon">🔄</div>
+        <div><div class="auto-title">On-Chain Token Swaps <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis can execute live token swaps on Abstract mainnet using the AGW CLI — no private key exposure. Used for PENGU and other Abstract-native token strategies.</div></div>
+      </div>
+
+      <div class="guide-section-title">🚀 How to Set Up Mantis Pro</div>
+      <div class="guide-tip"><b>Step 1:</b> Mantis Pro is open source. View the repo at <a href="https://github.com/Molobah2/Mantis-Pro" target="_blank" style="color:var(--green-light);">github.com/Molobah2/Mantis-Pro</a></div>
+      <div class="guide-tip"><b>Step 2:</b> Deploy to Railway (free tier works). Set your BUNNY_SESSION_COOKIE, Gmail OAuth env vars.</div>
+      <div class="guide-tip"><b>Step 3:</b> Mantis runs 24/7 automatically. Hourly Bunny Button coaching, 30-min Litany scans, Moody Madness 12hr reminders.</div>
+      <div class="guide-tip orange"><b>Built by</b> <a href="https://x.com/newguy_gn" target="_blank" style="color:var(--orange);">@newguy_gn</a> — Agent #857 on Abstract Chain. Building in public.</div>
+
+    </div>
   </div>
 
   <div id="last-updated">Last updated: —</div>
@@ -687,6 +847,29 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, 60000);
+
+// Tab switching
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  // Auto-switch tasks tab when wallet checked
+  if (name === 'tasks' && document.getElementById('wallet-input').value) {
+    loadPlayer();
+  }
+}
+
+// Auto-switch to tasks tab after wallet load
+const origLoadPlayer = loadPlayer;
+window.loadPlayer = async function() {
+  await origLoadPlayer();
+  // Switch to tasks tab
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-tasks').classList.add('active');
+  document.querySelectorAll('.tab-btn')[1].classList.add('active');
+}
 </script>
 </body>
 </html>
