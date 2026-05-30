@@ -23,12 +23,18 @@ app = Flask(__name__)
 
 @app.route("/")
 def root():
-    return jsonify({
-        "name": "Mantis Pro",
-        "status": "online",
-        "version": "1.0.0",
-        "description": "Autonomous AI agent on Abstract Chain"
-    })
+    import os
+    path = os.path.join(os.path.dirname(__file__), "index.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+@app.route("/static/abstract-bg.png")
+def serve_bg():
+    import os
+    from flask import send_from_directory
+    return send_from_directory(os.path.dirname(__file__), "abstract-bg.png")
 
 @app.route("/health")
 def health():
