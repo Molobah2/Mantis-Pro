@@ -188,6 +188,7 @@
     <button class="tab-btn" onclick="switchTab('presale',this)">🥕 Presale</button>
     <button class="tab-btn" onclick="switchTab('guide',this)">📖 Game Guide</button>
     <button class="tab-btn" onclick="switchTab('bot',this)">🤖 Mantis Bot</button>
+    <button class="tab-btn" onclick="switchTab('party',this)">👥 Party Finder</button>
   </div>
 
   <!-- LEADERBOARD TAB -->
@@ -327,6 +328,45 @@
         <div id="signup-status" style="margin-top:10px;font-size:12px;font-family:'Space Mono',monospace;color:var(--muted);"></div>
       </div>
       <div class="guide-tip orange" style="margin-top:14px;"><b>Built by</b> <a href="https://x.com/newguy_gn" target="_blank" style="color:var(--orange);">@newguy_gn</a> — Agent #857 on Abstract Chain. <a href="https://github.com/Molobah2/Mantis-Pro" target="_blank" style="color:var(--orange);">View on GitHub →</a></div>
+    </div>
+  </div>
+
+  <!-- PARTY FINDER TAB -->
+  <div class="tab-content" id="tab-party">
+    <div class="panel" style="padding:20px 24px;">
+
+      <div class="guide-section-title" style="margin-top:0;">👥 Find a Party to Join</div>
+      <div class="guide-tip" style="margin-bottom:16px;">
+        A party gives everyone in it <b>+5% bonus carrots</b> on every press — forever, for free. 
+        A full party has 5 members. Browse open parties below and join one directly. 
+        You need to complete the <b>Goblin Diplomacy</b> quest first (refer 2 friends) to unlock parties.
+      </div>
+
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+        <button onclick="loadParties()" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;">🔄 Refresh Parties</button>
+        <div style="flex:1;min-width:200px;">
+          <input id="party-search" type="text" placeholder="Search by party name or leader..." oninput="filterParties()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:9px 14px;color:var(--white);font-size:13px;outline:none;font-family:'Space Mono',monospace;" />
+        </div>
+        <select id="party-filter" onchange="filterParties()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:9px 12px;color:var(--white);font-size:13px;outline:none;cursor:pointer;">
+          <option value="all">All Parties</option>
+          <option value="open">Open (has space)</option>
+          <option value="full">Full</option>
+        </select>
+      </div>
+
+      <div id="party-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;"></div>
+      <div id="party-list-body"><div class="loading">FETCHING PARTIES...</div></div>
+
+      <div style="margin-top:20px;padding:14px;background:rgba(46,204,113,.06);border:1px solid rgba(46,204,113,.2);border-radius:8px;">
+        <div style="font-size:12px;color:var(--green-light);font-weight:700;margin-bottom:6px;letter-spacing:1px;">HOW PARTIES WORK</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.7;">
+          • Full party (5 members) = <b style="color:var(--white);">+5% bonus carrots</b> on every button press<br>
+          • 20% tax on your carrots goes to party mates — but you get theirs too<br>
+          • Net positive for everyone when the party is active and pressing<br>
+          • Unlock parties by completing <b style="color:var(--white);">Goblin Diplomacy</b> quest (refer 2 friends)
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -597,6 +637,112 @@ async function refresh() {
 renderQuests();
 refresh();
 setInterval(refresh, 60000);
+
+// ── PARTY FINDER ──────────────────────────────────────────────────────────
+let allParties = [];
+
+async function loadParties() {
+  const body = document.getElementById('party-list-body');
+  const stats = document.getElementById('party-stats');
+  body.innerHTML = '<div class="loading">FETCHING PARTIES...</div>';
+  try {
+    const data = await fetchProxy('/party/list');
+    // API returns parties in various shapes — handle both
+    const parties = data.parties || data.list || data || [];
+    allParties = Array.isArray(parties) ? parties : Object.values(parties);
+
+    if (!allParties.length) {
+      body.innerHTML = '<div class="error-msg">No parties found. Check back later.</div>';
+      return;
+    }
+
+    // Stats
+    const total = allParties.length;
+    const open = allParties.filter(p => (p.memberCount || p.members?.length || 0) < 5).length;
+    const full = total - open;
+    const avgSize = (allParties.reduce((s, p) => s + (p.memberCount || p.members?.length || 0), 0) / total).toFixed(1);
+
+    stats.innerHTML = [
+      ['Total Parties', total, 'var(--green-light)'],
+      ['Open (has space)', open, '#4caf50'],
+      ['Full Parties', full, 'var(--muted)'],
+      ['Avg Size', avgSize + '/5', 'var(--blue)'],
+    ].map(([label, val, color]) => `
+      <div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;padding:12px 14px;">
+        <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:4px;">${label}</div>
+        <div style="font-size:20px;font-weight:700;color:${color};">${val}</div>
+      </div>`).join('');
+
+    renderParties(allParties);
+  } catch(e) {
+    body.innerHTML = '<div class="error-msg">Error loading parties: ' + e.message + '</div>';
+  }
+}
+
+function renderParties(parties) {
+  const body = document.getElementById('party-list-body');
+  if (!parties.length) {
+    body.innerHTML = '<div class="error-msg">No parties match your filter.</div>';
+    return;
+  }
+
+  body.innerHTML = parties.map(p => {
+    const name = p.name || p.partyName || 'Unnamed Party';
+    const leader = p.leader || p.leaderHandle || p.leaderWallet || '?';
+    const leaderDisplay = leader.length > 20 ? leader.slice(0,10)+'...' : leader;
+    const members = p.memberCount || p.members?.length || 0;
+    const maxMembers = p.maxMembers || 5;
+    const isFull = members >= maxMembers;
+    const spotsLeft = maxMembers - members;
+    const bonus = p.bonusPct || p.bonus || 5;
+    const partyId = p.id || p.partyId || '';
+
+    // Member dots
+    const dots = Array.from({length: maxMembers}, (_, i) =>
+      `<div style="width:10px;height:10px;border-radius:50%;background:${i < members ? 'var(--green-light)' : 'rgba(255,255,255,.15)'};"></div>`
+    ).join('');
+
+    return `
+    <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:14px;transition:background .2s;" onmouseover="this.style.background='rgba(46,204,113,.04)'" onmouseout="this.style.background='transparent'">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:600;color:var(--white);margin-bottom:3px;">${name}</div>
+        <div style="font-size:11px;color:var(--muted);">Leader: ${leaderDisplay}</div>
+      </div>
+      <div style="display:flex;gap:4px;align-items:center;">${dots}</div>
+      <div style="text-align:right;min-width:80px;">
+        <div style="font-size:13px;font-weight:600;color:${isFull ? 'var(--muted)' : 'var(--green-light)'};">${isFull ? 'FULL' : spotsLeft + ' spot' + (spotsLeft>1?'s':'') + ' open'}</div>
+        <div style="font-size:11px;color:var(--muted);">${members}/${maxMembers} members</div>
+      </div>
+      <a href="https://bunnybutton.xyz/party" target="_blank" style="padding:6px 12px;background:${isFull ? 'rgba(255,255,255,.06)' : 'rgba(46,204,113,.12)'};border:1px solid ${isFull ? 'rgba(255,255,255,.1)' : 'rgba(46,204,113,.3)'};border-radius:6px;color:${isFull ? 'var(--muted)' : 'var(--green-light)'};text-decoration:none;font-size:12px;font-weight:600;white-space:nowrap;">
+        ${isFull ? 'View' : 'Join →'}
+      </a>
+    </div>`;
+  }).join('');
+}
+
+function filterParties() {
+  const search = document.getElementById('party-search').value.toLowerCase();
+  const filter = document.getElementById('party-filter').value;
+  let filtered = allParties;
+  if (search) {
+    filtered = filtered.filter(p =>
+      (p.name||'').toLowerCase().includes(search) ||
+      (p.partyName||'').toLowerCase().includes(search) ||
+      (p.leader||'').toLowerCase().includes(search) ||
+      (p.leaderHandle||'').toLowerCase().includes(search)
+    );
+  }
+  if (filter === 'open') filtered = filtered.filter(p => (p.memberCount||p.members?.length||0) < 5);
+  if (filter === 'full') filtered = filtered.filter(p => (p.memberCount||p.members?.length||0) >= 5);
+  renderParties(filtered);
+}
+
+// Load parties when tab is opened
+const origSwitchTab = switchTab;
+window.switchTab = function(name, btn) {
+  origSwitchTab(name, btn);
+  if (name === 'party' && allParties.length === 0) loadParties();
+}
 </script>
 </body>
 </html>
