@@ -67,6 +67,32 @@ def moody_woke():
 def moody_status():
     return jsonify(get_status())
 
+@app.route("/bunny/done")
+def bunny_done():
+    from bunny_agent import _mark_done, _daily_state
+    from flask import request
+    task = request.args.get("task", "").strip()
+    valid_tasks = [
+        "press_button", "energy_potion", "claim_farm", "streak",
+        "steal_upgrade", "regen_upgrade", "buy_farm", "breed_upgrade",
+        "connect_x", "connect_discord", "refer_friends", "join_party",
+        "stake_carrots", "creator_content"
+    ]
+    if not task:
+        return jsonify({"error": "Pass ?task=task_name", "valid_tasks": valid_tasks}), 400
+    if task not in valid_tasks:
+        return jsonify({"error": f"Unknown task: {task}", "valid_tasks": valid_tasks}), 400
+    _mark_done(task)
+    return jsonify({"status": "done", "task": task, "message": f"Task '{task}' marked complete. Mantis won't remind you about it today."})
+
+@app.route("/bunny/tasks")
+def bunny_tasks():
+    from bunny_agent import _daily_state
+    return jsonify({
+        "date": _daily_state.get("date", "?"),
+        "tasks_done": list(_daily_state.get("tasks_done", set())),
+    })
+
 # ── CONFIG ──────────────────────────────────
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
 OPENSEA_API_KEY    = os.getenv("OPENSEA_API_KEY")

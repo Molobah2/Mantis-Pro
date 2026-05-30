@@ -144,7 +144,13 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
     potion_used = player.get("energyPotionUsedToday", False)
     potion_cost = player.get("energyPotionCost", 0)
     total_clicks = player.get("totalClicks", 0)
-    streak = streaks.get("streakLength") or streaks.get("currentStreak", 0)
+    # Try all known streak field names
+    streak = (streaks.get("streakLength") or
+              streaks.get("currentStreak") or
+              streaks.get("streak") or
+              streaks.get("loginStreak") or
+              streaks.get("days") or 0)
+    print(f"  [Debug] Streak raw data: {streaks}")
 
     farm_cps = farm.get("carrotsPerSecond", 0)
     farm_cap_warn = farm.get("capWarning", False)
@@ -163,12 +169,22 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
 
     # ── DAILY MUST-DO TASKS ────────────────────────────────────────────────
 
-    # 1. Press button (check via total clicks increasing — we track separately)
+    # 1. Press button — mark done if total clicks increased since last check
+    energy_cur = player.get("energyCurrent", 500)
+    prev_clicks = _daily_state.get("prev_total_clicks", total_clicks)
+    if total_clicks > prev_clicks:
+        _mark_done("press_button")
+    _daily_state["prev_total_clicks"] = total_clicks
+
+    # Also mark done if energy is low (they clearly played)
+    if energy_cur < 100:
+        _mark_done("press_button")
+
     tasks.append({
         "key": "press_button",
         "priority": 1,
         "text": "Press the button until energy runs out",
-        "detail": f"Go to bunnybutton.xyz → keep pressing until energy hits 0. Your steal is {steal}x — each press earns carrots.",
+        "detail": f"Go to bunnybutton.xyz → keep pressing until energy hits 0. Your steal is {steal}x — each press earns carrots. (Energy: {energy_cur:.0f}/500)",
         "done": _is_done("press_button")
     })
 
@@ -203,17 +219,24 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
         })
 
     # 4. Log in streak
+    # Streak done if streak >= 1 (they've logged in at some point) or manually marked
+    streak_done = streak >= 1 or _is_done("streak")
     tasks.append({
         "key": "streak",
         "priority": 1,
         "text": f"Keep your daily login streak alive (currently {streak} days)",
         "detail": "Just signing in counts. Streak milestones give rewards. Don't break it!",
-        "done": streak > 0 or _is_done("streak")  # if streak > 0 they logged in
+        "done": streak_done
     })
 
     # ── UPGRADE TASKS ──────────────────────────────────────────────────────
 
-    # 5. Buy steal upgrade
+    # 5. Buy steal upgrade — detect if level increased since last check
+    prev_steal_level = _daily_state.get("prev_steal_level", steal_level)
+    if steal_level > prev_steal_level:
+        _mark_done("steal_upgrade")
+    _daily_state["prev_steal_level"] = steal_level
+
     steal_target = 1.0
     steal_done = steal >= steal_target or _is_done("steal_upgrade")
     tasks.append({
@@ -224,7 +247,12 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
         "done": steal_done
     })
 
-    # 6. Buy regen upgrade
+    # 6. Buy regen upgrade — detect level increase
+    prev_regen_level = _daily_state.get("prev_regen_level", regen_level)
+    if regen_level > prev_regen_level:
+        _mark_done("regen_upgrade")
+    _daily_state["prev_regen_level"] = regen_level
+
     regen_done = regen_level >= 3 or _is_done("regen_upgrade")
     tasks.append({
         "key": "regen_upgrade",
@@ -234,7 +262,9 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
         "done": regen_done
     })
 
-    # 7. Buy farm if not active
+    # 7. Buy farm if not active — auto-detect purchase
+    if farm_cps > 0:
+        _mark_done("buy_farm")
     if farm_cps == 0:
         tasks.append({
             "key": "buy_farm",
@@ -256,8 +286,9 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
 
     # ── SOCIAL / QUEST TASKS ───────────────────────────────────────────────
 
-    # 9. Connect X
-    x_done = "Blue Check Toll Bridge" in quest_names_done or _is_done("connect_x")
+    # 9. Connect X — check quest AND any x-related player fields
+    x_handle = player.get("xHandle") or player.get("twitterHandle") or player.get("xUsername")
+    x_done = "Blue Check Toll Bridge" in quest_names_done or bool(x_handle) or _is_done("connect_x")
     tasks.append({
         "key": "connect_x",
         "priority": 2,
