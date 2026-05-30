@@ -912,13 +912,22 @@ refresh();
 setInterval(refresh, 60000);
 
 // Auto-fill last used wallet on page load and auto-load tasks
-(function() {
+document.addEventListener('DOMContentLoaded', function() {
   const recents = getRecentWallets();
   if (recents.length) {
-    document.getElementById('wallet-input').value = recents[0];
+    const input = document.getElementById('wallet-input');
+    input.value = recents[0];
     renderRecentWallets('');
-    // Auto-load tasks for last wallet
-    setTimeout(() => loadPlayer(), 500);
+  }
+});
+
+// Also run immediately in case DOMContentLoaded already fired
+(function tryAutoFill() {
+  const recents = getRecentWallets();
+  const input = document.getElementById('wallet-input');
+  if (recents.length && input) {
+    input.value = recents[0];
+    renderRecentWallets('');
   }
 })();
 
