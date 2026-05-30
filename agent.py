@@ -154,10 +154,12 @@ def bunny_dashboard():
 def bunny_proxy():
     from flask import request as freq
     import requests as req2
-    endpoint = freq.args.get("endpoint", "/leaderboard")
+    from urllib.parse import unquote
+    endpoint = unquote(freq.args.get("endpoint", "/leaderboard"))
+    print(f"  [Proxy] endpoint: {repr(endpoint)}")
     allowed = ["/leaderboard", "/eth-price", "/presale/status", "/party/list"]
     if not any(endpoint.startswith(a) for a in allowed):
-        return jsonify({"error": "endpoint not allowed"}), 403
+        return jsonify({"error": f"endpoint not allowed: {endpoint}"}), 403
     try:
         resp = req2.get(
             f"https://www.bunnybutton.xyz/api{endpoint}",

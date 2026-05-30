@@ -84,13 +84,14 @@ def get_access_token():
         return json.loads(resp.read())["access_token"]
 
 
-def send_email(subject, html, plain):
+def send_email(subject, html, plain, to=None):
+    recipient = to or OWNER_EMAIL
     try:
         token = get_access_token()
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = ALERT_FROM
-        msg["To"] = ALERT_TO
+        msg["To"] = recipient
         msg.attach(MIMEText(plain, "plain"))
         msg.attach(MIMEText(html, "html"))
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
