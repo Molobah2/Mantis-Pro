@@ -190,6 +190,7 @@
     <button class="tab-btn" onclick="switchTab('bot',this)">🤖 Mantis Bot</button>
     <button class="tab-btn" onclick="switchTab('party',this)">👥 Party Finder</button>
     <button class="tab-btn" onclick="switchTab('calc',this)">🧮 Calculator</button>
+    <button class="tab-btn" onclick="switchTab('analytics',this)">📊 Analytics</button>
   </div>
 
   <!-- LEADERBOARD TAB -->
@@ -431,6 +432,46 @@
       <div style="margin-top:20px;">
         <div class="guide-section-title">💡 What if you upgrade?</div>
         <div id="calc-upgrades" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ANALYTICS TAB -->
+  <div class="tab-content" id="tab-analytics">
+    <div class="panel" style="padding:20px 24px;">
+
+      <div class="guide-section-title" style="margin-top:0;">📊 Leaderboard Analytics</div>
+      <div class="guide-tip" style="margin-bottom:16px;">Live breakdown of the top 100 players — breeds, carrot distribution, and what it takes to reach each rank tier.</div>
+
+      <div id="analytics-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;"><div class="loading">FETCHING...</div></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+
+        <!-- BREED BREAKDOWN -->
+        <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:16px;">
+          <div style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:12px;">🐰 Breed Distribution (Top 100)</div>
+          <div id="breed-chart"></div>
+        </div>
+
+        <!-- RANK TIERS -->
+        <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:16px;">
+          <div style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:12px;">🏆 What You Need Per Rank Tier</div>
+          <div id="rank-tiers"></div>
+        </div>
+
+      </div>
+
+      <!-- TOP 10 DETAILED -->
+      <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:16px;margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:12px;">🥇 Top 10 Breakdown</div>
+        <div id="top10-detail"></div>
+      </div>
+
+      <!-- CARROT DISTRIBUTION -->
+      <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:16px;">
+        <div style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:12px;">🥕 Carrot Distribution</div>
+        <div id="carrot-dist"></div>
       </div>
 
     </div>
@@ -897,6 +938,139 @@ function calcEarnings() {
 
 // Init calculator
 setTimeout(calcEarnings, 200);
+
+// ── LEADERBOARD ANALYTICS ─────────────────────────────────────────────────
+let analyticsData = [];
+
+async function loadAnalytics() {
+  try {
+    const data = await fetchProxy('/leaderboard?limit=100');
+    analyticsData = data.leaderboard || [];
+    renderAnalytics(analyticsData);
+  } catch(e) {
+    document.getElementById('analytics-stats').innerHTML = '<div class="error-msg">Error: ' + e.message + '</div>';
+  }
+}
+
+function renderAnalytics(lb) {
+  if (!lb.length) return;
+
+  const total = lb.length;
+  const carrots = lb.map(p => p.totalCarrotsEarned || 0);
+  const top1 = carrots[0] || 0;
+  const top10avg = Math.round(carrots.slice(0,10).reduce((a,b)=>a+b,0)/10);
+  const top50avg = Math.round(carrots.slice(0,50).reduce((a,b)=>a+b,0)/50);
+  const median = carrots[Math.floor(total/2)] || 0;
+
+  // Stats row
+  document.getElementById('analytics-stats').innerHTML = [
+    ['#1 Score', fmt(top1) + ' 🥕', 'var(--gold)'],
+    ['Top 10 Avg', fmt(top10avg) + ' 🥕', 'var(--green-light)'],
+    ['Top 50 Avg', fmt(top50avg) + ' 🥕', '#ffc107'],
+    ['Median', fmt(median) + ' 🥕', 'var(--muted)'],
+    ['Players Tracked', total, 'var(--blue)'],
+  ].map(([label, val, color]) => `
+    <div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;padding:14px;text-align:center;">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:5px;">${label}</div>
+      <div style="font-size:16px;font-weight:700;color:${color};">${val}</div>
+    </div>`).join('');
+
+  // Breed distribution
+  const breedCount = {};
+  lb.forEach(p => {
+    const b = (p.bunnyBreed || 'sprout').toLowerCase();
+    breedCount[b] = (breedCount[b] || 0) + 1;
+  });
+  const breedColors = { sprout:'#4caf50', meadow:'#2e7d32', spark:'#ffc107', burrow:'#64b5f6', bandit:'#ef5350', jackalope:'#ce93d8', moonburrow:'#80cbc4' };
+  const sortedBreeds = Object.entries(breedCount).sort((a,b)=>b[1]-a[1]);
+  const maxBreedCount = sortedBreeds[0][1];
+
+  document.getElementById('breed-chart').innerHTML = sortedBreeds.map(([breed, count]) => {
+    const pct = Math.round((count/total)*100);
+    const barW = Math.round((count/maxBreedCount)*100);
+    const color = breedColors[breed] || 'var(--muted)';
+    return `<div style="margin:6px 0;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-size:12px;color:var(--white);text-transform:capitalize;">${breed}</span>
+        <span style="font-size:12px;color:var(--muted);">${count} players (${pct}%)</span>
+      </div>
+      <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px;overflow:hidden;">
+        <div style="width:${barW}%;height:100%;background:${color};border-radius:3px;transition:width .5s;"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Rank tiers
+  const tiers = [
+    { label: 'Top 1', rank: 1, color: 'var(--gold)' },
+    { label: 'Top 10', rank: 10, color: '#c0c0c0' },
+    { label: 'Top 25', rank: 25, color: '#cd7f32' },
+    { label: 'Top 50', rank: 50, color: 'var(--green-light)' },
+    { label: 'Top 100', rank: 100, color: 'var(--blue)' },
+  ];
+
+  document.getElementById('rank-tiers').innerHTML = tiers.map(t => {
+    const entry = lb[t.rank - 1];
+    const score = entry ? (entry.totalCarrotsEarned || 0) : 0;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+      <span style="font-size:13px;font-weight:600;color:${t.color};">${t.label}</span>
+      <span style="font-size:13px;color:var(--white);">${fmt(score)} 🥕 needed</span>
+    </div>`;
+  }).join('');
+
+  // Top 10 detail
+  document.getElementById('top10-detail').innerHTML = lb.slice(0,10).map((p, i) => {
+    const name = p.xHandle || (p.walletAddress||'???').slice(0,10)+'...';
+    const breed = (p.bunnyBreed || 'sprout').toLowerCase();
+    const score = p.totalCarrotsEarned || 0;
+    const prev = i > 0 ? (lb[i-1].totalCarrotsEarned || 0) : score;
+    const gap = i > 0 ? fmt(prev - score) : '—';
+    const medals = ['🥇','🥈','🥉'];
+    return `<div style="display:grid;grid-template-columns:30px 1fr auto auto;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.04);">
+      <span style="font-size:16px;text-align:center;">${medals[i] || '#'+(i+1)}</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--white);">${name}</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:capitalize;">${breed}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:13px;color:var(--green-light);font-weight:600;">${fmt(score)} 🥕</div>
+        <div style="font-size:10px;color:var(--muted);">${i > 0 ? '-'+gap+' from #'+i : 'Leader'}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Carrot distribution buckets
+  const buckets = [
+    { label: '10K+', min: 10000, max: Infinity, color: 'var(--gold)' },
+    { label: '5K–10K', min: 5000, max: 10000, color: 'var(--green-light)' },
+    { label: '2K–5K', min: 2000, max: 5000, color: '#ffc107' },
+    { label: '1K–2K', min: 1000, max: 2000, color: 'var(--orange)' },
+    { label: 'Under 1K', min: 0, max: 1000, color: 'var(--muted)' },
+  ];
+  const maxBucket = Math.max(...buckets.map(b => carrots.filter(c => c >= b.min && c < b.max).length));
+
+  document.getElementById('carrot-dist').innerHTML = buckets.map(b => {
+    const count = carrots.filter(c => c >= b.min && c < b.max).length;
+    const pct = Math.round((count/total)*100);
+    const barW = maxBucket > 0 ? Math.round((count/maxBucket)*100) : 0;
+    return `<div style="margin:6px 0;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-size:12px;color:${b.color};font-weight:600;">${b.label}</span>
+        <span style="font-size:12px;color:var(--muted);">${count} players (${pct}%)</span>
+      </div>
+      <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px;overflow:hidden;">
+        <div style="width:${barW}%;height:100%;background:${b.color};border-radius:3px;transition:width .5s;opacity:.8;"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// trigger analytics load on tab switch
+const _prevSwitch = window.switchTab;
+window.switchTab = function(name, btn) {
+  _prevSwitch(name, btn);
+  if (name === 'analytics' && analyticsData.length === 0) loadAnalytics();
+}
 </script>
 </body>
 </html>
