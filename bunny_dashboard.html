@@ -175,6 +175,11 @@
   .auto-badge.live { background:rgba(46,204,113,0.15); color:var(--green-light); border:1px solid rgba(46,204,113,0.3); }
   .auto-badge.soon { background:rgba(255,140,0,0.1); color:var(--orange); border:1px solid rgba(255,140,0,0.2); }
 
+  /* RECENT WALLETS */
+  .recent-wallets { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
+  .recent-wallet-btn { padding:4px 10px; font-size:11px; font-family:'Space Mono',monospace; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:4px; color:var(--muted); cursor:pointer; transition:all 0.2s; letter-spacing:0.5px; }
+  .recent-wallet-btn:hover { border-color:var(--green-light); color:var(--green-light); }
+
   /* MARK DONE BUTTON */
   .mark-done-btn {
     display: inline-block;
@@ -535,6 +540,8 @@ async function loadPlayer() {
     return;
   }
   _currentWallet = wallet;
+  saveRecentWallet(wallet);
+  renderRecentWallets('');
   setStatus('Loading your game data...', 'loading');
   document.getElementById('tasks-badge').textContent = 'Loading...';
 
@@ -573,7 +580,57 @@ function setStatus(msg, type) {
   el.className = `wallet-status ${type}`;
 }
 
-// ── STORAGE ──────────────────────────────────────────────────────────────
+// ── RECENT WALLETS ───────────────────────────────────────────────────────
+function saveRecentWallet(wallet) {
+  if (!wallet || wallet.length < 10) return;
+  try {
+    let recents = JSON.parse(localStorage.getItem('mantis_recent_wallets') || '[]');
+    recents = recents.filter(w => w !== wallet); // remove if already exists
+    recents.unshift(wallet); // add to front
+    recents = recents.slice(0, 5); // keep max 5
+    localStorage.setItem('mantis_recent_wallets', JSON.stringify(recents));
+  } catch(e) {}
+}
+
+function getRecentWallets() {
+  try {
+    return JSON.parse(localStorage.getItem('mantis_recent_wallets') || '[]');
+  } catch(e) { return []; }
+}
+
+function renderRecentWallets(filter) {
+  const container = document.getElementById('recent-wallets-row');
+  const recents = getRecentWallets();
+  const filtered = filter ? recents.filter(w => w.toLowerCase().includes(filter.toLowerCase())) : recents;
+
+  if (!filtered.length) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  const existing = container.querySelectorAll('.recent-wallet-btn');
+  existing.forEach(e => e.remove());
+
+  filtered.forEach(wallet => {
+    const btn = document.createElement('button');
+    btn.className = 'recent-wallet-btn';
+    btn.textContent = wallet.slice(0,6) + '...' + wallet.slice(-4);
+    btn.title = wallet;
+    btn.onclick = () => {
+      document.getElementById('wallet-input').value = wallet;
+      container.style.display = 'none';
+      loadPlayer();
+    };
+    container.appendChild(btn);
+  });
+}
+
+function filterRecent(val) {
+  renderRecentWallets(val);
+}
+
+// ── STORAGE ───────────────────────────────────────────────────────────────
 let _currentWallet = '';
 const TODAY = new Date().toISOString().slice(0, 10); // "2026-05-30"
 
@@ -851,6 +908,15 @@ async function refresh() {
 
 refresh();
 setInterval(refresh, 60000);
+
+// Auto-fill last used wallet on page load
+(function() {
+  const recents = getRecentWallets();
+  if (recents.length) {
+    document.getElementById('wallet-input').value = recents[0];
+    renderRecentWallets('');
+  }
+})();
 
 // Register for alerts
 async function registerAlerts() {
