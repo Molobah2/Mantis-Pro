@@ -353,7 +353,13 @@ function switchTab(name, btn) {
 const TODAY = new Date().toISOString().slice(0, 10);
 
 const QUESTS = [
-  { id:'p1_press',    phase:'Phase 1 — First Day', pc:'free',    daily:false,
+  { id:'p1_x',        phase:'Phase 1 — First Day', pc:'free', daily:false,
+    title:'Connect your X (Twitter) account',
+    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu then connect X</a>. Your handle shows on the leaderboard instead of a wallet address. Also completes the Blue Check Toll Bridge quest for free rewards.' },
+  { id:'p1_discord',  phase:null, pc:'free', daily:false,
+    title:'Connect your Discord account',
+    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu then connect Discord</a>. Unlocks your in-game username, Discord bot commands, and leaderboard sync.' },
+  { id:'p1_press',    phase:null, pc:'free', daily:false,
     title:'Press the button for the first time',
     desc:'Go to <a href="https://bunnybutton.xyz" target="_blank" class="task-link">bunnybutton.xyz</a> and press the big button. Keep pressing until energy hits 0. Each press earns carrots based on your steal multiplier.' },
   { id:'p1_steal',    phase:null, pc:'free', daily:false,
@@ -365,12 +371,6 @@ const QUESTS = [
   { id:'p1_farm',     phase:null, pc:'free', daily:false,
     title:'Buy Farm Level 1 — passive income while you sleep',
     desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab then buy Level 1</a>. Earns carrots automatically even when offline. Do before more than 2-3 stat upgrades.' },
-  { id:'p1_x',        phase:null, pc:'free', daily:false,
-    title:'Connect your X (Twitter) account',
-    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu then connect X</a>. Your handle shows on the leaderboard. Completes the Blue Check Toll Bridge quest.' },
-  { id:'p1_discord',  phase:null, pc:'free', daily:false,
-    title:'Connect your Discord account',
-    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu then connect Discord</a>. Unlocks username, Discord commands, and leaderboard sync.' },
 
   { id:'p2_press',    phase:'Phase 2 — Daily Routine', pc:'daily', daily:true,
     title:'Press the button until energy hits 0 <span class="daily-badge">daily</span>',
