@@ -144,13 +144,19 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
     potion_used = player.get("energyPotionUsedToday", False)
     potion_cost = player.get("energyPotionCost", 0)
     total_clicks = player.get("totalClicks", 0)
-    # Try all known streak field names
-    streak = (streaks.get("streakLength") or
-              streaks.get("currentStreak") or
-              streaks.get("streak") or
-              streaks.get("loginStreak") or
-              streaks.get("days") or 0)
-    print(f"  [Debug] Streak raw data: {streaks}")
+    # Streak is nested: summary.streak.currentStreak
+    streak_summary = streaks.get("summary", {})
+    streak_obj = streak_summary.get("streak", {})
+    streak = (streak_obj.get("currentStreak") or
+              streak_obj.get("longestStreak") or
+              streaks.get("streakLength") or
+              streaks.get("currentStreak") or 0)
+    can_claim_streak = streak_obj.get("canClaim", False)
+
+    # Also extract milestone progress for the email
+    milestones = streak_summary.get("milestones", [])
+    total_clicks_milestone = next((m for m in milestones if m.get("id") == "clicks_10k"), None)
+    carrots_10k_milestone = next((m for m in milestones if m.get("id") == "carrots_10k"), None)
 
     farm_cps = farm.get("carrotsPerSecond", 0)
     farm_cap_warn = farm.get("capWarning", False)
@@ -221,11 +227,12 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
     # 4. Log in streak
     # Streak done if streak >= 1 (they've logged in at some point) or manually marked
     streak_done = streak >= 1 or _is_done("streak")
+    claim_note = " — ⚠️ Streak reward available! Go to Streaks tab to claim." if can_claim_streak else ""
     tasks.append({
         "key": "streak",
         "priority": 1,
-        "text": f"Keep your daily login streak alive (currently {streak} days)",
-        "detail": "Just signing in counts. Streak milestones give rewards. Don't break it!",
+        "text": f"Daily login streak: {streak} days{claim_note}",
+        "detail": f"Streak is active ✅ Keep logging in daily. Next milestone: 7 days (500 carrots reward). You're at {streak}/7.",
         "done": streak_done
     })
 
@@ -283,6 +290,35 @@ def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
             "detail": f"Save 2,500 carrots for a Breed Change, or earn 25,000 total carrots to unlock Jackalope (1.5x steal) for FREE. You have {total_carrots:,.0f}/{25000:,.0f} carrots toward Jackalope.",
             "done": _is_done("breed_upgrade")
         })
+
+    # ── MILESTONE TASKS ───────────────────────────────────────────────────
+    # Check for any claimable milestones
+    claimable = [m for m in milestones if m.get("canClaim", False)]
+    if claimable:
+        names = ", ".join(m.get("title", "?") for m in claimable)
+        tasks.append({
+            "key": "claim_milestones",
+            "priority": 1,
+            "text": f"Claim your milestone rewards: {names}",
+            "detail": "Go to Streaks tab → Milestones section → click Claim on each completed milestone. Free carrots waiting!",
+            "done": _is_done("claim_milestones")
+        })
+
+    # Next click milestone progress
+    next_click_m = next((m for m in milestones if not m.get("claimedAt") and m.get("category") == "lifetime_clicks"), None)
+    if next_click_m:
+        progress = next_click_m.get("progress", 0)
+        threshold = next_click_m.get("threshold", 0)
+        reward = next_click_m.get("rewardCarrots", 0)
+        remaining_clicks = max(0, threshold - progress)
+        if remaining_clicks < threshold * 0.2:  # within 20% of milestone
+            tasks.append({
+                "key": f"milestone_{next_click_m.get('id')}",
+                "priority": 2,
+                "text": f"Almost at {next_click_m.get('title')} milestone! ({progress:,}/{threshold:,} clicks)",
+                "detail": f"Just {remaining_clicks:,} more clicks to earn {reward:,} carrots. Keep pressing!",
+                "done": bool(next_click_m.get("claimedAt"))
+            })
 
     # ── SOCIAL / QUEST TASKS ───────────────────────────────────────────────
 
