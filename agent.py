@@ -15,6 +15,9 @@ load_dotenv()
 from bunny_routes import register_bunny_routes
 from bunny_agent import bunny_session
 
+# ── MOODY MADNESS ───────────────────────────
+from moody_agent import moody_check, record_woke, get_status, send_woke_confirmation
+
 # ── FLASK HEALTH SERVER ─────────────────────
 app = Flask(__name__)
 
@@ -47,6 +50,22 @@ def mcp():
 @app.route("/metadata")
 def metadata():
     return jsonify(AGENT_METADATA)
+
+register_bunny_routes(app)
+
+@app.route("/moody/woke")
+def moody_woke():
+    woke_time = record_woke()
+    send_woke_confirmation(woke_time)
+    return jsonify({
+        "status": "recorded",
+        "message": "Timer reset! You will get a reminder in 12 hours.",
+        "woke_at": woke_time.isoformat(),
+    })
+
+@app.route("/moody/status")
+def moody_status():
+    return jsonify(get_status())
 
 # ── CONFIG ──────────────────────────────────
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
@@ -385,6 +404,7 @@ def run_bunny():
     while True:
         try:
             bunny_session()
+            moody_check()
         except Exception as e:
             print(f"Bunny loop error: {e}")
         print("Sleeping 60 minutes before next Bunny session...")
