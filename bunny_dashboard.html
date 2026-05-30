@@ -189,6 +189,7 @@
     <button class="tab-btn" onclick="switchTab('guide',this)">📖 Game Guide</button>
     <button class="tab-btn" onclick="switchTab('bot',this)">🤖 Mantis Bot</button>
     <button class="tab-btn" onclick="switchTab('party',this)">👥 Party Finder</button>
+    <button class="tab-btn" onclick="switchTab('calc',this)">🧮 Calculator</button>
   </div>
 
   <!-- LEADERBOARD TAB -->
@@ -365,6 +366,71 @@
           • Net positive for everyone when the party is active and pressing<br>
           • Unlock parties by completing <b style="color:var(--white);">Goblin Diplomacy</b> quest (refer 2 friends)
         </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CALCULATOR TAB -->
+  <div class="tab-content" id="tab-calc">
+    <div class="panel" style="padding:20px 24px;">
+
+      <div class="guide-section-title" style="margin-top:0;">🧮 Carrot Earnings Calculator</div>
+      <div class="guide-tip" style="margin-bottom:20px;">Enter your current stats and see exactly how many carrots you will earn per day, per week, and per month. Adjust any value to see how upgrades affect your income.</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+
+        <div>
+          <label style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:block;margin-bottom:6px;">Steal Multiplier (x)</label>
+          <input id="calc-steal" type="number" value="0.25" step="0.05" min="0.1" max="10" oninput="calcEarnings()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:10px 14px;color:var(--white);font-size:15px;outline:none;font-family:'Space Mono',monospace;" />
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Current steal — find it on your profile</div>
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:block;margin-bottom:6px;">Max Energy</label>
+          <input id="calc-energy" type="number" value="500" step="10" min="100" max="5000" oninput="calcEarnings()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:10px 14px;color:var(--white);font-size:15px;outline:none;font-family:'Space Mono',monospace;" />
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Sprout = 500, Meadow = 1000, Burrow = 1500</div>
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:block;margin-bottom:6px;">Regen Speed (energy/hr)</label>
+          <input id="calc-regen" type="number" value="20" step="1" min="5" max="200" oninput="calcEarnings()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:10px 14px;color:var(--white);font-size:15px;outline:none;font-family:'Space Mono',monospace;" />
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Sprout = 20/hr, Spark = 58/hr</div>
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:block;margin-bottom:6px;">Farm Level (0 = no farm)</label>
+          <input id="calc-farm" type="number" value="0" step="1" min="0" max="10" oninput="calcEarnings()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:10px 14px;color:var(--white);font-size:15px;outline:none;font-family:'Space Mono',monospace;" />
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Each farm level adds passive income</div>
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:block;margin-bottom:6px;">Sessions Per Day</label>
+          <input id="calc-sessions" type="number" value="2" step="1" min="1" max="10" oninput="calcEarnings()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:10px 14px;color:var(--white);font-size:15px;outline:none;font-family:'Space Mono',monospace;" />
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">How many times per day you fully drain energy</div>
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:block;margin-bottom:6px;">Party Bonus</label>
+          <select id="calc-party" onchange="calcEarnings()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:10px 14px;color:var(--white);font-size:13px;outline:none;cursor:pointer;">
+            <option value="1">No party (0% bonus)</option>
+            <option value="1.05">In a party (+5% bonus)</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Full 5-person party = +5% on every press</div>
+        </div>
+
+      </div>
+
+      <!-- RESULTS -->
+      <div id="calc-results" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
+
+      <!-- BREAKDOWN -->
+      <div id="calc-breakdown" style="background:rgba(255,255,255,.03);border-radius:8px;padding:16px;font-size:13px;line-height:2;color:var(--muted);"></div>
+
+      <!-- UPGRADE COMPARISON -->
+      <div style="margin-top:20px;">
+        <div class="guide-section-title">💡 What if you upgrade?</div>
+        <div id="calc-upgrades" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;"></div>
       </div>
 
     </div>
@@ -742,7 +808,95 @@ const origSwitchTab = switchTab;
 window.switchTab = function(name, btn) {
   origSwitchTab(name, btn);
   if (name === 'party' && allParties.length === 0) loadParties();
+  if (name === 'calc') calcEarnings();
 }
+
+// ── CARROT CALCULATOR ─────────────────────────────────────────────────────
+// Farm CPS per level (approximate)
+const FARM_CPS = [0, 0.01, 0.025, 0.05, 0.09, 0.15, 0.22, 0.32, 0.44, 0.58, 0.75];
+// Base carrots per press at 1.0x steal
+const BASE_PER_PRESS = 1;
+
+function calcEarnings() {
+  const steal = parseFloat(document.getElementById('calc-steal').value) || 0.25;
+  const energy = parseInt(document.getElementById('calc-energy').value) || 500;
+  const regen = parseFloat(document.getElementById('calc-regen').value) || 20;
+  const farmLevel = parseInt(document.getElementById('calc-farm').value) || 0;
+  const sessions = parseInt(document.getElementById('calc-sessions').value) || 2;
+  const partyBonus = parseFloat(document.getElementById('calc-party').value) || 1;
+
+  // Presses per session = max energy (drain fully each session)
+  const pressesPerSession = energy;
+  const pressesPerDay = pressesPerSession * sessions;
+
+  // Carrots per press = steal * base
+  const carrotsPerPress = steal * BASE_PER_PRESS * partyBonus;
+  const pressCarrotsPerDay = pressesPerDay * carrotsPerPress;
+
+  // Farm passive income (capped at 8hrs per collection, 2 collections/day)
+  const farmCps = FARM_CPS[Math.min(farmLevel, FARM_CPS.length-1)];
+  const farmCarrotsPerDay = farmCps * 3600 * 8 * 2; // 2 x 8hr caps per day
+
+  // Energy potion = 1 extra full session per day
+  const potionCarrotsPerDay = pressesPerSession * carrotsPerPress;
+
+  // Total
+  const totalPerDay = pressCarrotsPerDay + farmCarrotsPerDay + potionCarrotsPerDay;
+  const totalPerWeek = totalPerDay * 7;
+  const totalPerMonth = totalPerDay * 30;
+
+  // Render results
+  const results = document.getElementById('calc-results');
+  results.innerHTML = [
+    ['Per Press', carrotsPerPress.toFixed(2) + ' 🥕', 'var(--green-light)'],
+    ['Per Day', fmt(Math.round(totalPerDay)) + ' 🥕', 'var(--green-light)'],
+    ['Per Week', fmt(Math.round(totalPerWeek)) + ' 🥕', '#ffc107'],
+    ['Per Month', fmt(Math.round(totalPerMonth)) + ' 🥕', 'var(--orange)'],
+    ['Days to Jackalope', Math.ceil(25000 / totalPerDay) + ' days', 'var(--blue)'],
+    ['Days to Top 10', Math.ceil(15000 / totalPerDay) + ' days', '#ce93d8'],
+  ].map(([label, val, color]) => `
+    <div style="background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;padding:14px 16px;text-align:center;">
+      <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:6px;">${label}</div>
+      <div style="font-size:18px;font-weight:700;color:${color};">${val}</div>
+    </div>`).join('');
+
+  // Breakdown
+  const breakdown = document.getElementById('calc-breakdown');
+  breakdown.innerHTML = `
+    <div style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:8px;">Daily Breakdown</div>
+    <div>⚡ Button pressing (${sessions} sessions × ${energy} energy): <b style="color:var(--white);">${fmt(Math.round(pressCarrotsPerDay))} carrots</b></div>
+    <div>💊 Daily Energy Potion (1 extra session): <b style="color:var(--white);">${fmt(Math.round(potionCarrotsPerDay))} carrots</b></div>
+    <div>🌾 Farm passive income (Level ${farmLevel}, 2 collections): <b style="color:var(--white);">${farmLevel > 0 ? fmt(Math.round(farmCarrotsPerDay)) : '0 — buy Farm Level 1!'} carrots</b></div>
+    <div style="border-top:1px solid rgba(255,255,255,.1);margin-top:8px;padding-top:8px;">Total: <b style="color:var(--green-light);font-size:15px;">${fmt(Math.round(totalPerDay))} carrots/day</b> ${partyBonus > 1 ? '(includes +5% party bonus)' : ''}</div>`;
+
+  // Upgrade comparison
+  const upgrades = document.getElementById('calc-upgrades');
+  const scenarios = [
+    { label: 'If steal → ' + (steal + 0.25).toFixed(2) + 'x', newSteal: steal + 0.25, newFarm: farmLevel },
+    { label: 'If steal → ' + (steal * 2).toFixed(2) + 'x (doubled)', newSteal: steal * 2, newFarm: farmLevel },
+    { label: 'If Farm → Level ' + (farmLevel + 1), newSteal: steal, newFarm: farmLevel + 1 },
+    { label: 'If Bandit breed (1.8x steal)', newSteal: Math.max(steal, 1.8), newFarm: farmLevel },
+  ];
+
+  upgrades.innerHTML = scenarios.map(s => {
+    const newPresses = pressesPerDay * s.newSteal * partyBonus;
+    const newPotion = pressesPerSession * s.newSteal * partyBonus;
+    const newFarmCps = FARM_CPS[Math.min(s.newFarm, FARM_CPS.length-1)];
+    const newFarm = newFarmCps * 3600 * 8 * 2;
+    const newTotal = newPresses + newPotion + newFarm;
+    const diff = newTotal - totalPerDay;
+    const pctGain = ((diff / totalPerDay) * 100).toFixed(0);
+    return `
+    <div style="background:rgba(46,204,113,.05);border:1px solid rgba(46,204,113,.15);border-radius:8px;padding:12px 14px;">
+      <div style="font-size:12px;font-weight:600;color:var(--white);margin-bottom:4px;">${s.label}</div>
+      <div style="font-size:13px;color:var(--green-light);font-weight:700;">${fmt(Math.round(newTotal))}/day</div>
+      <div style="font-size:11px;color:var(--muted);">+${fmt(Math.round(diff))} more (+${pctGain}%)</div>
+    </div>`;
+  }).join('');
+}
+
+// Init calculator
+setTimeout(calcEarnings, 200);
 </script>
 </body>
 </html>
