@@ -9,7 +9,6 @@
   :root {
     --green: #1a8a3c;
     --green-light: #2ecc71;
-    --green-bright: #00ff6a;
     --white: #ffffff;
     --muted: rgba(255,255,255,0.55);
     --card-bg: rgba(255,255,255,0.07);
@@ -19,408 +18,136 @@
     --gold: #ffd700;
     --orange: #ff8c00;
     --red: #ff4444;
-    --dark: rgba(8,20,12,0.97);
+    --blue: #64b5f6;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: 'Space Grotesk', sans-serif;
-    min-height: 100vh;
-    color: var(--white);
-    overflow-x: hidden;
-    position: relative;
-  }
-
-  /* ── BACKGROUND ── */
-  .bg-image {
-    position: fixed;
-    inset: 0;
-    background-image: url('/static/abstract-bg.png');
-    background-size: cover;
-    background-position: center top;
-    background-repeat: no-repeat;
-    filter: brightness(0.28) saturate(1.3);
-    z-index: 0;
-  }
-
-  .bg-overlay {
-    position: fixed;
-    inset: 0;
-    background: linear-gradient(
-      160deg,
-      rgba(8,20,12,0.55) 0%,
-      rgba(8,20,12,0.75) 50%,
-      rgba(8,20,12,0.92) 100%
-    );
-    z-index: 1;
-  }
-
-  /* Everything sits above bg */
+  body { font-family: 'Space Grotesk', sans-serif; min-height: 100vh; color: var(--white); overflow-x: hidden; }
+  .bg-image { position: fixed; inset: 0; background-image: url('/static/abstract-bg.png'); background-size: cover; background-position: center top; filter: brightness(0.28) saturate(1.3); z-index: 0; }
+  .bg-overlay { position: fixed; inset: 0; background: linear-gradient(160deg, rgba(8,20,12,0.55) 0%, rgba(8,20,12,0.75) 50%, rgba(8,20,12,0.92) 100%); z-index: 1; }
   header, main, footer { position: relative; z-index: 2; }
 
-  /* ── HEADER ── */
-  header {
-    padding: 18px 32px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    background: rgba(8,20,12,0.7);
-    backdrop-filter: blur(16px);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
+  header { padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(8,20,12,0.7); backdrop-filter: blur(16px); position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { font-size: 24px; }
+  .logo-title { font-size: 15px; font-weight: 700; }
+  .logo-sub { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; font-family: 'Space Mono', monospace; }
+  .live-badge { display: flex; align-items: center; gap: 8px; background: rgba(46,204,113,0.1); border: 1px solid rgba(46,204,113,0.3); border-radius: 20px; padding: 6px 14px; font-size: 11px; color: var(--green-light); letter-spacing: 2px; font-family: 'Space Mono', monospace; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-light); animation: blink 1.2s infinite; flex-shrink: 0; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+  main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; }
+  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; text-decoration: none; letter-spacing: 1px; margin-bottom: 20px; font-family: 'Space Mono', monospace; transition: color 0.2s; }
+  .back-link:hover { color: var(--green-light); }
 
-  .logo-icon { font-size: 26px; }
+  /* STATS ROW */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 18px; backdrop-filter: blur(8px); transition: all 0.25s; position: relative; overflow: hidden; }
+  .stat-card::after { content:''; position:absolute; top:0;left:0;right:0; height:2px; background: linear-gradient(90deg, var(--green), var(--green-light)); opacity:0.5; }
+  .stat-card:hover { background: var(--card-hover); border-color: var(--card-hover-border); }
+  .stat-label { font-size: 10px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 8px; font-family: 'Space Mono', monospace; }
+  .stat-value { font-size: 24px; font-weight: 700; color: var(--green-light); line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
-  .logo-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--white);
-    letter-spacing: 0.5px;
-  }
+  /* WALLET INPUT */
+  .wallet-box { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 20px 24px; backdrop-filter: blur(8px); margin-bottom: 24px; }
+  .wallet-box h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--white); }
+  .wallet-box p { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+  .wallet-input-row { display: flex; gap: 10px; }
+  .wallet-input { flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 10px 14px; color: var(--white); font-size: 13px; font-family: 'Space Mono', monospace; outline: none; transition: border-color 0.2s; }
+  .wallet-input:focus { border-color: rgba(46,204,113,0.5); }
+  .wallet-input::placeholder { color: var(--muted); }
+  .wallet-btn { background: var(--green); color: white; border: none; border-radius: 6px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'Space Grotesk', sans-serif; white-space: nowrap; }
+  .wallet-btn:hover { background: var(--green-light); transform: translateY(-1px); }
+  .wallet-status { margin-top: 10px; font-size: 12px; font-family: 'Space Mono', monospace; }
+  .wallet-status.loading { color: var(--muted); }
+  .wallet-status.error { color: var(--red); }
+  .wallet-status.success { color: var(--green-light); }
 
-  .logo-sub {
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    font-family: 'Space Mono', monospace;
-  }
+  /* THREE COLUMN LAYOUT */
+  .main-grid { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 18px; }
+  @media(max-width:900px) { .main-grid { grid-template-columns: 1fr; } }
 
-  .live-badge {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(46,204,113,0.1);
-    border: 1px solid rgba(46,204,113,0.3);
-    border-radius: 20px;
-    padding: 6px 14px;
-    font-size: 11px;
-    color: var(--green-light);
-    letter-spacing: 2px;
-    font-family: 'Space Mono', monospace;
-  }
+  /* PANELS */
+  .panel { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(8px); }
+  .panel-header { padding: 13px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); }
+  .panel-title { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--green-light); font-weight: 600; }
+  .panel-badge { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
 
-  .live-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--green-light);
-    animation: blink 1.2s infinite;
-    flex-shrink: 0;
-  }
-
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.2; }
-  }
-
-  /* ── MAIN ── */
-  main {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 32px 24px 60px;
-  }
-
-  /* ── STAT CARDS ── */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px;
-    margin-bottom: 28px;
-  }
-
-  .stat-card {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 10px;
-    padding: 20px;
-    backdrop-filter: blur(8px);
-    transition: all 0.25s;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .stat-card::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, var(--green), var(--green-light));
-    opacity: 0.5;
-  }
-
-  .stat-card:hover {
-    background: var(--card-hover);
-    border-color: var(--card-hover-border);
-    transform: translateY(-2px);
-  }
-
-  .stat-label {
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-    font-family: 'Space Mono', monospace;
-  }
-
-  .stat-value {
-    font-size: 26px;
-    font-weight: 700;
-    color: var(--green-light);
-    line-height: 1;
-    letter-spacing: -0.5px;
-  }
-
-  .stat-sub {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 6px;
-  }
-
-  /* ── PANELS ── */
-  .panels {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-  }
-
-  @media (max-width: 700px) {
-    .panels { grid-template-columns: 1fr; }
-    .stats-row { grid-template-columns: 1fr 1fr; }
-  }
-
-  .panel {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 10px;
-    overflow: hidden;
-    backdrop-filter: blur(8px);
-  }
-
-  .panel-header {
-    padding: 14px 20px;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: rgba(255,255,255,0.03);
-  }
-
-  .panel-title {
-    font-size: 12px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--green-light);
-    font-weight: 600;
-  }
-
-  .panel-badge {
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 1px;
-    font-family: 'Space Mono', monospace;
-  }
-
-  /* ── LEADERBOARD ── */
-  .lb-row {
-    display: grid;
-    grid-template-columns: 44px 1fr auto auto;
-    align-items: center;
-    gap: 10px;
-    padding: 11px 20px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    transition: background 0.2s;
-    animation: slideIn 0.3s ease both;
-  }
-
+  /* LEADERBOARD */
+  .lb-row { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 8px; padding: 9px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.2s; animation: slideIn 0.3s ease both; }
   .lb-row:last-child { border-bottom: none; }
-
   .lb-row:hover { background: rgba(46,204,113,0.05); }
-
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateX(-8px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-
-  .lb-rank {
-    font-size: 13px;
-    color: var(--muted);
-    text-align: center;
-    font-family: 'Space Mono', monospace;
-  }
-
+  @keyframes slideIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+  .lb-rank { font-size: 12px; color: var(--muted); text-align: center; font-family: 'Space Mono', monospace; }
   .lb-rank.top1 { color: var(--gold); font-weight: 700; }
   .lb-rank.top2 { color: #c0c0c0; }
   .lb-rank.top3 { color: #cd7f32; }
+  .lb-name { font-size: 13px; color: var(--white); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .lb-right { text-align: right; }
+  .lb-carrots { font-size: 12px; color: var(--green-light); font-weight: 600; }
+  .lb-breed { font-size: 9px; color: var(--muted); font-family: 'Space Mono', monospace; text-transform: uppercase; }
+  .breed-pill { display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; letter-spacing:1px; text-transform:uppercase; border:1px solid rgba(255,255,255,0.1); color:var(--muted); }
+  .breed-pill.meadow{border-color:rgba(46,204,113,0.3);color:#4caf50}
+  .breed-pill.spark{border-color:rgba(255,193,7,0.3);color:#ffc107}
+  .breed-pill.burrow{border-color:rgba(100,181,246,0.3);color:#64b5f6}
+  .breed-pill.bandit{border-color:rgba(239,83,80,0.3);color:#ef5350}
+  .breed-pill.jackalope{border-color:rgba(206,147,216,0.3);color:#ce93d8}
 
-  .lb-name {
-    font-size: 14px;
-    color: var(--white);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-weight: 500;
-  }
+  /* TASK LIST */
+  .tasks-panel { display: flex; flex-direction: column; }
+  .tasks-placeholder { padding: 24px 18px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .tasks-placeholder .icon { font-size: 32px; margin-bottom: 10px; }
 
-  .lb-breed {
-    font-size: 10px;
-    color: var(--muted);
-    text-align: right;
-    font-family: 'Space Mono', monospace;
-  }
+  .path-section { border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .path-section:last-child { border-bottom: none; }
+  .path-label { padding: 10px 16px; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-family: 'Space Mono', monospace; display: flex; align-items: center; gap: 8px; }
+  .path-label.free { color: var(--green-light); background: rgba(46,204,113,0.05); }
+  .path-label.paid { color: var(--orange); background: rgba(255,140,0,0.05); }
+  .path-label.social { color: var(--blue); background: rgba(100,181,246,0.05); }
 
-  .lb-carrots {
-    font-size: 13px;
-    color: var(--green-light);
-    text-align: right;
-    white-space: nowrap;
-    font-weight: 600;
-  }
+  .task-item { padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; gap: 10px; align-items: flex-start; transition: background 0.15s; }
+  .task-item:hover { background: rgba(255,255,255,0.02); }
+  .task-item.done { opacity: 0.5; }
+  .task-check { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .task-body { flex: 1; min-width: 0; }
+  .task-title { font-size: 13px; font-weight: 600; color: var(--white); margin-bottom: 3px; line-height: 1.3; }
+  .task-item.done .task-title { text-decoration: line-through; color: var(--muted); }
+  .task-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .task-link { display: inline-block; margin-top: 5px; font-size: 11px; color: var(--green-light); text-decoration: none; font-family: 'Space Mono', monospace; transition: opacity 0.2s; }
+  .task-link:hover { opacity: 0.7; }
+  .task-link.orange { color: var(--orange); }
+  .task-link.blue { color: var(--blue); }
 
-  .breed-pill {
-    display: inline-block;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-size: 9px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    border: 1px solid rgba(255,255,255,0.1);
-    color: var(--muted);
-  }
+  /* PRESALE PANEL */
+  .presale-body { padding: 16px; }
+  .presale-row { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:13px; }
+  .presale-row:last-of-type { border-bottom:none; }
+  .presale-key { color:var(--muted); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; font-family:'Space Mono',monospace; }
+  .presale-val { color:var(--white); font-weight:600; }
+  .presale-val.green{color:var(--green-light)}
+  .presale-val.orange{color:var(--orange)}
+  .presale-val.red{color:var(--red)}
+  .progress-bar { margin-top:14px; }
+  .progress-label { display:flex; justify-content:space-between; font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; font-family:'Space Mono',monospace; }
+  .progress-track { background:rgba(255,255,255,0.06); border-radius:4px; height:5px; overflow:hidden; border:1px solid rgba(255,255,255,0.08); }
+  .progress-fill { height:100%; background:linear-gradient(90deg, var(--green), var(--green-light)); border-radius:4px; transition:width 1s ease; box-shadow:0 0 10px rgba(46,204,113,0.4); }
 
-  .breed-pill.meadow { border-color: rgba(46,204,113,0.3); color: #4caf50; }
-  .breed-pill.spark  { border-color: rgba(255,193,7,0.3); color: #ffc107; }
-  .breed-pill.burrow { border-color: rgba(100,181,246,0.3); color: #64b5f6; }
-  .breed-pill.bandit { border-color: rgba(239,83,80,0.3); color: #ef5350; }
-  .breed-pill.jackalope { border-color: rgba(206,147,216,0.3); color: #ce93d8; }
+  #last-updated { font-size:10px; color:var(--muted); letter-spacing:2px; text-align:center; margin-top:18px; font-family:'Space Mono',monospace; }
+  .loading { color:var(--muted); font-size:11px; padding:20px 16px; letter-spacing:2px; font-family:'Space Mono',monospace; }
+  .error-msg { color:var(--red); font-size:11px; padding:14px 16px; font-family:'Space Mono',monospace; }
 
-  /* ── PRESALE PANEL ── */
-  .presale-body { padding: 20px; }
+  footer { text-align:center; padding:20px; font-size:11px; color:var(--muted); letter-spacing:2px; border-top:1px solid rgba(255,255,255,0.07); font-family:'Space Mono',monospace; position:relative; z-index:2; }
+  footer a { color:var(--green-light); text-decoration:none; }
 
-  .presale-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    font-size: 14px;
-  }
-
-  .presale-row:last-of-type { border-bottom: none; }
-
-  .presale-key {
-    color: var(--muted);
-    font-size: 11px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    font-family: 'Space Mono', monospace;
-  }
-
-  .presale-val { color: var(--white); font-weight: 600; }
-  .presale-val.green { color: var(--green-light); }
-  .presale-val.orange { color: var(--orange); }
-  .presale-val.red { color: var(--red); }
-
-  .progress-bar { margin-top: 18px; }
-
-  .progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-    font-family: 'Space Mono', monospace;
-  }
-
-  .progress-track {
-    background: rgba(255,255,255,0.06);
-    border-radius: 4px;
-    height: 5px;
-    overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.08);
-  }
-
-  .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--green), var(--green-light));
-    border-radius: 4px;
-    transition: width 1s ease;
-    box-shadow: 0 0 10px rgba(46,204,113,0.4);
-  }
-
-  /* ── FOOTER ── */
-  footer {
-    text-align: center;
-    padding: 24px;
-    font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    border-top: 1px solid rgba(255,255,255,0.07);
-    font-family: 'Space Mono', monospace;
-    position: relative;
-    z-index: 2;
-  }
-
-  footer a { color: var(--green-light); text-decoration: none; }
-
-  /* ── TIMESTAMP ── */
-  #last-updated {
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-align: center;
-    margin-top: 20px;
-    font-family: 'Space Mono', monospace;
-  }
-
-  /* ── LOADING / ERROR ── */
-  .loading {
-    color: var(--muted);
-    font-size: 12px;
-    padding: 24px 20px;
-    letter-spacing: 2px;
-    font-family: 'Space Mono', monospace;
-  }
-
-  .error-msg {
-    color: var(--red);
-    font-size: 12px;
-    padding: 16px 20px;
-    font-family: 'Space Mono', monospace;
-  }
-
-  /* ── BACK LINK ── */
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--muted);
-    font-size: 12px;
-    text-decoration: none;
-    letter-spacing: 1px;
-    transition: color 0.2s;
-    margin-bottom: 24px;
-    font-family: 'Space Mono', monospace;
-  }
-
-  .back-link:hover { color: var(--green-light); }
+  /* PLAYER STATS STRIP */
+  .player-strip { background: rgba(46,204,113,0.06); border: 1px solid rgba(46,204,113,0.2); border-radius:8px; padding:12px 16px; margin-bottom:16px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+  .player-strip-item { font-size:12px; }
+  .player-strip-label { color:var(--muted); font-size:10px; letter-spacing:1px; text-transform:uppercase; font-family:'Space Mono',monospace; }
+  .player-strip-val { color:var(--white); font-weight:600; font-size:14px; }
+  .player-strip-val.green { color:var(--green-light); }
 </style>
 </head>
 <body>
-
 <div class="bg-image"></div>
 <div class="bg-overlay"></div>
 
@@ -432,15 +159,13 @@
       <div class="logo-sub">Mantis Pro · Agent #857 · Abstract Chain</div>
     </div>
   </div>
-  <div class="live-badge">
-    <div class="live-dot"></div>
-    LIVE
-  </div>
+  <div class="live-badge"><div class="live-dot"></div>LIVE</div>
 </header>
 
 <main>
   <a href="/" class="back-link">← Back to Mantis Pro</a>
 
+  <!-- STAT CARDS -->
   <div class="stats-row">
     <div class="stat-card">
       <div class="stat-label">ETH / USD</div>
@@ -455,35 +180,61 @@
     <div class="stat-card">
       <div class="stat-label">CARROT Remaining</div>
       <div class="stat-value" id="carrot-remaining" style="font-size:20px;">—</div>
-      <div class="stat-sub">of 35,000,000 allocation</div>
+      <div class="stat-sub">of 35M allocation</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Presale Rate</div>
-      <div class="stat-value" style="font-size:18px; color: var(--orange);">350K</div>
+      <div class="stat-value" style="font-size:18px;color:var(--orange);">350K</div>
       <div class="stat-sub">CARROT per 1 ETH</div>
     </div>
   </div>
 
-  <div class="panels">
+  <!-- WALLET INPUT -->
+  <div class="wallet-box">
+    <h3>🎯 Get Your Personalised To-Do List</h3>
+    <p>Enter your wallet address to see exactly what you should do next — personalised to your rank, carrots, upgrades and quests. Free path and paid path clearly separated.</p>
+    <div class="wallet-input-row">
+      <input class="wallet-input" id="wallet-input" type="text" placeholder="0x... your wallet address" />
+      <button class="wallet-btn" onclick="loadPlayer()">Check My Tasks →</button>
+    </div>
+    <div class="wallet-status" id="wallet-status"></div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- LEADERBOARD -->
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">🏆 Leaderboard</span>
         <span class="panel-badge" id="lb-updated">—</span>
       </div>
-      <div id="leaderboard-body">
-        <div class="loading">FETCHING DATA...</div>
+      <div id="leaderboard-body"><div class="loading">FETCHING...</div></div>
+    </div>
+
+    <!-- TASK LIST -->
+    <div class="panel tasks-panel">
+      <div class="panel-header">
+        <span class="panel-title">📋 Your To-Do List</span>
+        <span class="panel-badge" id="tasks-badge">Enter wallet above</span>
+      </div>
+      <div id="tasks-body">
+        <div class="tasks-placeholder">
+          <div class="icon">👆</div>
+          Enter your wallet address above to get a personalised task list based on your actual game progress.
+        </div>
       </div>
     </div>
 
+    <!-- PRESALE -->
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">🥕 Presale Details</span>
         <span class="panel-badge">LIVE</span>
       </div>
-      <div class="presale-body" id="presale-body">
-        <div class="loading">FETCHING DATA...</div>
-      </div>
+      <div class="presale-body" id="presale-body"><div class="loading">FETCHING...</div></div>
     </div>
+
   </div>
 
   <div id="last-updated">Last updated: —</div>
@@ -496,123 +247,263 @@
 </footer>
 
 <script>
+const BASE_URL = 'https://www.bunnybutton.xyz';
+
 async function fetchProxy(endpoint) {
   const res = await fetch(`/api/bunny-proxy?endpoint=${encodeURIComponent(endpoint)}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
+async function fetchDirect(endpoint, wallet) {
+  // For wallet-specific public endpoints
+  const url = `${BASE_URL}/api${endpoint}${wallet ? (endpoint.includes('?') ? '&' : '?') + 'wallet=' + wallet : ''}`;
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 function fmt(n) { return Number(n).toLocaleString(); }
 
-function breedClass(breed) {
-  if (!breed) return '';
-  const b = breed.toLowerCase();
-  return ['meadow','spark','burrow','bandit','jackalope'].includes(b) ? b : '';
+function breedClass(b) {
+  if (!b) return '';
+  const bl = b.toLowerCase();
+  return ['meadow','spark','burrow','bandit','jackalope'].includes(bl) ? bl : '';
 }
 
-function rankEmoji(rank) {
-  if (rank === 1) return '🥇';
-  if (rank === 2) return '🥈';
-  if (rank === 3) return '🥉';
-  return `#${rank}`;
+function rankEmoji(r) {
+  if (r===1) return '🥇'; if (r===2) return '🥈'; if (r===3) return '🥉';
+  return `#${r}`;
 }
-
-function rankClass(rank) {
-  if (rank === 1) return 'top1';
-  if (rank === 2) return 'top2';
-  if (rank === 3) return 'top3';
+function rankClass(r) {
+  if (r===1) return 'top1'; if (r===2) return 'top2'; if (r===3) return 'top3';
   return '';
 }
 
+// ── LEADERBOARD ──
 async function loadLeaderboard() {
   const body = document.getElementById('leaderboard-body');
   try {
-    const data = await fetchProxy('/leaderboard?limit=20');
+    const data = await fetchProxy('/leaderboard?limit=15');
     const lb = data.leaderboard || [];
     if (!lb.length) { body.innerHTML = '<div class="error-msg">No data</div>'; return; }
-    body.innerHTML = lb.map((e, i) => {
-      const rank = e.rank || (i + 1);
-      const name = e.xHandle || (e.walletAddress || '???').slice(0,10) + '...';
+    body.innerHTML = lb.map((e,i) => {
+      const rank = e.rank || (i+1);
+      const name = e.xHandle || (e.walletAddress||'???').slice(0,10)+'...';
       const carrots = e.totalCarrotsEarned || 0;
       const breed = e.bunnyBreed || 'sprout';
       const bc = breedClass(breed);
       return `<div class="lb-row" style="animation-delay:${i*0.04}s">
         <div class="lb-rank ${rankClass(rank)}">${rankEmoji(rank)}</div>
         <div class="lb-name">${name}</div>
-        <div class="lb-breed"><span class="breed-pill ${bc}">${breed}</span></div>
-        <div class="lb-carrots">${fmt(carrots)} 🥕</div>
+        <div class="lb-right">
+          <div class="lb-carrots">${fmt(carrots)} 🥕</div>
+          <div class="lb-breed"><span class="breed-pill ${bc}">${breed}</span></div>
+        </div>
       </div>`;
     }).join('');
     document.getElementById('lb-updated').textContent = new Date().toLocaleTimeString();
   } catch(e) {
-    body.innerHTML = `<div class="error-msg">Error: ${e.message}</div>`;
+    body.innerHTML = `<div class="error-msg">${e.message}</div>`;
   }
 }
 
+// ── STATS ──
 async function loadStats() {
   try {
     const [ethData, presaleData] = await Promise.all([
       fetchProxy('/eth-price'),
       fetchProxy('/presale/status')
     ]);
-
     const ethUsd = ethData.ethUsd || 0;
     document.getElementById('eth-price').textContent =
-      '$' + Number(ethUsd).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      '$' + Number(ethUsd).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 
     const active = presaleData.active;
     const remaining = presaleData.remainingAllocation || 0;
     const raised = presaleData.totalRaisedEth || 0;
     const sold = 35000000 - remaining;
-    const pct = Math.min(100, Math.round((sold / 35000000) * 100));
+    const pct = Math.min(100, Math.round((sold/35000000)*100));
     const raisedUsd = raised * ethUsd;
 
     document.getElementById('presale-status').textContent = active ? 'ACTIVE' : 'ENDED';
     document.getElementById('presale-status').style.color = active ? 'var(--green-light)' : 'var(--red)';
-    document.getElementById('presale-sub').textContent = active ? 'Presale is live now' : 'Presale has ended';
-    document.getElementById('carrot-remaining').textContent = (remaining / 1000000).toFixed(2) + 'M';
+    document.getElementById('presale-sub').textContent = active ? 'Presale is live now' : 'Presale ended';
+    document.getElementById('carrot-remaining').textContent = (remaining/1000000).toFixed(2)+'M';
 
     document.getElementById('presale-body').innerHTML = `
-      <div class="presale-row">
-        <span class="presale-key">Status</span>
-        <span class="presale-val ${active ? 'green' : 'red'}">${active ? '✅ Active' : '❌ Ended'}</span>
-      </div>
-      <div class="presale-row">
-        <span class="presale-key">ETH Raised</span>
-        <span class="presale-val">${Number(raised).toFixed(4)} ETH</span>
-      </div>
-      <div class="presale-row">
-        <span class="presale-key">USD Value</span>
-        <span class="presale-val green">$${fmt(Math.round(raisedUsd))}</span>
-      </div>
-      <div class="presale-row">
-        <span class="presale-key">CARROT Left</span>
-        <span class="presale-val orange">${fmt(remaining)}</span>
-      </div>
-      <div class="presale-row">
-        <span class="presale-key">Rate</span>
-        <span class="presale-val">350,000 CARROT / ETH</span>
-      </div>
-      <div class="presale-row">
-        <span class="presale-key">Min Buy</span>
-        <span class="presale-val">0.01 ETH</span>
-      </div>
-      <div class="presale-row">
-        <span class="presale-key">Hard Cap</span>
-        <span class="presale-val">100 ETH</span>
-      </div>
+      <div class="presale-row"><span class="presale-key">Status</span><span class="presale-val ${active?'green':'red'}">${active?'✅ Active':'❌ Ended'}</span></div>
+      <div class="presale-row"><span class="presale-key">ETH Raised</span><span class="presale-val">${Number(raised).toFixed(4)} ETH</span></div>
+      <div class="presale-row"><span class="presale-key">USD Value</span><span class="presale-val green">$${fmt(Math.round(raisedUsd))}</span></div>
+      <div class="presale-row"><span class="presale-key">CARROT Left</span><span class="presale-val orange">${fmt(remaining)}</span></div>
+      <div class="presale-row"><span class="presale-key">Rate</span><span class="presale-val">350,000 / ETH</span></div>
+      <div class="presale-row"><span class="presale-key">Min Buy</span><span class="presale-val">0.01 ETH (~$${Math.round(ethUsd*0.01)})</span></div>
+      <div class="presale-row"><span class="presale-key">Hard Cap</span><span class="presale-val">100 ETH</span></div>
+      <div class="presale-row"><span class="presale-key">Ends</span><span class="presale-val">June 27, 2026</span></div>
       <div class="progress-bar">
-        <div class="progress-label">
-          <span>Sold ${pct}%</span>
-          <span>${fmt(sold)} / 35,000,000</span>
-        </div>
-        <div class="progress-track">
-          <div class="progress-fill" style="width:${pct}%"></div>
-        </div>
+        <div class="progress-label"><span>Sold ${pct}%</span><span>${fmt(sold)} / 35M</span></div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
       </div>`;
-  } catch(e) {
-    console.error('Stats error:', e);
+  } catch(e) { console.error(e); }
+}
+
+// ── PLAYER TASKS ──
+async function loadPlayer() {
+  const wallet = document.getElementById('wallet-input').value.trim();
+  if (!wallet || wallet.length < 10) {
+    setStatus('Please enter a valid wallet address', 'error');
+    return;
   }
+  setStatus('Loading your game data...', 'loading');
+  document.getElementById('tasks-badge').textContent = 'Loading...';
+
+  try {
+    // Fetch presale data for this wallet (public endpoint)
+    const presale = await fetchDirect('/presale/status', wallet);
+    const leaderboard = await fetchProxy('/leaderboard?limit=100');
+    const lb = leaderboard.leaderboard || [];
+
+    // Find player in leaderboard
+    const player = lb.find(e =>
+      e.walletAddress && e.walletAddress.toLowerCase() === wallet.toLowerCase()
+    );
+
+    if (!player) {
+      // Player exists but not on leaderboard yet — show starter tasks
+      renderStarterTasks(wallet, presale);
+      setStatus('✅ Wallet found — showing starter guide', 'success');
+      return;
+    }
+
+    renderPlayerTasks(player, presale, wallet);
+    setStatus(`✅ Loaded data for ${player.xHandle || wallet.slice(0,10)+'...'}`, 'success');
+
+  } catch(e) {
+    setStatus(`Error: ${e.message}`, 'error');
+  }
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('wallet-status');
+  el.textContent = msg;
+  el.className = `wallet-status ${type}`;
+}
+
+function task(done, title, desc, link, linkText, linkColor='') {
+  return `<div class="task-item ${done?'done':''}">
+    <div class="task-check">${done ? '✅' : '🔲'}</div>
+    <div class="task-body">
+      <div class="task-title">${title}</div>
+      <div class="task-desc">${desc}</div>
+      ${link ? `<a href="${link}" target="_blank" class="task-link ${linkColor}">${linkText} →</a>` : ''}
+    </div>
+  </div>`;
+}
+
+function pathHeader(label, emoji, type) {
+  return `<div class="path-section"><div class="path-label ${type}">${emoji} ${label}</div>`;
+}
+
+function renderStarterTasks(wallet, presale) {
+  const body = document.getElementById('tasks-body');
+  document.getElementById('tasks-badge').textContent = 'Starter Guide';
+
+  body.innerHTML = `
+    <div class="player-strip">
+      <div class="player-strip-item"><div class="player-strip-label">Status</div><div class="player-strip-val green">New Player</div></div>
+      <div class="player-strip-item"><div class="player-strip-label">Path</div><div class="player-strip-val">Free</div></div>
+    </div>
+
+    ${pathHeader('FREE PATH — Start Here', '🆓', 'free')}
+      ${task(false, 'Press the button to earn your first carrots', 'Open Bunny Button and click the big button. Every press earns carrots based on your steal multiplier.', 'https://bunnybutton.xyz', 'Go to Bunny Button')}
+      ${task(false, 'Buy your first Steal upgrade', 'Steal multiplier = more carrots per press. This is the most important upgrade. Start here before anything else.', 'https://bunnybutton.xyz/shop', 'Open Shop')}
+      ${task(false, 'Buy your first Regen upgrade', 'Faster regen = energy refills faster = more presses per day. Alternate between Steal and Regen upgrades.', 'https://bunnybutton.xyz/shop', 'Open Shop')}
+      ${task(false, 'Buy Farm Level 1 — passive income!', 'The farm makes carrots even while you sleep. Buy it early. Goes in Farm tab, not Shop.', 'https://bunnybutton.xyz/farm', 'Go to Farm')}
+      ${task(false, 'Connect your X (Twitter) account', 'Wallet menu → connect X. Shows your handle on the leaderboard and completes a quest.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings')}
+      ${task(false, 'Connect your Discord account', 'Wallet menu → connect Discord. Unlocks username and Discord commands.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings')}
+      ${task(false, 'Log in every day to build your streak', 'Just signing in counts. 7-day streak = 500 carrot reward. 30-day streak = 2,500 carrots.', 'https://bunnybutton.xyz', 'Open Bunny Button')}
+    </div>
+
+    ${pathHeader('SOCIAL PATH — Free Bonuses', '👥', 'social')}
+      ${task(false, 'Refer 2 friends to unlock Parties', 'Share your referral code from Wallet menu. When 2 people sign up using it, you unlock Parties — which gives +5% carrots per press for the whole group.', 'https://bunnybutton.xyz/wallet', 'Get Your Referral Code')}
+      ${task(false, 'Join a party for the +5% bonus', 'Once parties are unlocked (after referring 2 friends), go to Party tab and join one. A full 5-person party = +5% bonus on every press.', 'https://bunnybutton.xyz/party', 'Browse Parties')}
+      ${task(false, 'Post content about Bunny Button', 'Make an X post or short video about the game and submit it to the Creator Program. Rewards include carrot crates and tokens.', 'https://bunnybutton.xyz/creator-program', 'Creator Program')}
+    </div>
+
+    ${pathHeader('FREE BREED UNLOCKS — Long-Term Goals', '🐰', 'free')}
+      ${task(false, 'Earn 25,000 total carrots → unlock Jackalope (1.5x steal FREE)', 'Keep pressing daily. No spending needed. Jackalope gives you 1.5x steal multiplier for free — better than most paid breeds.', 'https://bunnybutton.xyz', 'Start Pressing')}
+      ${task(false, 'Reach 2.25x total steal → unlock Moonburrow (1.25x steal FREE)', 'Buy Steal upgrades in the Shop until your total steal multiplier reaches 2.25x. Moonburrow breed unlocks automatically.', 'https://bunnybutton.xyz/shop', 'Buy Steal Upgrades')}
+    </div>`;
+}
+
+function renderPlayerTasks(player, presale, wallet) {
+  const body = document.getElementById('tasks-body');
+
+  const rank = player.rank || '?';
+  const totalCarrots = player.totalCarrotsEarned || 0;
+  const balance = player.carrotBalance || 0;
+  const steal = player.stealMultiplier || 0.2;
+  const breed = player.bunnyBreed || 'sprout';
+  const bunnyClass = player.bunnyClass || 'none';
+  const stealLevel = player.stealLevel || 0;
+  const regenLevel = player.regenLevel || 0;
+  const farmCps = player.carrotsPerSecond || 0;
+  const referralCode = player.referralCode || '?';
+  const xHandle = player.xHandle;
+  const burned = player.carrotsBurned || 0;
+
+  // Derived booleans
+  const hasFarm = farmCps > 0;
+  const hasX = !!xHandle;
+  const goodSteal = steal >= 1.0;
+  const goodRegen = regenLevel >= 3;
+  const hasJackalope = breed.toLowerCase() === 'jackalope';
+  const hasMoonburrow = breed.toLowerCase() === 'moonburrow';
+  const goodBreed = !['sprout','none'].includes(breed.toLowerCase());
+  const reachMoonburrow = steal >= 2.25;
+  const reachJackalope = totalCarrots >= 25000;
+  const hasBurntOfferings = burned >= 50000;
+  const canStake = balance > 5000;
+
+  // Top of leaderboard gap
+  const top1 = 14000; // approx
+  const gap = Math.max(0, top1 - totalCarrots);
+
+  document.getElementById('tasks-badge').textContent = `Rank #${rank}`;
+
+  body.innerHTML = `
+    <div class="player-strip">
+      <div class="player-strip-item"><div class="player-strip-label">Rank</div><div class="player-strip-val green">#${rank}</div></div>
+      <div class="player-strip-item"><div class="player-strip-label">Total Carrots</div><div class="player-strip-val">${fmt(totalCarrots)}</div></div>
+      <div class="player-strip-item"><div class="player-strip-label">Balance</div><div class="player-strip-val">${fmt(balance)}</div></div>
+      <div class="player-strip-item"><div class="player-strip-label">Steal</div><div class="player-strip-val">${steal}x</div></div>
+      <div class="player-strip-item"><div class="player-strip-label">Breed</div><div class="player-strip-val">${breed}</div></div>
+    </div>
+
+    ${pathHeader('FREE PATH — Do These Daily', '🆓', 'free')}
+      ${task(false, 'Press the button until energy hits 0', `Your steal is ${steal}x so each press earns well. Keep pressing until energy = 0, then wait for it to refill.`, 'https://bunnybutton.xyz', 'Press the Button')}
+      ${task(false, 'Use your free daily Energy Potion', 'After energy hits 0, go to Shop → Energy Potion. It fully refills your energy once per day. Free extra session!', 'https://bunnybutton.xyz/shop', 'Open Shop')}
+      ${task(hasFarm, 'Buy Farm Level 1 — passive income while offline', hasFarm ? `Farm active at ${(farmCps*3600).toFixed(1)} carrots/hr. Upgrade it when you can.` : 'Go to Farm tab and buy Level 1. Earns carrots even while you sleep. Do this before more stat upgrades.', 'https://bunnybutton.xyz/farm', 'Open Farm')}
+      ${task(goodSteal, `Buy Steal upgrades — currently at ${steal}x (target 1.0x+)`, goodSteal ? 'Steal is solid. Keep upgrading it.' : 'Shop → Steal. Most important upgrade. Keep buying until you reach 1.0x steal.', 'https://bunnybutton.xyz/shop', 'Open Shop')}
+      ${task(goodRegen, `Buy Regen upgrades — level ${regenLevel} (target level 3+)`, goodRegen ? 'Regen is good. Alternate with Steal upgrades.' : 'Shop → Regen. Faster refill = more sessions per day. Alternate with Steal upgrades.', 'https://bunnybutton.xyz/shop', 'Open Shop')}
+      ${task(reachJackalope, `Earn 25,000 total carrots for FREE Jackalope breed (${fmt(totalCarrots)}/${fmt(25000)})`, reachJackalope ? 'Jackalope unlocked! You have 1.5x steal.' : `${fmt(25000-totalCarrots)} more carrots to go. No spending needed — just keep pressing daily.`, 'https://bunnybutton.xyz', 'Keep Pressing')}
+      ${task(reachMoonburrow, `Reach 2.25x steal for FREE Moonburrow breed (${steal}x/${2.25}x)`, reachMoonburrow ? 'Moonburrow unlocked!' : `${(2.25-steal).toFixed(2)}x more steal needed. Buy Steal upgrades in Shop.`, 'https://bunnybutton.xyz/shop', 'Buy Steal Upgrades')}
+    </div>
+
+    ${pathHeader('SOCIAL PATH — Free Bonuses', '👥', 'social')}
+      ${task(hasX, 'Connect your X account', hasX ? `Connected as ${xHandle}` : 'Wallet menu → connect X. Completes quest + shows your handle on leaderboard.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings', 'blue')}
+      ${task(false, `Refer friends to unlock parties (your code: ${referralCode})`, `Share code ${referralCode} on X or Discord. 2 referrals = Parties unlocked (+5% bonus per press). You also earn 8% of their carrot earnings.`, 'https://bunnybutton.xyz/wallet', 'Get Referral Link', 'blue')}
+      ${task(false, 'Join a party for group bonus', 'Party tab → join any open party. Full 5-person party = +5% bonus per press for everyone. Ask in Bunny Button Discord.', 'https://bunnybutton.xyz/party', 'Browse Parties', 'blue')}
+      ${task(false, 'Submit content to Creator Program', 'Post about Bunny Button on X, then submit your post URL. Rewards: carrot crates, tokens, unique items.', 'https://bunnybutton.xyz/creator-program', 'Creator Program', 'blue')}
+    </div>
+
+    ${pathHeader('PAID PATH — Move Up Fast', '⚡', 'paid')}
+      ${task(goodBreed, `Upgrade your breed — ${breed} gives ${steal}x steal`, goodBreed ? `${breed} is a good breed. Consider Bandit (1.8x steal) for max carrots.` : `Sprout only gives 0.2x steal. Paid breeds: Meadow ($15, 1x steal), Spark ($15, fast regen), Bandit ($15, 1.8x steal — best value). Go to Profile → Breed Change.`, 'https://bunnybutton.xyz/profile', 'Change Breed', 'orange')}
+      ${task(false, 'Open a Carrot Crate for gear bonus', 'Gacha page → open a Crate (~$10 worth of carrots). Get Cape (+steal), Boots (+regen), or Hat (+energy). Wait until steal is at level 3+ before opening.', 'https://bunnybutton.xyz/gacha', 'Open Crates', 'orange')}
+      ${task(canStake, `Stake surplus carrots (balance: ${fmt(balance)})`, canStake ? `You have ${fmt(balance)} carrots. Stake the surplus in Farm tab → Stake. Lock for 30/90/365 days for APY rewards. Only stake what you won't need for upgrades.` : 'Once your carrot balance exceeds 5,000, stake the surplus for APY rewards. Farm tab → Stake.', 'https://bunnybutton.xyz/farm', 'Open Farm / Stake', 'orange')}
+      ${task(hasBurntOfferings, `Burn 50,000 carrots on upgrades for 5,000 carrot reward (${fmt(burned)}/${fmt(50000)})`, hasBurntOfferings ? 'Quest complete! You earned 5,000 carrots.' : `${fmt(50000-burned)} more to burn. Just keep buying upgrades in the Shop — burned carrots count automatically.`, 'https://bunnybutton.xyz/shop', 'Open Shop', 'orange')}
+      ${task(false, 'Buy CARROT in presale at 1.4x discount', `Presale price: 350K CARROT per ETH. Launch price: 250K CARROT per ETH. Buying now = 1.4x more CARROT. Min buy: 0.01 ETH.`, 'https://bunnybutton.xyz/presale', 'Join Presale', 'orange')}
+    </div>`;
 }
 
 async function refresh() {
