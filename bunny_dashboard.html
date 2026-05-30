@@ -175,6 +175,19 @@
   .auto-badge.live { background:rgba(46,204,113,0.15); color:var(--green-light); border:1px solid rgba(46,204,113,0.3); }
   .auto-badge.soon { background:rgba(255,140,0,0.1); color:var(--orange); border:1px solid rgba(255,140,0,0.2); }
 
+  /* SELF ASSESSMENT */
+  .assessment-box { padding: 16px; }
+  .assessment-title { font-size: 14px; font-weight: 700; color: var(--white); margin-bottom: 4px; }
+  .assessment-sub { font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+  .assessment-question { margin-bottom: 16px; }
+  .assessment-question label { font-size: 12px; color: var(--green-light); letter-spacing: 1px; text-transform: uppercase; font-family: 'Space Mono', monospace; display: block; margin-bottom: 8px; }
+  .assessment-options { display: flex; flex-wrap: wrap; gap: 8px; }
+  .assessment-opt { padding: 7px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; background: rgba(255,255,255,0.04); color: var(--white); font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: 'Space Grotesk', sans-serif; }
+  .assessment-opt:hover { border-color: rgba(46,204,113,0.4); background: rgba(46,204,113,0.06); }
+  .assessment-opt.selected { border-color: var(--green-light); background: rgba(46,204,113,0.12); color: var(--green-light); font-weight: 600; }
+  .assessment-submit { margin-top: 16px; background: var(--green); color: white; border: none; border-radius: 6px; padding: 10px 24px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Space Grotesk', sans-serif; transition: all 0.2s; }
+  .assessment-submit:hover { background: var(--green-light); }
+
   /* RECENT WALLETS */
   .recent-wallets { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
   .recent-wallet-btn { padding:4px 10px; font-size:11px; font-family:'Space Mono',monospace; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:4px; color:var(--muted); cursor:pointer; transition:all 0.2s; letter-spacing:0.5px; }
@@ -437,7 +450,7 @@
 const BASE_URL = 'https://www.bunnybutton.xyz';
 
 async function fetchProxy(endpoint) {
-  const res = await fetch(`/api/bunny-proxy?endpoint=${encodeURIComponent(endpoint)}`);
+  const res = await fetch('/api/bunny-proxy?endpoint=' + endpoint);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -734,36 +747,94 @@ function pathHeader(label, emoji, type) {
   return `<div class="path-section"><div class="path-label ${type}">${emoji} ${label}</div>`;
 }
 
-function renderStarterTasks(wallet, presale) {
+function renderAssessment(wallet) {
   const body = document.getElementById('tasks-body');
-  document.getElementById('tasks-badge').textContent = 'Starter Guide';
+  document.getElementById('tasks-badge').textContent = 'Quick Setup';
+
+  const questions = [
+    { id: 'steal', label: "What's your current steal multiplier?", options: ['0.2x (just started)', '0.25–0.5x', '0.5–1.0x', '1.0x+', '1.5x+', '2.0x+'] },
+    { id: 'farm', label: 'Do you have a Carrot Farm?', options: ['No farm yet', 'Farm Level 1', 'Farm Level 2', 'Farm Level 3+'] },
+    { id: 'breed', label: "What's your current breed?", options: ['Sprout (starter)', 'Meadow / Spark / Burrow', 'Bandit (1.8x)', 'Moonburrow (free)', 'Jackalope (free)'] },
+    { id: 'social', label: 'What have you connected?', options: ['Nothing yet', 'X (Twitter)', 'Discord', 'Both X + Discord'] },
+    { id: 'party', label: 'Are you in a party?', options: ['Not in a party', 'In a party'] },
+    { id: 'carrots', label: 'Roughly how many total carrots earned?', options: ['Under 1,000', '1,000–5,000', '5,000–10,000', '10,000–25,000', '25,000+'] },
+  ];
+
+  const optionsHtml = questions.map(q => `
+    <div class="assessment-question">
+      <label>${q.label}</label>
+      <div class="assessment-options" data-qid="${q.id}">
+        ${q.options.map(o => `<button class="assessment-opt" onclick="selectOpt(this,'${q.id}')">${o}</button>`).join('')}
+      </div>
+    </div>`).join('');
 
   body.innerHTML = `
-    <div class="player-strip">
-      <div class="player-strip-item"><div class="player-strip-label">Status</div><div class="player-strip-val green">New Player</div></div>
-      <div class="player-strip-item"><div class="player-strip-label">Path</div><div class="player-strip-val">Free</div></div>
-    </div>
-
-    ${pathHeader('FREE PATH — Start Here', '🆓', 'free')}
-      ${task(false, 'Press the button to earn your first carrots', 'Open Bunny Button and click the big button. Every press earns carrots based on your steal multiplier.', 'https://bunnybutton.xyz', 'Go to Bunny Button', '', 'press_first', true)}
-      ${task(false, 'Buy your first Steal upgrade', 'Steal multiplier = more carrots per press. This is the most important upgrade. Start here before anything else.', 'https://bunnybutton.xyz/shop', 'Open Shop', '', 'steal_first', true)}
-      ${task(false, 'Buy your first Regen upgrade', 'Faster regen = energy refills faster = more presses per day. Alternate between Steal and Regen upgrades.', 'https://bunnybutton.xyz/shop', 'Open Shop', '', 'regen_first', true)}
-      ${task(false, 'Buy Farm Level 1 — passive income!', 'The farm makes carrots even while you sleep. Buy it early. Goes in Farm tab, not Shop.', 'https://bunnybutton.xyz/farm', 'Go to Farm', '', 'farm_first', true)}
-      ${task(false, 'Connect your X (Twitter) account', 'Wallet menu → connect X. Shows your handle on the leaderboard and completes a quest.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings', '', 'connect_x_s', true)}
-      ${task(false, 'Connect your Discord account', 'Wallet menu → connect Discord. Unlocks username and Discord commands.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings', '', 'connect_discord_s', true)}
-      ${task(false, 'Log in every day to build your streak', 'Just signing in counts. 7-day streak = 500 carrot reward. 30-day streak = 2,500 carrots.', 'https://bunnybutton.xyz', 'Open Bunny Button', '', 'streak_s', true)}
-    </div>
-
-    ${pathHeader('SOCIAL PATH — Free Bonuses', '👥', 'social')}
-      ${task(false, 'Refer 2 friends to unlock Parties', 'Share your referral code from Wallet menu. When 2 people sign up using it, you unlock Parties — which gives +5% carrots per press for the whole group.', 'https://bunnybutton.xyz/wallet', 'Get Your Referral Code', 'blue', 'refer_s', true)}
-      ${task(false, 'Join a party for the +5% bonus', 'Once parties are unlocked (after referring 2 friends), go to Party tab and join one. A full 5-person party = +5% bonus on every press.', 'https://bunnybutton.xyz/party', 'Browse Parties', 'blue', 'party_s', true)}
-      ${task(false, 'Post content about Bunny Button', 'Make an X post or short video about the game and submit it to the Creator Program. Rewards include carrot crates and tokens.', 'https://bunnybutton.xyz/creator-program', 'Creator Program', 'blue', 'creator_s', true)}
-    </div>
-
-    ${pathHeader('FREE BREED UNLOCKS — Long-Term Goals', '🐰', 'free')}
-      ${task(false, 'Earn 25,000 total carrots → unlock Jackalope (1.5x steal FREE)', 'Keep pressing daily. No spending needed. Jackalope gives you 1.5x steal multiplier for free — better than most paid breeds.', 'https://bunnybutton.xyz', 'Start Pressing')}
-      ${task(false, 'Reach 2.25x total steal → unlock Moonburrow (1.25x steal FREE)', 'Buy Steal upgrades in the Shop until your total steal multiplier reaches 2.25x. Moonburrow breed unlocks automatically.', 'https://bunnybutton.xyz/shop', 'Buy Steal Upgrades')}
+    <div class="assessment-box">
+      <div class="assessment-title">📋 Tell us about your progress</div>
+      <div class="assessment-sub">Your wallet is not in the top 100 yet — no problem! Answer these quick questions and we will build your personalised task list.</div>
+      ${optionsHtml}
+      <button class="assessment-submit" onclick="submitAssessment('${wallet}')">Generate My Task List →</button>
+      <div id="assessment-status" style="margin-top:10px;font-size:12px;color:var(--red);font-family:'Space Mono',monospace;"></div>
     </div>`;
+}
+
+window.selectOpt = function(btn, qid) {
+  const group = btn.closest('[data-qid]');
+  group.querySelectorAll('.assessment-opt').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+window.submitAssessment = function(wallet) {
+  const answers = {};
+  document.querySelectorAll('[data-qid]').forEach(group => {
+    const qid = group.dataset.qid;
+    const selected = group.querySelector('.selected');
+    answers[qid] = selected ? selected.textContent.trim() : null;
+  });
+
+  const unanswered = Object.entries(answers).filter(([k,v]) => !v);
+  if (unanswered.length) {
+    document.getElementById('assessment-status').textContent = 'Please answer all questions before continuing.';
+    return;
+  }
+
+  // Build synthetic player from answers
+  const stealMap = {'0.2x (just started)':0.2,'0.25–0.5x':0.3,'0.5–1.0x':0.75,'1.0x+':1.0,'1.5x+':1.5,'2.0x+':2.0};
+  const steal = stealMap[answers.steal] || 0.2;
+  const stealLevel = steal <= 0.2 ? 0 : steal <= 0.5 ? 2 : steal <= 1.0 ? 4 : steal <= 1.5 ? 6 : 9;
+  const regenLevel = steal <= 0.5 ? 1 : steal <= 1.0 ? 3 : steal <= 1.5 ? 5 : 8;
+  const farmLevel = answers.farm === 'No farm yet' ? 0 : answers.farm === 'Farm Level 1' ? 1 : answers.farm === 'Farm Level 2' ? 2 : 3;
+  const breedMap = {'Sprout (starter)':'sprout','Meadow / Spark / Burrow':'meadow','Bandit (1.8x)':'bandit','Moonburrow (free)':'moonburrow','Jackalope (free)':'jackalope'};
+  const breed = breedMap[answers.breed] || 'sprout';
+  const hasX = answers.social === 'X (Twitter)' || answers.social === 'Both X + Discord';
+  const hasDiscord = answers.social === 'Discord' || answers.social === 'Both X + Discord';
+  const inParty = answers.party === 'In a party';
+  const carrotMap = {'Under 1,000':500,'1,000–5,000':3000,'5,000–10,000':7500,'10,000–25,000':17000,'25,000+':30000};
+  const totalCarrots = carrotMap[answers.carrots] || 500;
+  const burned = Math.round(totalCarrots * 0.4);
+
+  const syntheticPlayer = {
+    rank: '100+', totalCarrotsEarned: totalCarrots, carrotBalance: Math.round(totalCarrots * 0.2),
+    stealMultiplier: steal, stealLevel, regenLevel, bunnyBreed: breed, bunnyClass: 'warrior',
+    xHandle: hasX ? 'connected' : null, carrotsBurned: burned, totalClicks: Math.round(totalCarrots / steal),
+    referralCode: 'CHECK IN GAME', energyPotionCost: 100
+  };
+
+  // Store farm level in localStorage
+  if (farmLevel >= 1) setDone(wallet, 'farm_l1', true);
+  if (farmLevel >= 2) setDone(wallet, 'farm_l2', true);
+  if (farmLevel >= 3) setDone(wallet, 'farm_l3', true);
+  if (inParty) setDone(wallet, 'party', true);
+  if (hasDiscord) setDone(wallet, 'connect_discord', true);
+
+  renderPlayerTasks(syntheticPlayer, {}, wallet);
+  document.getElementById('tasks-badge').textContent = 'Your Tasks (Self-assessed)';
+  switchToTasksTab();
+}
+
+function renderStarterTasks(wallet, presale) {
+  // Show assessment instead of generic starter tasks
+  renderAssessment(wallet);
 }
 
 function renderPlayerTasks(player, presale, wallet) {
