@@ -93,6 +93,34 @@ def bunny_tasks():
         "tasks_done": list(_daily_state.get("tasks_done", set())),
     })
 
+@app.route("/bunny/dashboard")
+def bunny_dashboard():
+    import os
+    dashboard_path = os.path.join(os.path.dirname(__file__), "bunny_dashboard.html")
+    with open(dashboard_path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+@app.route("/api/bunny-proxy")
+def bunny_proxy():
+    from flask import request as freq
+    import requests as req2
+    endpoint = freq.args.get("endpoint", "/leaderboard")
+    allowed = ["/leaderboard", "/eth-price", "/presale/status", "/party/list"]
+    if not any(endpoint.startswith(a) for a in allowed):
+        return jsonify({"error": "endpoint not allowed"}), 403
+    try:
+        resp = req2.get(
+            f"https://www.bunnybutton.xyz/api{endpoint}",
+            headers={"Accept": "application/json"},
+            timeout=8
+        )
+        from flask import Response
+        return Response(resp.content, status=resp.status_code, content_type="application/json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ── CONFIG ──────────────────────────────────
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
 OPENSEA_API_KEY    = os.getenv("OPENSEA_API_KEY")

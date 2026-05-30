@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bunny Button Live — Mantis Pro Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060a06;
+    --surface: #0d140d;
+    --border: #1a2e1a;
+    --green: #39ff14;
+    --green-dim: #1a7a08;
+    --orange: #ff6b00;
+    --gold: #ffd700;
+    --white: #e8f5e8;
+    --muted: #4a6b4a;
+    --red: #ff3333;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline effect */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Grid background */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(57,255,20,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(57,255,20,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: rgba(6,10,6,0.95);
+    backdrop-filter: blur(10px);
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    font-size: 28px;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { filter: drop-shadow(0 0 8px rgba(57,255,20,0.8)); }
+    50% { filter: drop-shadow(0 0 20px rgba(57,255,20,1)); }
+  }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--green);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(57,255,20,0.08);
+    border: 1px solid var(--green-dim);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 2px;
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: blink 1s infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px;
+  }
+
+  /* Stat cards row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--green);
+    opacity: 0.4;
+  }
+
+  .stat-card:hover {
+    border-color: var(--green-dim);
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--green);
+    line-height: 1;
+  }
+
+  .stat-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* Panels */
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 700px) {
+    .panels { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--green);
+  }
+
+  .panel-badge {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .panel-body {
+    padding: 0;
+  }
+
+  /* Leaderboard */
+  .lb-row {
+    display: grid;
+    grid-template-columns: 40px 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(26,46,26,0.5);
+    transition: background 0.2s;
+    animation: fadeIn 0.4s ease both;
+  }
+
+  .lb-row:last-child { border-bottom: none; }
+  .lb-row:hover { background: rgba(57,255,20,0.03); }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .lb-rank {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .lb-rank.top1 { color: var(--gold); font-weight: 700; font-size: 14px; }
+  .lb-rank.top2 { color: #c0c0c0; }
+  .lb-rank.top3 { color: #cd7f32; }
+
+  .lb-name {
+    font-size: 13px;
+    color: var(--white);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lb-breed {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-align: right;
+  }
+
+  .lb-carrots {
+    font-size: 13px;
+    color: var(--green);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* Presale panel */
+  .presale-body {
+    padding: 24px 20px;
+  }
+
+  .presale-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(26,46,26,0.5);
+    font-size: 13px;
+  }
+
+  .presale-row:last-child { border-bottom: none; }
+  .presale-key { color: var(--muted); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+  .presale-val { color: var(--white); font-weight: 700; }
+  .presale-val.green { color: var(--green); }
+  .presale-val.orange { color: var(--orange); }
+
+  .progress-bar {
+    margin-top: 20px;
+  }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .progress-track {
+    background: rgba(57,255,20,0.08);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green-dim), var(--green));
+    border-radius: 4px;
+    transition: width 1s ease;
+    box-shadow: 0 0 8px rgba(57,255,20,0.5);
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 32px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+
+  footer a { color: var(--green-dim); text-decoration: none; }
+  footer a:hover { color: var(--green); }
+
+  /* Loading */
+  .loading {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 24px 20px;
+    letter-spacing: 2px;
+    animation: blink 1s infinite;
+  }
+
+  /* Error */
+  .error-msg {
+    color: var(--red);
+    font-size: 11px;
+    padding: 16px 20px;
+    letter-spacing: 1px;
+  }
+
+  /* Last updated */
+  #last-updated {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-align: center;
+    margin-top: 16px;
+  }
+
+  .breed-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .breed-pill.meadow { border-color: #2a5a2a; color: #4caf50; }
+  .breed-pill.spark { border-color: #5a4a00; color: #ffc107; }
+  .breed-pill.burrow { border-color: #2a3a5a; color: #64b5f6; }
+  .breed-pill.bandit { border-color: #5a2a2a; color: #ef5350; }
+  .breed-pill.jackalope { border-color: #4a2a5a; color: #ce93d8; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-icon">🥕</span>
+    <div>
+      <div class="logo-text">Bunny Button Live</div>
+      <div class="logo-sub">Powered by Mantis Pro · Agent #857</div>
+    </div>
+  </div>
+  <div class="live-badge">
+    <div class="live-dot"></div>
+    LIVE
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">ETH / USD</div>
+      <div class="stat-value" id="eth-price">—</div>
+      <div class="stat-sub">Live spot price</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Presale Status</div>
+      <div class="stat-value" id="presale-status" style="font-size:18px;">—</div>
+      <div class="stat-sub" id="presale-sub">Loading...</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">CARROT Remaining</div>
+      <div class="stat-value" id="carrot-remaining" style="font-size:20px;">—</div>
+      <div class="stat-sub">of 35,000,000 allocation</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Presale Price</div>
+      <div class="stat-value" style="font-size:18px; color: var(--orange);">350K</div>
+      <div class="stat-sub">CARROT per 1 ETH</div>
+    </div>
+  </div>
+
+  <div class="panels">
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">🏆 Leaderboard</span>
+        <span class="panel-badge" id="lb-updated">—</span>
+      </div>
+      <div class="panel-body" id="leaderboard-body">
+        <div class="loading">FETCHING DATA...</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">🥕 Presale Details</span>
+        <span class="panel-badge">LIVE</span>
+      </div>
+      <div class="panel-body presale-body" id="presale-body">
+        <div class="loading">FETCHING DATA...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="last-updated">Last updated: —</div>
+
+</div>
+
+<footer>
+  Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> ·
+  Mantis Pro · Agent #857 on Abstract Chain ·
+  <a href="https://bunnybutton.xyz" target="_blank">Play Bunny Button →</a>
+</footer>
+
+<script>
+const BASE = '/api/bunny-proxy';
+
+async function fetchProxy(endpoint) {
+  const res = await fetch(`${BASE}?endpoint=${encodeURIComponent(endpoint)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function fmt(n) {
+  return Number(n).toLocaleString();
+}
+
+function breedClass(breed) {
+  if (!breed) return '';
+  const b = breed.toLowerCase();
+  if (['meadow','spark','burrow','bandit','jackalope'].includes(b)) return b;
+  return '';
+}
+
+function rankClass(rank) {
+  if (rank === 1) return 'top1';
+  if (rank === 2) return 'top2';
+  if (rank === 3) return 'top3';
+  return '';
+}
+
+function rankEmoji(rank) {
+  if (rank === 1) return '🥇';
+  if (rank === 2) return '🥈';
+  if (rank === 3) return '🥉';
+  return `#${rank}`;
+}
+
+async function loadLeaderboard() {
+  const body = document.getElementById('leaderboard-body');
+  try {
+    const data = await fetchProxy('/leaderboard?limit=20');
+    const lb = data.leaderboard || [];
+
+    if (!lb.length) {
+      body.innerHTML = '<div class="error-msg">No data available</div>';
+      return;
+    }
+
+    body.innerHTML = lb.map((entry, i) => {
+      const rank = entry.rank || (i + 1);
+      const name = entry.xHandle || (entry.walletAddress || '???').slice(0, 10) + '...';
+      const carrots = entry.totalCarrotsEarned || 0;
+      const breed = entry.bunnyBreed || 'sprout';
+      const rc = rankClass(rank);
+      const bc = breedClass(breed);
+      const delay = i * 0.05;
+
+      return `<div class="lb-row" style="animation-delay:${delay}s">
+        <div class="lb-rank ${rc}">${rankEmoji(rank)}</div>
+        <div class="lb-name">${name}</div>
+        <div class="lb-breed"><span class="breed-pill ${bc}">${breed}</span></div>
+        <div class="lb-carrots">${fmt(carrots)} 🥕</div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('lb-updated').textContent = new Date().toLocaleTimeString();
+  } catch (e) {
+    body.innerHTML = `<div class="error-msg">Error: ${e.message}</div>`;
+  }
+}
+
+async function loadStats() {
+  try {
+    const [ethData, presaleData] = await Promise.all([
+      fetchProxy('/eth-price'),
+      fetchProxy('/presale/status')
+    ]);
+
+    // ETH price
+    const ethUsd = ethData.ethUsd || 0;
+    document.getElementById('eth-price').textContent = '$' + Number(ethUsd).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+    // Presale
+    const active = presaleData.active;
+    const remaining = presaleData.remainingAllocation || 0;
+    const raised = presaleData.totalRaisedEth || 0;
+    const pct = Math.round(((35000000 - remaining) / 35000000) * 100);
+
+    document.getElementById('presale-status').textContent = active ? 'ACTIVE' : 'ENDED';
+    document.getElementById('presale-status').style.color = active ? 'var(--green)' : 'var(--red)';
+    document.getElementById('presale-sub').textContent = active ? 'Presale is live now' : 'Presale has ended';
+    document.getElementById('carrot-remaining').textContent = (remaining / 1000000).toFixed(2) + 'M';
+
+    const raisedUsd = raised * ethUsd;
+
+    document.getElementById('presale-body').innerHTML = `
+      <div class="presale-row">
+        <span class="presale-key">Status</span>
+        <span class="presale-val ${active ? 'green' : ''}">${active ? '✅ ACTIVE' : '❌ ENDED'}</span>
+      </div>
+      <div class="presale-row">
+        <span class="presale-key">ETH Raised</span>
+        <span class="presale-val">${Number(raised).toFixed(4)} ETH</span>
+      </div>
+      <div class="presale-row">
+        <span class="presale-key">USD Value</span>
+        <span class="presale-val green">$${fmt(Math.round(raisedUsd))}</span>
+      </div>
+      <div class="presale-row">
+        <span class="presale-key">CARROT Left</span>
+        <span class="presale-val orange">${fmt(remaining)}</span>
+      </div>
+      <div class="presale-row">
+        <span class="presale-key">Price</span>
+        <span class="presale-val">350,000 CARROT / ETH</span>
+      </div>
+      <div class="presale-row">
+        <span class="presale-key">Minimum Buy</span>
+        <span class="presale-val">0.01 ETH</span>
+      </div>
+      <div class="presale-row">
+        <span class="presale-key">Hard Cap</span>
+        <span class="presale-val">100 ETH</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-label">
+          <span>SOLD</span>
+          <span>${pct}%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+    `;
+
+  } catch (e) {
+    console.error('Stats error:', e);
+  }
+}
+
+function updateTimestamp() {
+  document.getElementById('last-updated').textContent =
+    'Last updated: ' + new Date().toLocaleTimeString() + ' — auto-refreshes every 60 seconds';
+}
+
+async function refresh() {
+  await Promise.all([loadLeaderboard(), loadStats()]);
+  updateTimestamp();
+}
+
+refresh();
+setInterval(refresh, 60000);
+</script>
+
+</body>
+</html>
