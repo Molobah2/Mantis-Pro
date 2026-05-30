@@ -563,11 +563,13 @@ async function loadPlayer() {
       // Player exists but not on leaderboard yet — show starter tasks
       renderStarterTasks(wallet, presale);
       setStatus('✅ Wallet found — showing starter guide', 'success');
+      switchToTasksTab();
       return;
     }
 
     renderPlayerTasks(player, presale, wallet);
     setStatus(`✅ Loaded data for ${player.xHandle || wallet.slice(0,10)+'...'}`, 'success');
+    switchToTasksTab();
 
   } catch(e) {
     setStatus(`Error: ${e.message}`, 'error');
@@ -909,12 +911,14 @@ async function refresh() {
 refresh();
 setInterval(refresh, 60000);
 
-// Auto-fill last used wallet on page load
+// Auto-fill last used wallet on page load and auto-load tasks
 (function() {
   const recents = getRecentWallets();
   if (recents.length) {
     document.getElementById('wallet-input').value = recents[0];
     renderRecentWallets('');
+    // Auto-load tasks for last wallet
+    setTimeout(() => loadPlayer(), 500);
   }
 })();
 
@@ -970,15 +974,13 @@ function switchTab(name) {
   }
 }
 
-// Auto-switch to tasks tab after wallet load
-const origLoadPlayer = loadPlayer;
-window.loadPlayer = async function() {
-  await origLoadPlayer();
-  // Switch to tasks tab
+// Auto-switch to tasks tab after wallet load — patched after definition
+function switchToTasksTab() {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-tasks').classList.add('active');
-  document.querySelectorAll('.tab-btn')[1].classList.add('active');
+  const taskBtn = document.querySelector('.tab-btn:nth-child(2)');
+  if (taskBtn) taskBtn.classList.add('active');
 }
 </script>
 </body>
