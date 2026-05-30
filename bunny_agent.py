@@ -1,8 +1,11 @@
 """
-bunny_agent.py — Bunny Button full game advisor for Mantis Pro
---------------------------------------------------------------
-Sends a complete noob-friendly email every time energy is full.
-Covers every activity in the game with plain-English guidance.
+bunny_agent.py — Bunny Button daily advisor + energy alert for Mantis Pro
+-------------------------------------------------------------------------
+Two separate email flows:
+  1. Hourly advisor — runs every hour, sends tasks not yet done today
+  2. Energy alert  — fires only when energy is 100% full
+
+State tracking uses a simple in-memory dict (resets on redeploy, which is fine).
 """
 
 import os
@@ -10,6 +13,7 @@ import json
 import base64
 import urllib.request
 import urllib.parse
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from bunny_button import BunnyButton, RateLimitError, AuthError
@@ -17,21 +21,38 @@ from bunny_button import BunnyButton, RateLimitError, AuthError
 ALERT_TO = "smolobah21@gmail.com"
 ALERT_FROM = "smolobah21@gmail.com"
 
+# ── IN-MEMORY STATE (tracks what's been done today) ────────────────────────
+_daily_state = {
+    "date": "",           # UTC date string e.g. "2026-05-30"
+    "energy_alerted": False,   # did we send the full-energy email today
+    "tasks_done": set(),       # set of task keys completed today
+}
 
-def separator(label=""):
-    print(f"\n{'─' * 10} {label} {'─' * 10}")
+def _today():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
+def _reset_if_new_day():
+    today = _today()
+    if _daily_state["date"] != today:
+        _daily_state["date"] = today
+        _daily_state["energy_alerted"] = False
+        _daily_state["tasks_done"] = set()
+        print(f"  [State] New day {today} — daily state reset")
+
+def _mark_done(task_key):
+    _daily_state["tasks_done"].add(task_key)
+
+def _is_done(task_key):
+    return task_key in _daily_state["tasks_done"]
+
+
+# ── GMAIL OAUTH ────────────────────────────────────────────────────────────
 
 def get_access_token():
-    client_id = os.environ.get("GMAIL_CLIENT_ID")
-    client_secret = os.environ.get("GMAIL_CLIENT_SECRET")
-    refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN")
-    if not all([client_id, client_secret, refresh_token]):
-        raise Exception("Missing Gmail OAuth env vars")
     payload = urllib.parse.urlencode({
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "refresh_token": refresh_token,
+        "client_id": os.environ.get("GMAIL_CLIENT_ID", ""),
+        "client_secret": os.environ.get("GMAIL_CLIENT_SECRET", ""),
+        "refresh_token": os.environ.get("GMAIL_REFRESH_TOKEN", ""),
         "grant_type": "refresh_token"
     }).encode("utf-8")
     req = urllib.request.Request(
@@ -63,305 +84,428 @@ def send_email(subject, html, plain):
         with urllib.request.urlopen(req, timeout=10) as resp:
             r = json.loads(resp.read())
             print(f"  [Email] ✅ Sent (id: {r.get('id','?')})")
+            return True
     except urllib.error.HTTPError as e:
         print(f"  [Email] ❌ {e.code}: {e.read().decode()}")
     except Exception as e:
         print(f"  [Email] ❌ {e}")
+    return False
 
 
 # ── HTML HELPERS ───────────────────────────────────────────────────────────
 
-def section(title, emoji, content, border="#1a3a1a"):
+def card(title, emoji, content, color="#1a3a1a"):
     return f"""
-    <div style="margin:12px 0;border-radius:8px;overflow:hidden;border:1px solid {border};">
-      <div style="background:#111;padding:10px 14px;border-bottom:1px solid {border};">
-        <span style="color:#7fff7f;font-weight:bold;font-size:14px;">{emoji} {title}</span>
+    <div style="margin:10px 0;border-radius:8px;overflow:hidden;border:1px solid {color};">
+      <div style="background:#111;padding:9px 14px;border-bottom:1px solid {color};">
+        <b style="color:#7fff7f;font-size:14px;">{emoji} {title}</b>
       </div>
-      <div style="padding:12px 14px;background:#0d150d;">
-        {content}
-      </div>
+      <div style="padding:11px 14px;background:#0d150d;">{content}</div>
     </div>"""
 
-def row(label, value, note=""):
-    note_html = f'<span style="color:#888;font-size:12px;"> — {note}</span>' if note else ""
-    return f'<div style="margin:4px 0;"><span style="color:#aaa;font-size:13px;">{label}:</span> <span style="color:#fff;font-weight:bold;">{value}</span>{note_html}</div>'
+def task_item(done, text, detail=""):
+    icon = "✅" if done else "🔲"
+    bg = "#0d200d" if done else "#1a0d00"
+    border = "#2a5a2a" if done else "#3a2000"
+    opacity = "0.6" if done else "1"
+    detail_html = f'<div style="color:#888;font-size:12px;margin-top:3px;">{detail}</div>' if detail else ""
+    return f"""
+    <div style="margin:5px 0;padding:8px 10px;background:{bg};border-left:3px solid {border};border-radius:4px;opacity:{opacity};">
+      <span style="font-size:13px;color:#fff;">{icon} {text}</span>
+      {detail_html}
+    </div>"""
 
-def tip(text, color="#ff9900"):
-    return f'<div style="margin:6px 0;padding:8px 10px;background:#1a1200;border-left:3px solid {color};border-radius:4px;color:#fff;font-size:13px;">{text}</div>'
+def stat_pill(label, value, color="#4caf50"):
+    return f'<span style="display:inline-block;margin:3px;padding:4px 10px;background:#111;border:1px solid {color};border-radius:20px;font-size:12px;"><span style="color:#888;">{label}</span> <b style="color:{color};">{value}</b></span>'
 
-def action(step, text):
-    return f'<div style="margin:6px 0;display:flex;gap:8px;align-items:flex-start;"><span style="color:#4caf50;font-weight:bold;min-width:20px;">{step}.</span><span style="color:#fff;font-size:13px;">{text}</span></div>'
-
-def quest_row(name, status, how):
-    icon = "✅" if status == "complete" else "🔲"
-    color = "#2a5a2a" if status == "complete" else "#1a1a1a"
-    return f'<div style="margin:4px 0;padding:6px 8px;background:{color};border-radius:4px;"><span style="font-size:13px;">{icon} <b style="color:#fff;">{name}</b> <span style="color:#888;font-size:12px;">— {how}</span></span></div>'
+def tip_box(text, color="#ff9900"):
+    return f'<div style="margin:6px 0;padding:8px 10px;background:#1a1200;border-left:3px solid {color};border-radius:4px;color:#ddd;font-size:13px;">{text}</div>'
 
 
-# ── SMART ADVISOR ──────────────────────────────────────────────────────────
+# ── TASK EVALUATION ────────────────────────────────────────────────────────
 
-def build_email(player, inventory, energy, farm, quests_data, streaks, stake):
-    breed = player.get("bunnyBreed") or "None"
-    bunny_class = player.get("bunnyClass") or "None"
-    steal = player.get("stealMultiplier", 0.2)
-    energy_cur = player.get("energyCurrent", 0)
-    energy_max = player.get("energyMax", 500)
-    regen = player.get("energyRegenPerHour", 0)
+def evaluate_tasks(player, inventory, farm, quests_data, streaks, stake):
+    """
+    Returns a list of tasks: {key, text, detail, done, priority}
+    Priority: 1=urgent, 2=important, 3=nice to do
+    """
+    tasks = []
+
     total_carrots = player.get("totalCarrotsEarned", 0)
     balance = player.get("carrotBalance", 0)
     burned = player.get("carrotsBurned", 0)
-    rank = player.get("rank", "?")
+    steal = player.get("stealMultiplier", 0.2)
     steal_level = player.get("stealLevel", 0)
     regen_level = player.get("regenLevel", 0)
     energy_level = player.get("maxEnergyLevel", 0)
-    total_clicks = player.get("totalClicks", 0)
+    breed = player.get("bunnyBreed") or "None"
+    bunny_class = player.get("bunnyClass") or "None"
     referral_code = player.get("referralCode", "?")
     potion_used = player.get("energyPotionUsedToday", False)
     potion_cost = player.get("energyPotionCost", 0)
+    total_clicks = player.get("totalClicks", 0)
+    streak = streaks.get("streakLength") or streaks.get("currentStreak", 0)
 
     farm_cps = farm.get("carrotsPerSecond", 0)
     farm_cap_warn = farm.get("capWarning", False)
-    farm_hours_left = farm.get("hoursToCapFull")
-
-    streak_len = streaks.get("streakLength") or streaks.get("currentStreak", 0)
 
     quest_list = quests_data.get("quests", []) if isinstance(quests_data, dict) else []
-    quests_done = sum(1 for q in quest_list if q.get("status") == "complete")
-    quests_pending = [q for q in quest_list if q.get("status") != "complete"]
-    next_quest = quests_pending[0] if quests_pending else None
+    quest_names_done = {q.get("name") for q in quest_list if q.get("status") == "complete"}
+    quest_names_pending = [q.get("name") for q in quest_list if q.get("status") != "complete"]
 
     equipped = inventory.get("equipped", {})
-    cape = equipped.get("cape")
-    boots = equipped.get("boots")
-    hat = equipped.get("hat")
-    gear_bonuses = inventory.get("aggregateBonuses", {})
+    has_cape = bool(equipped.get("cape"))
+    has_boots = bool(equipped.get("boots"))
+    has_hat = bool(equipped.get("hat"))
 
     stake_data = stake.get("stakes", []) if isinstance(stake, dict) else []
     active_stakes = [s for s in stake_data if s.get("status") == "active"]
 
-    # ── SECTION 1: Your Stats Right Now ──────────────────────────────────
-    pct = round((energy_cur / energy_max) * 100)
-    stats_content = (
-        row("Energy", f"{energy_cur:.0f} / {energy_max:.0f} ({pct}%)", "use it all before it overflows") +
-        row("Regen speed", f"{regen:.1f}/hr", f"fills up in ~{(energy_max/regen):.1f}hrs when empty") +
-        row("Steal multiplier", f"{steal}x", "higher = more carrots per button press") +
-        row("Rank", f"#{rank}", "based on total carrots earned") +
-        row("Total carrots earned", f"{total_carrots:,.0f}") +
-        row("Current balance", f"{balance:,.0f}", "carrots you can spend") +
-        row("Carrots burned", f"{burned:,.0f}", "spent on upgrades, counts for quests") +
-        row("Total button presses", f"{total_clicks:,.0f}") +
-        row("Daily streak", f"{streak_len} days", "log in every day to keep it")
-    )
+    # ── DAILY MUST-DO TASKS ────────────────────────────────────────────────
 
-    # ── SECTION 2: What To Do RIGHT NOW ───────────────────────────────────
-    now_actions = []
+    # 1. Press button (check via total clicks increasing — we track separately)
+    tasks.append({
+        "key": "press_button",
+        "priority": 1,
+        "text": "Press the button until energy runs out",
+        "detail": f"Go to bunnybutton.xyz → keep pressing until energy hits 0. Your steal is {steal}x — each press earns carrots.",
+        "done": _is_done("press_button")
+    })
 
-    # Energy
-    now_actions.append(action("1", f"⚡ <b>Press the button now!</b> Your energy is full ({energy_cur:.0f}/{energy_max:.0f}). Go to <a href='https://bunnybutton.xyz' style='color:#4caf50;'>bunnybutton.xyz</a> and keep pressing until energy runs out."))
-
-    # Energy potion
+    # 2. Use daily energy potion
+    potion_done = potion_used or _is_done("energy_potion")
     if not potion_used and balance >= potion_cost and potion_cost > 0:
-        now_actions.append(action("2", f"💊 <b>Use your daily Energy Potion</b> — costs {potion_cost:,.0f} carrots and fully refills your energy. Do this after you drain it. Go to Shop → Energy Potion. Free extra session every day!"))
-    elif not potion_used:
-        now_actions.append(action("2", "💊 <b>Energy Potion</b> is available today but you may not have enough carrots yet. Check Shop when balance grows."))
+        tasks.append({
+            "key": "energy_potion",
+            "priority": 1,
+            "text": "Use your free daily Energy Potion",
+            "detail": f"After draining energy, go to Shop → Energy Potion. Costs {potion_cost:,.0f} carrots and fully refills your energy. Free extra session every day!",
+            "done": potion_done
+        })
+    elif potion_used:
+        tasks.append({
+            "key": "energy_potion",
+            "priority": 1,
+            "text": "Use your free daily Energy Potion",
+            "detail": "Already used today ✅",
+            "done": True
+        })
 
-    # Next quest
-    if next_quest:
-        qname = next_quest.get("name", "?")
-        qhow = {
-            "First Hop": "press the button once",
-            "Carrot Pickpocket": "earn carrots by pressing the button",
-            "Goblin Diplomacy": f"refer 2 friends — share your referral code: <b>{referral_code}</b>",
-            "Blue Check Toll Bridge": "go to Wallet menu → connect your X (Twitter) account",
-            "Ratcatchers": "join a party — ask in the Bunny Button Discord",
-            "Five Bunnies Walk Into A Pub": "get your party filled to 5 members",
-            "Wizards Hate This Bunny": "buy steal upgrades until your total steal reaches 2.25x — unlocks Moonburrow breed",
-            "The Carrot Cartel": f"earn {max(0, 25000-total_carrots):,.0f} more carrots (need 25,000 total) — unlocks Jackalope breed",
-            "Burnt Offerings": f"burn {max(0, 50000-burned):,.0f} more carrots on upgrades (need 50,000 burned) — rewards 5,000 carrots",
-            "Recipe For Disaster": "complete all other 19 quests — rewards quest cape + 20,000 carrots",
-        }.get(qname, "check in-game for details")
-        now_actions.append(action("3", f"🎯 <b>Next quest: {qname}</b> — {qhow}"))
+    # 3. Claim farm carrots (if farm active)
+    if farm_cps > 0:
+        farm_done = not farm_cap_warn or _is_done("claim_farm")
+        tasks.append({
+            "key": "claim_farm",
+            "priority": 1 if farm_cap_warn else 2,
+            "text": "Collect your farm carrots" + (" ⚠️ CAP ALMOST HIT!" if farm_cap_warn else ""),
+            "detail": f"Go to Farm tab → collect offline carrots. Farm makes {farm_cps*3600:.1f} carrots/hr. You must collect at least every 8 hours or you lose yield.",
+            "done": farm_done
+        })
 
-    # Farm claim warning
-    if farm_cap_warn:
-        now_actions.append(action("!", "🌾 <b>URGENT — Claim your farm carrots!</b> Your farm is about to hit the 8-hour cap. Go to Farm tab and collect now or you lose yield."))
+    # 4. Log in streak
+    tasks.append({
+        "key": "streak",
+        "priority": 1,
+        "text": f"Keep your daily login streak alive (currently {streak} days)",
+        "detail": "Just signing in counts. Streak milestones give rewards. Don't break it!",
+        "done": streak > 0 or _is_done("streak")  # if streak > 0 they logged in
+    })
 
-    now_content = "".join(now_actions)
+    # ── UPGRADE TASKS ──────────────────────────────────────────────────────
 
-    # ── SECTION 3: Upgrade Shop Guide ─────────────────────────────────────
-    upgrade_tips = []
-    if steal_level == 0:
-        upgrade_tips.append(tip("🗡️ <b>Buy your first Steal upgrade first.</b> This increases how many carrots you get per press. It's the most important upgrade. Go to Shop → Steal."))
-    elif steal < 1.0:
-        upgrade_tips.append(tip(f"🗡️ Your steal is {steal}x. Keep buying Steal upgrades — aim for at least 1.0x before spending on other things."))
-    else:
-        upgrade_tips.append(tip(f"🗡️ Steal is at {steal}x (level {steal_level}). Good. Now alternate between Steal and Regen upgrades."))
+    # 5. Buy steal upgrade
+    steal_target = 1.0
+    steal_done = steal >= steal_target or _is_done("steal_upgrade")
+    tasks.append({
+        "key": "steal_upgrade",
+        "priority": 1 if steal < 0.5 else 2,
+        "text": f"Buy a Steal upgrade in the Shop (currently {steal}x, target 1.0x+)",
+        "detail": "Shop → Steal. This is the most important stat — directly multiplies every carrot you earn. Keep buying until you hit at least 1.0x.",
+        "done": steal_done
+    })
 
-    if regen_level == 0:
-        upgrade_tips.append(tip("⚡ <b>Buy Regen upgrade after Steal.</b> More regen = faster energy refill = more presses per day. Go to Shop → Regen."))
-    else:
-        upgrade_tips.append(tip(f"⚡ Regen is at level {regen_level} ({regen:.1f}/hr). Keep upgrading this alongside Steal."))
+    # 6. Buy regen upgrade
+    regen_done = regen_level >= 3 or _is_done("regen_upgrade")
+    tasks.append({
+        "key": "regen_upgrade",
+        "priority": 2,
+        "text": f"Buy a Regen upgrade in the Shop (level {regen_level}, target level 3+)",
+        "detail": "Shop → Regen. Faster regen = more presses per day = more carrots. Alternate between Steal and Regen upgrades.",
+        "done": regen_done
+    })
 
-    if energy_level == 0:
-        upgrade_tips.append(tip("🔋 Max Energy upgrade makes your pool bigger. Lower priority than Steal and Regen early on. Buy it after the others are mid-level."))
-
+    # 7. Buy farm if not active
     if farm_cps == 0:
-        upgrade_tips.append(tip("🌾 <b>Buy Farm Level 1 as soon as possible!</b> It makes carrots even while you sleep. Go to Farm tab → buy first level. Do this before doing more than 2-3 stat upgrades."))
-    else:
-        upgrade_tips.append(tip(f"🌾 Farm is active at {farm_cps:.4f} carrots/sec ({farm_cps*3600:.1f}/hr). Upgrade it periodically — alternate with stat upgrades."))
+        tasks.append({
+            "key": "buy_farm",
+            "priority": 1,
+            "text": "Buy Farm Level 1 — passive income while you sleep!",
+            "detail": "Go to Farm tab → buy Level 1. Even a tiny farm adds up over hours. Do this before buying more than 2-3 stat upgrades.",
+            "done": _is_done("buy_farm")
+        })
 
+    # 8. Breed upgrade (Sprout is bad)
+    if breed == "sprout" or breed == "Sprout" or breed == "None":
+        tasks.append({
+            "key": "breed_upgrade",
+            "priority": 2,
+            "text": "Upgrade your breed — Sprout only gives 0.2x steal",
+            "detail": f"Save 2,500 carrots for a Breed Change, or earn 25,000 total carrots to unlock Jackalope (1.5x steal) for FREE. You have {total_carrots:,.0f}/{25000:,.0f} carrots toward Jackalope.",
+            "done": _is_done("breed_upgrade")
+        })
+
+    # ── SOCIAL / QUEST TASKS ───────────────────────────────────────────────
+
+    # 9. Connect X
+    x_done = "Blue Check Toll Bridge" in quest_names_done or _is_done("connect_x")
+    tasks.append({
+        "key": "connect_x",
+        "priority": 2,
+        "text": "Connect your X (Twitter) account",
+        "detail": "Go to Wallet menu → connect X. This completes the 'Blue Check Toll Bridge' quest and shows your handle on the leaderboard instead of a wallet address.",
+        "done": x_done
+    })
+
+    # 10. Connect Discord
+    tasks.append({
+        "key": "connect_discord",
+        "priority": 2,
+        "text": "Connect your Discord account",
+        "detail": "Go to Wallet menu → connect Discord. Unlocks in-game username, Discord commands, and leaderboard sync.",
+        "done": _is_done("connect_discord")
+    })
+
+    # 11. Refer 2 friends
+    goblin_done = "Goblin Diplomacy" in quest_names_done or _is_done("refer_friends")
+    tasks.append({
+        "key": "refer_friends",
+        "priority": 2,
+        "text": f"Refer 2 friends to unlock parties (your code: {referral_code})",
+        "detail": f"Share your referral code <b>{referral_code}</b> on X or Discord. When 2 people use it, you unlock PARTIES which gives +5% bonus carrots per press. You also earn 8% of their carrot earnings.",
+        "done": goblin_done
+    })
+
+    # 12. Join a party
+    ratcatchers_done = "Ratcatchers" in quest_names_done or _is_done("join_party")
+    if goblin_done:
+        tasks.append({
+            "key": "join_party",
+            "priority": 2,
+            "text": "Join a party (unlocked after Goblin Diplomacy quest)",
+            "detail": "Go to Party tab → browse party list or ask in Bunny Button Discord for an invite. Full party = +5% bonus per press for everyone.",
+            "done": ratcatchers_done
+        })
+
+    # 13. Stake surplus carrots
     if balance > 5000 and len(active_stakes) == 0:
-        upgrade_tips.append(tip(f"💰 You have {balance:,.0f} carrots sitting idle. Consider staking some! Go to Farm tab → Stake. Lock for 30/90/365 days for extra CARROT rewards. Only stake what you don't need for upgrades in the next few days."))
+        tasks.append({
+            "key": "stake_carrots",
+            "priority": 3,
+            "text": f"Stake your surplus carrots (balance: {balance:,.0f})",
+            "detail": "Go to Farm tab → Stake section. Lock for 30/90/365 days. Longer = higher APY. Only stake what you won't need for upgrades in next few days.",
+            "done": _is_done("stake_carrots")
+        })
 
-    upgrade_content = "".join(upgrade_tips)
+    # 14. Submit creator content
+    tasks.append({
+        "key": "creator_content",
+        "priority": 3,
+        "text": "Submit content to the Creator Program for bonus rewards",
+        "detail": "Make a post about Bunny Button on X, then go to bunnybutton.xyz/creator-program → submit the URL. You can earn carrot crates, tokens, or unique items.",
+        "done": _is_done("creator_content")
+    })
 
-    # ── SECTION 4: Breed & Class Guide ────────────────────────────────────
-    breed_note = {
-        "Sprout": "⚠️ You're on Sprout (free starter) — only 0.2x steal. You should upgrade your breed when you can afford it.",
-        "Meadow": "✅ Meadow is a solid balanced breed (1x steal, 1000 energy). Good all-rounder.",
-        "Bandit": "✅ Bandit has 1.8x steal — great for big burst sessions. Best with Warrior class.",
-        "Spark": "✅ Spark has fast regen (58/hr) — great for frequent short sessions.",
-        "Burrow": "✅ Burrow has the biggest energy pool (1500). Great if you play in long sessions.",
-        "Moonburrow": "✅ Moonburrow (1.25x steal, 880 energy) — unlocked by quest. Strong mid-game breed.",
-        "Jackalope": "✅ Jackalope (1.5x steal) — unlocked by earning 25,000 total carrots. Best free breed.",
-    }.get(breed, f"You are on {breed}.")
+    return tasks
 
-    class_note = {
-        "Warrior": "✅ Warrior (+15% steal) — best class for maximizing carrots per press.",
-        "Mage": "✅ Mage (+15% regen) — good for frequent players who press a lot.",
-        "Knight": "✅ Knight (+15% max energy) — good for long sessions.",
-        "Shaman": "✅ Shaman (1.4x lucky carrot chance) — fun but lower steady income.",
-        "None": "⚠️ You haven't picked a class yet! Go to the game and choose one. Pick Warrior for most carrots.",
-    }.get(bunny_class, f"Class: {bunny_class}.")
 
-    breed_content = (
-        f'<div style="margin:6px 0;color:#fff;font-size:13px;"><b>Your breed:</b> {breed}</div>' +
-        tip(breed_note, "#4caf50" if breed != "Sprout" else "#ff5555") +
-        f'<div style="margin:6px 0;color:#fff;font-size:13px;"><b>Your class:</b> {bunny_class}</div>' +
-        tip(class_note, "#4caf50") +
-        tip("🐰 <b>FREE breed upgrades through quests:</b> Reach 2.25x steal → get Moonburrow. Earn 25,000 total carrots → get Jackalope (1.5x steal). Don't pay 2,500 carrots for a breed change until you've unlocked these free ones first.", "#888")
+# ── EMAIL BUILDERS ─────────────────────────────────────────────────────────
+
+def build_hourly_email(player, inventory, energy, farm, quests_data, streaks, stake):
+    tasks = evaluate_tasks(player, inventory, farm, quests_data, streaks, stake)
+
+    breed = player.get("bunnyBreed") or "None"
+    bunny_class = player.get("bunnyClass") or "None"
+    steal = player.get("stealMultiplier", 0.2)
+    total_carrots = player.get("totalCarrotsEarned", 0)
+    balance = player.get("carrotBalance", 0)
+    rank = player.get("rank", "?")
+    regen = player.get("energyRegenPerHour", 0)
+
+    energy_cur = energy.get("energyCurrent", 0)
+    energy_max = energy.get("energyMax", 500)
+    energy_pct = energy.get("percentFull", 0)
+    hours_to_full = energy.get("hoursToFull")
+
+    done_count = sum(1 for t in tasks if t["done"])
+    total_count = len(tasks)
+    pending_tasks = [t for t in tasks if not t["done"]]
+    urgent = [t for t in pending_tasks if t["priority"] == 1]
+    important = [t for t in pending_tasks if t["priority"] == 2]
+    nice = [t for t in pending_tasks if t["priority"] == 3]
+
+    # Stats bar
+    energy_color = "#4caf50" if energy_pct >= 80 else "#ff9900" if energy_pct >= 40 else "#ff5555"
+    stats_html = (
+        stat_pill("Rank", f"#{rank}") +
+        stat_pill("Energy", f"{energy_cur:.0f}/{energy_max:.0f}", energy_color) +
+        stat_pill("Steal", f"{steal}x") +
+        stat_pill("Total Carrots", f"{total_carrots:,.0f}") +
+        stat_pill("Balance", f"{balance:,.0f}") +
+        stat_pill("Breed", breed) +
+        stat_pill("Class", bunny_class)
     )
 
-    # ── SECTION 5: Gear (Crates) Guide ────────────────────────────────────
-    cape_str = f"{cape.get('name','?')} (+{cape.get('stealBonus',0)}x steal)" if cape else "None equipped"
-    boots_str = f"{boots.get('name','?')} (+{boots.get('regenBonus',0)}/hr regen)" if boots else "None equipped"
-    hat_str = f"{hat.get('name','?')} (+{hat.get('energyBonus',0)} energy)" if hat else "None equipped"
-
-    gear_content = (
-        row("Cape (steal bonus)", cape_str) +
-        row("Boots (regen bonus)", boots_str) +
-        row("Hat (energy bonus)", hat_str) +
-        tip("🎁 <b>How to get gear:</b> Go to Gacha page → open a Carrot Crate (~$10 worth of carrots). You get one random item: Cape, Boots, or Hat. Equip it on the Gear page for instant stat boosts on top of your breed and class.", "#4caf50") +
-        tip("💡 <b>When to open crates:</b> Wait until your steal and regen upgrades are at least level 3-4 each. A good crate can beat 1-2 upgrade levels. Don't open crates before you have basic upgrades.", "#888") +
-        tip("♻️ <b>Salvage bad items:</b> If you get a bad roll, go to Gear page → Salvage to get carrots back. Save 3 same-slot items and you can reroll them into a better one.", "#888")
-    )
-
-    # ── SECTION 6: Party Guide ────────────────────────────────────────────
-    party_content = (
-        tip("👥 <b>What is a party?</b> Up to 5 wallets team up. A full 5-person party gives everyone +5% bonus carrots per press. A 20% tax on your carrots goes to your party mates — but you get theirs too. Net positive for everyone.", "#4caf50") +
-        tip(f"🔓 <b>How to unlock parties:</b> Complete the 'Goblin Diplomacy' quest — refer 2 friends using your code: <b>{referral_code}</b>. Share it on X or Discord.", "#ff9900") +
-        tip("📋 <b>How to join:</b> Once unlocked, go to Party tab → browse the party list or get an invite link from someone. Ask in the Bunny Button Discord for party invites.", "#888")
-    )
-
-    # ── SECTION 7: Referral Guide ─────────────────────────────────────────
-    referral_content = (
-        row("Your referral code", referral_code) +
-        tip(f"💸 <b>Share your code:</b> When someone uses your referral code, you earn 8% of their button-press carrots (up to 500/day per person). Share it on X, Discord, or with friends. Your code: <b>{referral_code}</b>", "#4caf50") +
-        tip("📋 <b>How to use someone else's code:</b> Go to Wallet menu → Referral → enter a code. This helps that person and unlocks your referral quests.", "#888")
-    )
-
-    # ── SECTION 8: Staking Guide ──────────────────────────────────────────
-    stake_content = (
-        tip("🔒 <b>What is staking?</b> You lock your carrots for 30, 90, or 365 days and earn extra CARROT tokens as a reward. Longer lock = higher APY (annual percentage yield). It's like putting money in a savings account.", "#4caf50") +
-        tip("⚠️ <b>When to stake:</b> Only stake carrots you don't need for upgrades in the next few days. If you exit early, you lose all the yield. Recommended: stake any balance over 5,000 carrots that you won't need soon.", "#ff9900") +
-        tip("📍 <b>Where to stake:</b> Go to Farm tab → Stake section. Choose your lock period and amount.", "#888")
-    )
-
-    # ── SECTION 9: Farm Guide ─────────────────────────────────────────────
-    farm_hrs = f"{farm_hours_left:.1f} hrs" if farm_hours_left else "N/A"
-    farm_content = (
-        row("Farm yield", f"{farm_cps:.4f} carrots/sec ({farm_cps*3600:.1f}/hr)") +
-        row("Time to 8hr cap", farm_hrs) +
-        tip("🌾 <b>What is the farm?</b> The Carrot Farm makes carrots automatically even while you're offline. Buy Farm Level 1 from the Farm tab. It's one of the best investments in the game.", "#4caf50") +
-        tip("⏰ <b>8-hour cap:</b> The farm stops storing carrots after 8 hours offline. You need to log in at least once every 8 hours to collect and keep earning. Mantis Pro will email you before the cap hits.", "#ff9900") +
-        tip("📈 <b>Upgrade the farm:</b> Higher farm levels = more carrots per second. After buying Farm Level 1, alternate between stat upgrades and farm upgrades.", "#888")
-    )
-
-    # ── SECTION 10: Creator Program ───────────────────────────────────────
-    creator_content = (
-        tip("🎬 <b>What is the Creator Program?</b> If you make content about Bunny Button — posts on X, videos, clips, guides — you can submit it and earn carrot crates, carrot tokens, or unique creator-only items.", "#4caf50") +
-        tip("📝 <b>How to submit:</b> Go to bunnybutton.xyz/creator-program → connect wallet → link X and Discord → submit your content URL with a short note explaining what it is.", "#888") +
-        tip("✅ <b>What counts:</b> X posts, threads, videos, stream clips, memes, guides, or anything useful about Bunny Button. The team reviews manually and decides rewards.", "#888")
-    )
-
-    # ── SECTION 11: Quest Progress ────────────────────────────────────────
-    QUEST_HOW = {
-        "First Hop": "press the button once",
-        "Carrot Pickpocket": "earn carrots by pressing the button",
-        "Goblin Diplomacy": f"refer 2 friends (your code: {referral_code})",
-        "Blue Check Toll Bridge": "connect X account from Wallet menu",
-        "Ratcatchers": "join any party",
-        "Five Bunnies Walk Into A Pub": "fill your party to 5 members",
-        "Wizards Hate This Bunny": "reach 2.25x total steal — unlocks Moonburrow breed",
-        "The Carrot Cartel": f"earn {max(0,25000-total_carrots):,.0f} more carrots — unlocks Jackalope breed",
-        "Burnt Offerings": f"burn {max(0,50000-burned):,.0f} more carrots on upgrades",
-        "Recipe For Disaster": "complete all 19 quests — cape + 20,000 carrots reward",
-    }
-    quest_rows = "".join(
-        quest_row(q.get("name","?"), q.get("status","?"), QUEST_HOW.get(q.get("name","?"), "check in-game"))
-        for q in quest_list
-    )
-    quest_content = (
-        f'<div style="margin-bottom:8px;color:#aaa;font-size:13px;">{quests_done}/{len(quest_list)} complete</div>' +
-        (quest_rows or '<div style="color:#888;font-size:13px;">No quest data yet — check in-game</div>')
-    )
-
-    # ── ASSEMBLE EMAIL ─────────────────────────────────────────────────────
-    header = f"""
-    <div style="background:#0f1a0f;padding:20px;text-align:center;border-bottom:1px solid #1a3a1a;">
-      <span style="font-size:42px;">⚡🥕</span>
-      <h1 style="color:#7fff7f;margin:8px 0 4px;font-size:22px;">Energy Full — Time to Play!</h1>
-      <p style="color:#aaa;margin:0;font-size:13px;">Mantis Pro is watching your game 24/7 · Rank #{rank} · {total_carrots:,.0f} carrots earned</p>
+    # Progress bar
+    pct = int((done_count / total_count) * 100) if total_count else 0
+    bar_color = "#4caf50" if pct >= 80 else "#ff9900" if pct >= 40 else "#ff5555"
+    progress_html = f"""
+    <div style="margin:8px 0;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="color:#aaa;font-size:12px;">Daily progress</span>
+        <span style="color:{bar_color};font-size:12px;font-weight:bold;">{done_count}/{total_count} tasks done ({pct}%)</span>
+      </div>
+      <div style="background:#222;border-radius:10px;height:8px;">
+        <div style="background:{bar_color};width:{pct}%;height:8px;border-radius:10px;"></div>
+      </div>
     </div>"""
 
-    cta = """
-    <div style="padding:16px;text-align:center;">
-      <a href="https://bunnybutton.xyz" style="background:#4caf50;color:#fff;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block;">Open Bunny Button →</a>
-    </div>"""
+    # Energy status
+    if energy_pct >= 100:
+        energy_msg = tip_box("⚡ <b>ENERGY IS FULL RIGHT NOW — go press the button immediately!</b>", "#4caf50")
+    elif hours_to_full:
+        energy_msg = tip_box(f"⏱️ Energy at {energy_pct}% — full in ~{hours_to_full:.1f} hours. Regen: {regen:.1f}/hr. You'll get an email when it's ready.", "#888")
+    else:
+        energy_msg = ""
 
-    footer = '<p style="color:#333;font-size:11px;text-align:center;padding:12px;margin:0;">Mantis Pro · Abstract Chain Agent · Checks every 30 minutes</p>'
+    # Task sections
+    def render_tasks(task_list, title, color):
+        if not task_list:
+            return ""
+        items = "".join(task_item(t["done"], t["text"], t["detail"]) for t in task_list)
+        return card(title, "", items, color)
+
+    urgent_html = render_tasks(urgent, "🚨 DO THESE NOW (Urgent)", "#3a1a00") if urgent else tip_box("✅ All urgent tasks done! Great work.", "#4caf50")
+    important_html = render_tasks(important, "📋 Do These Today (Important)", "#1a2a3a")
+    nice_html = render_tasks(nice, "💡 Nice To Do (Bonus)", "#1a1a2a") if nice else ""
+
+    # Leaderboard tip
+    top_score = 12729  # from last leaderboard check
+    gap = max(0, top_score - total_carrots)
+    leaderboard_tip = tip_box(f"🏆 You're rank #{rank}. Top player has ~{top_score:,.0f} carrots. Gap: {gap:,.0f} carrots. Keep pressing and upgrading steal to climb!", "#ff9900")
+
+    now_str = datetime.now(timezone.utc).strftime("%H:%M UTC")
 
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;background:#0a0f0a;border-radius:14px;overflow:hidden;border:1px solid #1a3a1a;">
-      {header}
-      <div style="padding:12px 14px;">
-        {section("Your Stats Right Now", "📊", stats_content)}
-        {section("What To Do RIGHT NOW", "🚨", now_content, "#2a3a00")}
-        {section("Shop — How To Upgrade Yourself", "🛒", upgrade_content)}
-        {section("Your Breed & Class", "🐰", breed_content)}
-        {section("Gear — Capes, Boots & Hats", "🎽", gear_content)}
-        {section("Party — Team Up For Bonus", "👥", party_content)}
-        {section("Referrals — Earn From Friends", "💸", referral_content)}
-        {section("Staking — Earn While Idle", "🔒", stake_content)}
-        {section("Carrot Farm — Passive Income", "🌾", farm_content)}
-        {section("Creator Program — Make Content, Earn Rewards", "🎬", creator_content)}
-        {section("Quest Progress", "🎯", quest_content)}
+      <div style="background:#0f1a0f;padding:18px;text-align:center;border-bottom:1px solid #1a3a1a;">
+        <span style="font-size:36px;">🥕</span>
+        <h1 style="color:#7fff7f;margin:6px 0 3px;font-size:20px;">Mantis Pro — Daily Advisor</h1>
+        <p style="color:#666;margin:0;font-size:12px;">{now_str} · {done_count}/{total_count} tasks done today</p>
       </div>
-      {cta}
-      {footer}
+      <div style="padding:12px 14px;">
+        <div style="margin:8px 0;">{stats_html}</div>
+        {progress_bar_html if (progress_bar_html := progress_html) else ""}
+        {energy_msg}
+        {urgent_html}
+        {important_html}
+        {nice_html}
+        {leaderboard_tip}
+      </div>
+      <div style="padding:12px 14px;text-align:center;">
+        <a href="https://bunnybutton.xyz" style="background:#4caf50;color:#fff;padding:12px 36px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;display:inline-block;">Open Bunny Button →</a>
+      </div>
+      <p style="color:#333;font-size:11px;text-align:center;padding:10px;margin:0;">Mantis Pro · Checks every hour · Only reminds you of unfinished tasks</p>
     </div>"""
 
-    plain = f"Energy full {energy_cur:.0f}/{energy_max:.0f}. Go play: https://bunnybutton.xyz | Rank #{rank} | {total_carrots:,.0f} carrots"
+    plain = f"Mantis Pro Daily Advisor [{now_str}]\n{done_count}/{total_count} tasks done\nRank #{rank} | {total_carrots:,.0f} carrots | Energy {energy_cur:.0f}/{energy_max:.0f}\n\nGo play: https://bunnybutton.xyz"
+
+    pending_count = total_count - done_count
+    return html, plain, pending_count, tasks
+
+
+def build_energy_email(player, energy, farm, quests_data, streaks):
+    steal = player.get("stealMultiplier", 0.2)
+    total_carrots = player.get("totalCarrotsEarned", 0)
+    balance = player.get("carrotBalance", 0)
+    rank = player.get("rank", "?")
+    breed = player.get("bunnyBreed") or "None"
+    bunny_class = player.get("bunnyClass") or "None"
+    energy_cur = energy.get("energyCurrent", 0)
+    energy_max = energy.get("energyMax", 500)
+    potion_used = player.get("energyPotionUsedToday", False)
+    potion_cost = player.get("energyPotionCost", 0)
+    referral_code = player.get("referralCode", "?")
+    regen = player.get("energyRegenPerHour", 0)
+
+    quest_list = quests_data.get("quests", []) if isinstance(quests_data, dict) else []
+    pending_quests = [q for q in quest_list if q.get("status") != "complete"]
+    next_quest = pending_quests[0] if pending_quests else None
+
+    QUEST_HOW = {
+        "First Hop": "press the button once",
+        "Carrot Pickpocket": "earn carrots by pressing the button",
+        "Goblin Diplomacy": f"refer 2 friends — share code: <b>{referral_code}</b>",
+        "Blue Check Toll Bridge": "Wallet menu → connect X account",
+        "Ratcatchers": "Party tab → join any party",
+        "Five Bunnies Walk Into A Pub": "get your party to 5 members",
+        "Wizards Hate This Bunny": "reach 2.25x total steal via Shop upgrades",
+        "The Carrot Cartel": f"earn {max(0,25000-total_carrots):,.0f} more carrots (need 25,000 total)",
+        "Burnt Offerings": f"burn {max(0,50000-player.get('carrotsBurned',0)):,.0f} more on upgrades",
+        "Recipe For Disaster": "complete all 19 quests",
+    }
+
+    quest_section = ""
+    if next_quest:
+        qname = next_quest.get("name", "?")
+        qhow = QUEST_HOW.get(qname, "check in-game")
+        quest_section = tip_box(f"🎯 <b>Next Quest: {qname}</b> — {qhow}", "#ff9900")
+
+    potion_section = ""
+    if not potion_used and balance >= potion_cost and potion_cost > 0:
+        potion_section = tip_box(f"💊 <b>After you drain energy:</b> use your daily Energy Potion! Shop → Energy Potion. Costs {potion_cost:,.0f} carrots, fully refills energy. Free second session!", "#4caf50")
+
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;background:#0a0f0a;border-radius:14px;overflow:hidden;border:1px solid #1a3a1a;">
+      <div style="background:#0f1a0f;padding:20px;text-align:center;border-bottom:1px solid #1a3a1a;">
+        <span style="font-size:48px;">⚡</span>
+        <h1 style="color:#7fff7f;margin:8px 0 4px;font-size:22px;">Energy Full — Press NOW!</h1>
+        <p style="color:#aaa;margin:0;font-size:13px;">Your {energy_cur:.0f}/{energy_max:.0f} energy is ready. Don't waste it.</p>
+      </div>
+      <div style="padding:14px;">
+        <div style="margin:6px 0;">
+          {stat_pill("Rank", f"#{rank}")}
+          {stat_pill("Steal", f"{steal}x")}
+          {stat_pill("Breed", breed)}
+          {stat_pill("Class", bunny_class)}
+          {stat_pill("Total", f"{total_carrots:,.0f}")}
+        </div>
+        {tip_box(f"⚡ <b>Go to bunnybutton.xyz and press the button until energy hits 0.</b> Each press earns {steal}x carrots. Your regen is {regen:.1f}/hr so it'll refill in ~{energy_max/regen:.1f} hours.", "#4caf50")}
+        {potion_section}
+        {quest_section}
+      </div>
+      <div style="padding:12px 14px;text-align:center;">
+        <a href="https://bunnybutton.xyz" style="background:#4caf50;color:#fff;padding:14px 40px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block;">Press the Button →</a>
+      </div>
+      <p style="color:#333;font-size:11px;text-align:center;padding:10px;margin:0;">Mantis Pro · Abstract Chain Agent</p>
+    </div>"""
+
+    plain = f"⚡ Energy full {energy_cur:.0f}/{energy_max:.0f} — go press now! https://bunnybutton.xyz"
     return html, plain
 
 
-# ── MAIN SESSION ───────────────────────────────────────────────────────────
+# ── MAIN SESSION (called every hour) ──────────────────────────────────────
 
 def bunny_session():
+    from datetime import timezone as tz
+    separator = lambda label="": print(f"\n{'─'*10} {label} {'─'*10}")
+
     separator("BUNNY BUTTON SESSION")
+    _reset_if_new_day()
+
     cookie = os.environ.get("BUNNY_SESSION_COOKIE")
     bb = BunnyButton(session_cookie=cookie)
 
+    # Public data
     try:
         separator("LEADERBOARD (Top 10)")
         print(bb.leaderboard_summary(limit=10))
@@ -369,9 +513,8 @@ def bunny_session():
         print(f"Leaderboard error: {e}")
 
     try:
-        separator("PRESALE STATUS")
         presale = bb.get_presale_status()
-        print(f"  Active: {presale.get('active')} | Remaining: {presale.get('remainingAllocation',0):,.0f} CARROT")
+        print(f"  Presale: {presale.get('active')} | {presale.get('remainingAllocation',0):,.0f} CARROT left")
     except Exception as e:
         print(f"Presale error: {e}")
 
@@ -380,6 +523,7 @@ def bunny_session():
         separator("SESSION COMPLETE")
         return
 
+    # Player data
     try:
         player = bb.get_player()
         inventory = bb.get_inventory()
@@ -393,39 +537,41 @@ def bunny_session():
         separator("SESSION COMPLETE")
         return
 
-    separator("ENERGY")
-    cur = energy.get("energyCurrent", 0)
-    mx = energy.get("energyMax", 500)
-    pct = energy.get("percentFull", 0)
-    print(f"  {cur:.0f} / {mx:.0f}  ({pct}% full)")
-
     energy_full = energy.get("isFull", False)
-    farm_warn = farm.get("capWarning", False)
-
-    if energy_full:
-        print("  ⚡ FULL — building full advisor email...")
-        html, plain = build_email(player, inventory, energy, farm, quests_data, streaks, stake)
-        send_email("⚡ Bunny Button — Energy Full! Your full game guide inside", html, plain)
-    else:
-        h = energy.get("hoursToFull")
-        if h:
-            print(f"  Full in ~{h:.1f} hours")
-
-    separator("FARM")
-    cps = farm.get("carrotsPerSecond", 0)
-    print(f"  {cps:.4f}/sec ({cps*3600:.1f}/hr)")
-    if farm_warn and not energy_full:
-        print("  ⚠️ Cap warning — sending farm alert")
-        html, plain = build_email(player, inventory, energy, farm, quests_data, streaks, stake)
-        send_email("⚠️ Bunny Button — Claim Your Farm NOW Before Cap Hits!", html, plain)
+    energy_cur = energy.get("energyCurrent", 0)
+    energy_max = energy.get("energyMax", 500)
+    total_carrots = player.get("totalCarrotsEarned", 0)
+    rank = player.get("rank", "?")
 
     separator("QUICK STATS")
     print(f"  Breed: {player.get('bunnyBreed')} | Class: {player.get('bunnyClass')}")
-    print(f"  Steal: {player.get('stealMultiplier')}x | Rank: #{player.get('rank')}")
-    print(f"  Total: {player.get('totalCarrotsEarned',0):,.0f} | Balance: {player.get('carrotBalance',0):,.0f}")
+    print(f"  Energy: {energy_cur:.0f}/{energy_max:.0f} | Steal: {player.get('stealMultiplier')}x | Rank: #{rank}")
+    print(f"  Total: {total_carrots:,.0f} | Balance: {player.get('carrotBalance',0):,.0f}")
+    print(f"  Farm: {farm.get('carrotsPerSecond',0)*3600:.1f}/hr | Streak: {streaks.get('streakLength',0)} days")
 
-    quest_list = quests_data.get("quests", []) if isinstance(quests_data, dict) else []
-    done = sum(1 for q in quest_list if q.get("status") == "complete")
-    print(f"  Quests: {done}/{len(quest_list)} | Streak: {streaks.get('streakLength',0)} days")
+    # ── ENERGY ALERT (only when full, only once per day) ──────────────────
+    if energy_full and not _daily_state["energy_alerted"]:
+        print("  ⚡ Energy FULL — sending energy alert email")
+        html, plain = build_energy_email(player, energy, farm, quests_data, streaks)
+        if send_email("⚡ Energy Full — Press the Button NOW!", html, plain):
+            _daily_state["energy_alerted"] = True
+    elif energy_full:
+        print("  ⚡ Energy full but alert already sent today")
+
+    # ── HOURLY ADVISOR (always sends, shows remaining tasks) ───────────────
+    separator("HOURLY ADVISOR")
+    html, plain, pending_count, tasks = build_hourly_email(
+        player, inventory, energy, farm, quests_data, streaks, stake
+    )
+
+    done_count = sum(1 for t in tasks if t["done"])
+    total_count = len(tasks)
+
+    if pending_count == 0:
+        print(f"  All {total_count} tasks done today! Sending completion email.")
+        send_email(f"✅ You've done everything today! Rank #{rank}", html, plain)
+    else:
+        print(f"  {pending_count} tasks pending — sending advisor email")
+        send_email(f"🥕 Mantis Pro — {pending_count} things to do now | Rank #{rank}", html, plain)
 
     separator("BUNNY SESSION COMPLETE")

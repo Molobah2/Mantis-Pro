@@ -11,10 +11,6 @@ from flask import Flask, jsonify
 
 load_dotenv()
 
-# ── BUNNY BUTTON ────────────────────────────
-from bunny_routes import register_bunny_routes
-from bunny_agent import bunny_session
-
 # ── FLASK HEALTH SERVER ─────────────────────
 app = Flask(__name__)
 
@@ -47,8 +43,6 @@ def mcp():
 @app.route("/metadata")
 def metadata():
     return jsonify(AGENT_METADATA)
-
-register_bunny_routes(app)
 
 # ── CONFIG ──────────────────────────────────
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
@@ -372,19 +366,31 @@ Should I mint a new card right now? Consider balance, supply, and market conditi
     print("=" * 40)
 
 # ── AGENT LOOP (background thread) ──────────
-def run_agent():
+def run_litany():
     time.sleep(3)
     while True:
         try:
             agent_session()
-            bunny_session()
         except Exception as e:
-            print(f"Agent loop error: {e}")
-        print("Sleeping 30 minutes before next session...")
+            print(f"Litany loop error: {e}")
+        print("Sleeping 30 minutes before next Litany session...")
         time.sleep(30 * 60)
 
-agent_thread = threading.Thread(target=run_agent, daemon=True)
-agent_thread.start()
+def run_bunny():
+    time.sleep(5)
+    while True:
+        try:
+            bunny_session()
+        except Exception as e:
+            print(f"Bunny loop error: {e}")
+        print("Sleeping 60 minutes before next Bunny session...")
+        time.sleep(60 * 60)
+
+litany_thread = threading.Thread(target=run_litany, daemon=True)
+litany_thread.start()
+
+bunny_thread = threading.Thread(target=run_bunny, daemon=True)
+bunny_thread.start()
 
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":
