@@ -193,23 +193,157 @@
   .recent-wallet-btn { padding:4px 10px; font-size:11px; font-family:'Space Mono',monospace; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:4px; color:var(--muted); cursor:pointer; transition:all 0.2s; letter-spacing:0.5px; }
   .recent-wallet-btn:hover { border-color:var(--green-light); color:var(--green-light); }
 
+  /* QUEST SYSTEM */
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0 8px;
+    margin-top: 8px;
+  }
+  .phase-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+  }
+  .phase-label.free { color: var(--green-light); }
+  .phase-label.daily { color: var(--blue); }
+  .phase-label.mid { color: #ffc107; }
+  .phase-label.late { color: var(--orange); }
+  .phase-label.paid { color: #ce93d8; }
+  .phase-divider { flex:1; height:1px; background:rgba(255,255,255,0.07); }
+
+  /* QUEST ITEM STATES */
+  .quest-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin: 4px 0;
+    transition: all 0.25s;
+    border: 1px solid transparent;
+    position: relative;
+  }
+
+  /* LOCKED */
+  .quest-item.locked {
+    opacity: 0.35;
+    cursor: default;
+    background: transparent;
+  }
+  .quest-item.locked .quest-check { color: rgba(255,255,255,0.2); }
+
+  /* ACTIVE */
+  .quest-item.active {
+    background: rgba(46,204,113,0.06);
+    border-color: rgba(46,204,113,0.25);
+    box-shadow: 0 0 0 1px rgba(46,204,113,0.1);
+  }
+  .quest-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--green-light);
+    border-radius: 8px 0 0 8px;
+  }
+
+  /* DONE — collapsed */
+  .quest-item.done {
+    padding: 7px 14px;
+    background: rgba(46,204,113,0.03);
+    border-color: rgba(46,204,113,0.1);
+  }
+  .quest-item.done .quest-body-full { display: none; }
+  .quest-item.done .quest-title-done { display: flex; }
+
+  /* ACTIVE/LOCKED — show full, hide done summary */
+  .quest-item:not(.done) .quest-body-full { display: block; }
+  .quest-item:not(.done) .quest-title-done { display: none; }
+
+  .quest-check {
+    font-size: 16px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    line-height: 1;
+  }
+
+  .quest-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+  .quest-item.locked .quest-title { color: var(--muted); }
+
+  .quest-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 6px;
+  }
+
+  .quest-title-done {
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+  }
+  .quest-title-done span {
+    font-size: 12px;
+    color: rgba(46,204,113,0.6);
+    font-weight: 500;
+    text-decoration: line-through;
+  }
+  .quest-undo {
+    font-size: 10px;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1px;
+    padding: 2px 6px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    margin-left: auto;
+    background: transparent;
+    transition: all 0.2s;
+  }
+  .quest-undo:hover { border-color: var(--muted); color: var(--white); }
+
   /* MARK DONE BUTTON */
   .mark-done-btn {
     display: inline-block;
-    margin-top: 6px;
-    padding: 3px 10px;
-    font-size: 11px;
-    font-family: 'Space Mono', monospace;
-    color: var(--muted);
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 4px;
+    margin-top: 2px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--white);
+    border: 1px solid rgba(46,204,113,0.4);
+    border-radius: 6px;
     cursor: pointer;
-    background: transparent;
+    background: rgba(46,204,113,0.1);
     transition: all 0.2s;
-    letter-spacing: 1px;
+    font-weight: 600;
   }
-  .mark-done-btn:hover { border-color: var(--green-light); color: var(--green-light); }
-  .mark-done-btn.marked { border-color: var(--green); color: var(--green-light); background: rgba(46,204,113,0.08); cursor: default; }
+  .mark-done-btn:hover { background: rgba(46,204,113,0.2); border-color: var(--green-light); }
+
+  /* DAILY RESET BADGE */
+  .daily-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: 1px solid rgba(100,181,246,0.3);
+    color: var(--blue);
+    font-family: 'Space Mono', monospace;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
   footer a { color:var(--green-light); text-decoration:none; }
 
   /* PLAYER STATS STRIP */
@@ -288,256 +422,22 @@
   <div class="tab-content" id="tab-tasks">
     <div class="panel" style="padding:20px 24px;">
 
-      <div style="margin-bottom:18px;">
-        <div class="guide-section-title" style="margin-top:0;">How to use this guide</div>
-        <div class="guide-tip">Follow the steps below in order. Each section builds on the last. Check off tasks as you complete them — your progress saves in your browser automatically.</div>
-      </div>
-
-      <!-- PHASE 1 -->
-      <div class="guide-section-title">🟢 Phase 1 — First Day (Do These First)</div>
-
-      <div class="task-item" id="row_p1_press">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Press the button for the first time</div>
-          <div class="task-desc">Go to <a href="https://bunnybutton.xyz" target="_blank" class="task-link">bunnybutton.xyz</a> and press the big button. Keep pressing until your energy hits 0. Each press earns carrots.</div>
-          <button id="btn_p1_press" class="mark-done-btn" onclick="toggleTask('p1_press')">Mark as done</button>
+      <!-- PROGRESS BAR -->
+      <div id="overall-progress" style="margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;">Overall Progress</span>
+          <span id="progress-text" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">0 / 21 tasks</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.06);border-radius:4px;height:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
+          <div id="progress-fill" style="height:100%;background:linear-gradient(90deg,var(--green),var(--green-light));border-radius:4px;transition:width 0.5s ease;width:0%;box-shadow:0 0 8px rgba(46,204,113,0.4);"></div>
         </div>
       </div>
 
-      <div class="task-item" id="row_p1_steal">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Buy your first Steal upgrade</div>
-          <div class="task-desc">Go to <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal</a>. This is the most important upgrade — it directly multiplies every carrot you earn per press. Do this before anything else.</div>
-          <button id="btn_p1_steal" class="mark-done-btn" onclick="toggleTask('p1_steal')">Mark as done</button>
-        </div>
+      <div id="quest-list"></div>
+
+      <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;text-align:center;font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">
+        ✅ Progress saves in your browser · Daily tasks reset at midnight
       </div>
-
-      <div class="task-item" id="row_p1_regen">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Buy your first Regen upgrade</div>
-          <div class="task-desc"><a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Regen</a>. Faster energy refill = more presses per day = more carrots. Buy Steal and Regen alternately.</div>
-          <button id="btn_p1_regen" class="mark-done-btn" onclick="toggleTask('p1_regen')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p1_farm">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Buy Farm Level 1 — passive income while you sleep</div>
-          <div class="task-desc"><a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → buy Level 1</a>. The farm earns carrots automatically even while offline. Do this before more than 2–3 stat upgrades.</div>
-          <button id="btn_p1_farm" class="mark-done-btn" onclick="toggleTask('p1_farm')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p1_x">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Connect your X (Twitter) account</div>
-          <div class="task-desc"><a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu → connect X</a>. Your handle shows on the leaderboard instead of a wallet address. Also completes the "Blue Check Toll Bridge" quest.</div>
-          <button id="btn_p1_x" class="mark-done-btn" onclick="toggleTask('p1_x')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p1_discord">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Connect your Discord account</div>
-          <div class="task-desc"><a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu → connect Discord</a>. Unlocks in-game username, Discord commands, and leaderboard sync.</div>
-          <button id="btn_p1_discord" class="mark-done-btn" onclick="toggleTask('p1_discord')">Mark as done</button>
-        </div>
-      </div>
-
-      <!-- PHASE 2 -->
-      <div class="guide-section-title" style="margin-top:24px;">🔵 Phase 2 — Daily Routine (Do Every Day)</div>
-
-      <div class="task-item" id="row_p2_press">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Press the button until energy hits 0</div>
-          <div class="task-desc">This resets every day. Drain energy completely, then let it refill. <a href="https://bunnybutton.xyz" target="_blank" class="task-link">Go press now →</a></div>
-          <button id="btn_p2_press" class="mark-done-btn" onclick="toggleTask('p2_press')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p2_potion">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Use your free daily Energy Potion</div>
-          <div class="task-desc">After energy hits 0 → <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Energy Potion</a>. Fully refills energy once per day for free. That is a whole extra session at zero cost.</div>
-          <button id="btn_p2_potion" class="mark-done-btn" onclick="toggleTask('p2_potion')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p2_farm">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Collect your farm carrots</div>
-          <div class="task-desc">Farm caps at 8 hours offline — after that it stops earning until you collect. Go to <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → claim carrots</a>. Do this at least twice a day.</div>
-          <button id="btn_p2_farm" class="mark-done-btn" onclick="toggleTask('p2_farm')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p2_streak">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Log in daily to keep your streak</div>
-          <div class="task-desc">Just signing in counts. <a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab</a>: 7-day streak = 500 carrots, 30-day = 2,500 carrots, 100-day = 10,000 carrots. Don't break it.</div>
-          <button id="btn_p2_streak" class="mark-done-btn" onclick="toggleTask('p2_streak')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p2_upgrades">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Buy at least one upgrade per day</div>
-          <div class="task-desc">Alternate: Steal → Regen → Steal → Regen → Farm upgrade. Every upgrade compounds. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop →</a></div>
-          <button id="btn_p2_upgrades" class="mark-done-btn" onclick="toggleTask('p2_upgrades')">Mark as done</button>
-        </div>
-      </div>
-
-      <!-- PHASE 3 -->
-      <div class="guide-section-title" style="margin-top:24px;">🟡 Phase 3 — Mid Game (When You Have Carrots)</div>
-
-      <div class="task-item" id="row_p3_steal1">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Reach 1.0x steal multiplier</div>
-          <div class="task-desc">Keep buying Steal upgrades in <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal</a> until your multiplier hits 1.0x. At this point each press earns 5x more than the starting 0.2x.</div>
-          <button id="btn_p3_steal1" class="mark-done-btn" onclick="toggleTask('p3_steal1')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p3_farm2">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Upgrade Farm to Level 2</div>
-          <div class="task-desc"><a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Upgrades → Level 2</a>. More passive income per second. Do this when you have surplus carrots after stat upgrades.</div>
-          <button id="btn_p3_farm2" class="mark-done-btn" onclick="toggleTask('p3_farm2')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p3_refer">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Refer 2 friends to unlock Parties</div>
-          <div class="task-desc">Get your referral code from <a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu</a> and share it on X or Discord. 2 sign-ups = Parties unlock. A full 5-person party gives everyone +5% bonus per press. You also earn 8% of their carrot earnings.</div>
-          <button id="btn_p3_refer" class="mark-done-btn" onclick="toggleTask('p3_refer')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p3_party">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Join a party for the group bonus</div>
-          <div class="task-desc"><a href="https://bunnybutton.xyz/party" target="_blank" class="task-link">Party tab → browse parties</a> or ask in the Bunny Button Discord. Full 5-person party = +5% per press for everyone.</div>
-          <button id="btn_p3_party" class="mark-done-btn" onclick="toggleTask('p3_party')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p3_milestone1">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Claim your 1,000 carrot and 1K click milestone rewards</div>
-          <div class="task-desc">Go to <a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab → Milestones</a>. Claim any completed milestones — they give free carrot rewards. Check after every big session.</div>
-          <button id="btn_p3_milestone1" class="mark-done-btn" onclick="toggleTask('p3_milestone1')">Mark as done</button>
-        </div>
-      </div>
-
-      <!-- PHASE 4 -->
-      <div class="guide-section-title" style="margin-top:24px;">🟠 Phase 4 — Late Game (Climb to Top 10)</div>
-
-      <div class="task-item" id="row_p4_jackalope">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Earn 25,000 total carrots → unlock Jackalope breed FREE (1.5x steal)</div>
-          <div class="task-desc">Just keep pressing daily. No spending needed. When you hit 25,000 total carrots the Jackalope breed unlocks automatically — giving you 1.5x steal for free. That is a massive upgrade over Sprout's 0.2x.</div>
-          <button id="btn_p4_jackalope" class="mark-done-btn" onclick="toggleTask('p4_jackalope')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p4_moonburrow">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Reach 2.25x steal → unlock Moonburrow breed FREE (1.25x steal)</div>
-          <div class="task-desc">Buy Steal upgrades until your total multiplier hits 2.25x. Moonburrow breed unlocks automatically. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal →</a></div>
-          <button id="btn_p4_moonburrow" class="mark-done-btn" onclick="toggleTask('p4_moonburrow')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p4_burn">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Burn 50,000 carrots on upgrades → earn 5,000 carrot reward</div>
-          <div class="task-desc">Keep buying upgrades in the Shop — burned carrots count automatically. At 50,000 burned, the Burnt Offerings quest completes and rewards you 5,000 carrots. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop →</a></div>
-          <button id="btn_p4_burn" class="mark-done-btn" onclick="toggleTask('p4_burn')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p4_farm3">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Upgrade Farm to Level 3+</div>
-          <div class="task-desc">Higher farm levels increase passive carrot income significantly. <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Upgrades</a>. Alternate with stat upgrades.</div>
-          <button id="btn_p4_farm3" class="mark-done-btn" onclick="toggleTask('p4_farm3')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p4_crate">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Open a Carrot Crate for gear bonus</div>
-          <div class="task-desc">Wait until steal is at level 3+ before opening. <a href="https://bunnybutton.xyz/gacha" target="_blank" class="task-link">Gacha page → open a Crate</a>. Get Cape (+steal), Boots (+regen), or Hat (+energy). Gear stacks on top of all your other upgrades.</div>
-          <button id="btn_p4_crate" class="mark-done-btn" onclick="toggleTask('p4_crate')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p4_stake">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Stake surplus carrots for APY rewards</div>
-          <div class="task-desc">Once your balance exceeds 2,000 and you don't need it for upgrades soon — <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Stake</a>. Lock for 30/90/365 days. Longer = higher APY. Idle carrots should always be working.</div>
-          <button id="btn_p4_stake" class="mark-done-btn" onclick="toggleTask('p4_stake')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p4_creator">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Submit content to the Creator Program</div>
-          <div class="task-desc">Make an X post about Bunny Button, then submit it at <a href="https://bunnybutton.xyz/creator-program" target="_blank" class="task-link">Creator Program</a>. Rewards: carrot crates, CARROT tokens, unique items. Takes 10 minutes and costs nothing.</div>
-          <button id="btn_p4_creator" class="mark-done-btn" onclick="toggleTask('p4_creator')">Mark as done</button>
-        </div>
-      </div>
-
-      <!-- PHASE 5 PAID -->
-      <div class="guide-section-title" style="margin-top:24px;">⚡ Paid Path — Accelerate Fast (Optional)</div>
-      <div class="guide-tip orange" style="margin-bottom:14px;"><b>These cost real money but dramatically speed up your climb. Skip if free path only.</b></div>
-
-      <div class="task-item" id="row_p5_bandit">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Upgrade to Bandit breed (~$15) — instantly 1.8x steal</div>
-          <div class="task-desc">Best value paid breed. Combined with Warrior class (+15% steal) = effectively 2.07x steal day one. <a href="https://bunnybutton.xyz/profile" target="_blank" class="task-link orange">Profile → Change Breed →</a></div>
-          <button id="btn_p5_bandit" class="mark-done-btn" onclick="toggleTask('p5_bandit')">Mark as done</button>
-        </div>
-      </div>
-
-      <div class="task-item" id="row_p5_presale">
-        <div class="task-check">🔲</div>
-        <div class="task-body">
-          <div class="task-title">Buy CARROT in presale — 1.4x more than launch price</div>
-          <div class="task-desc">Presale: 350,000 CARROT per ETH. Launch price: 250,000 per ETH. Buying now = 40% more CARROT for same ETH. Ends June 27, 2026. Min 0.01 ETH (~$20). <a href="https://bunnybutton.xyz/presale" target="_blank" class="task-link orange">Join Presale →</a></div>
-          <button id="btn_p5_presale" class="mark-done-btn" onclick="toggleTask('p5_presale')">Mark as done</button>
-        </div>
-      </div>
-
-      <div style="margin-top:20px;padding:14px;background:rgba(255,255,255,0.03);border-radius:8px;text-align:center;font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;">
-        ✅ Progress saves in your browser automatically · Resets only if you clear browser data
-      </div>
-
     </div>
   </div>
 
@@ -680,6 +580,459 @@
 
 <script>
 const BASE_URL = 'https://www.bunnybutton.xyz';
+
+async function fetchProxy(endpoint) {
+  const res = await fetch('/api/bunny-proxy?endpoint=' + endpoint);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchDirect(endpoint, wallet) {
+  // Route through Mantis Pro proxy to avoid CORS
+  const ep = endpoint + (wallet ? (endpoint.includes('?') ? '&' : '?') + 'wallet=' + encodeURIComponent(wallet) : '');
+  return fetchProxy(ep);
+}
+
+function fmt(n) { return Number(n).toLocaleString(); }
+
+function breedClass(b) {
+  if (!b) return '';
+  const bl = b.toLowerCase();
+  return ['meadow','spark','burrow','bandit','jackalope'].includes(bl) ? bl : '';
+}
+
+function rankEmoji(r) {
+  if (r===1) return '🥇'; if (r===2) return '🥈'; if (r===3) return '🥉';
+  return `#${r}`;
+}
+function rankClass(r) {
+  if (r===1) return 'top1'; if (r===2) return 'top2'; if (r===3) return 'top3';
+  return '';
+}
+
+// ── LEADERBOARD ──
+let _allLeaderboard = [];
+let _lbPage = 0;
+const LB_PAGE_SIZE = 20;
+
+async function loadLeaderboard() {
+  const body = document.getElementById('leaderboard-body');
+  try {
+    const data = await fetchProxy('/leaderboard?limit=100');
+    _allLeaderboard = data.leaderboard || [];
+    _lbPage = 0;
+    renderLeaderboardPage();
+    document.getElementById('lb-updated').textContent = new Date().toLocaleTimeString();
+  } catch(e) {
+    body.innerHTML = `<div class="error-msg">${e.message}</div>`;
+  }
+}
+
+function renderLeaderboardPage() {
+  const body = document.getElementById('leaderboard-body');
+  const start = _lbPage * LB_PAGE_SIZE;
+  const page = _allLeaderboard.slice(start, start + LB_PAGE_SIZE);
+  const totalPages = Math.ceil(_allLeaderboard.length / LB_PAGE_SIZE);
+
+  body.innerHTML = page.map((e, i) => {
+    const rank = e.rank || (start + i + 1);
+    const name = e.xHandle || (e.walletAddress||'???').slice(0,10)+'...';
+    const carrots = e.totalCarrotsEarned || 0;
+    const breed = e.bunnyBreed || 'sprout';
+    const bc = breedClass(breed);
+    return `<div class="lb-row" style="animation-delay:${i*0.03}s">
+      <div class="lb-rank ${rankClass(rank)}">${rankEmoji(rank)}</div>
+      <div class="lb-name">${name}</div>
+      <div class="lb-right">
+        <div class="lb-carrots">${fmt(carrots)} 🥕</div>
+        <div class="lb-breed"><span class="breed-pill ${bc}">${breed}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Pagination controls
+  if (totalPages > 1) {
+    body.innerHTML += `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid rgba(255,255,255,0.06);">
+        <button onclick="lbPrev()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${_lbPage===0?'var(--muted)':'var(--white)'};padding:5px 12px;cursor:${_lbPage===0?'default':'pointer'};font-size:12px;font-family:'Space Mono',monospace;">← Prev</button>
+        <span style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">Page ${_lbPage+1} / ${totalPages} · ${_allLeaderboard.length} players</span>
+        <button onclick="lbNext()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${_lbPage===totalPages-1?'var(--muted)':'var(--white)'};padding:5px 12px;cursor:${_lbPage===totalPages-1?'default':'pointer'};font-size:12px;font-family:'Space Mono',monospace;">Next →</button>
+      </div>`;
+  }
+}
+
+function lbPrev() {
+  if (_lbPage > 0) { _lbPage--; renderLeaderboardPage(); }
+}
+
+function lbNext() {
+  const totalPages = Math.ceil(_allLeaderboard.length / LB_PAGE_SIZE);
+  if (_lbPage < totalPages - 1) { _lbPage++; renderLeaderboardPage(); }
+}
+
+// ── STATS ──
+async function loadStats() {
+  try {
+    const [ethData, presaleData] = await Promise.all([
+      fetchProxy('/eth-price'),
+      fetchProxy('/presale/status')
+    ]);
+    const ethUsd = ethData.ethUsd || 0;
+    document.getElementById('eth-price').textContent =
+      '$' + Number(ethUsd).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    const active = presaleData.active;
+    const remaining = presaleData.remainingAllocation || 0;
+    const raised = presaleData.totalRaisedEth || 0;
+    const sold = 35000000 - remaining;
+    const pct = Math.min(100, Math.round((sold/35000000)*100));
+    const raisedUsd = raised * ethUsd;
+
+    document.getElementById('presale-status').textContent = active ? 'ACTIVE' : 'ENDED';
+    document.getElementById('presale-status').style.color = active ? 'var(--green-light)' : 'var(--red)';
+    document.getElementById('presale-sub').textContent = active ? 'Presale is live now' : 'Presale ended';
+    document.getElementById('carrot-remaining').textContent = (remaining/1000000).toFixed(2)+'M';
+
+    document.getElementById('presale-body').innerHTML = `
+      <div class="presale-row"><span class="presale-key">Status</span><span class="presale-val ${active?'green':'red'}">${active?'✅ Active':'❌ Ended'}</span></div>
+      <div class="presale-row"><span class="presale-key">ETH Raised</span><span class="presale-val">${Number(raised).toFixed(4)} ETH</span></div>
+      <div class="presale-row"><span class="presale-key">USD Value</span><span class="presale-val green">$${fmt(Math.round(raisedUsd))}</span></div>
+      <div class="presale-row"><span class="presale-key">CARROT Left</span><span class="presale-val orange">${fmt(remaining)}</span></div>
+      <div class="presale-row"><span class="presale-key">Rate</span><span class="presale-val">350,000 / ETH</span></div>
+      <div class="presale-row"><span class="presale-key">Min Buy</span><span class="presale-val">0.01 ETH (~$${Math.round(ethUsd*0.01)})</span></div>
+      <div class="presale-row"><span class="presale-key">Hard Cap</span><span class="presale-val">100 ETH</span></div>
+      <div class="presale-row"><span class="presale-key">Ends</span><span class="presale-val">June 27, 2026</span></div>
+      <div class="progress-bar">
+        <div class="progress-label"><span>Sold ${pct}%</span><span>${fmt(sold)} / 35M</span></div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div>`;
+  } catch(e) { console.error(e); }
+}
+
+// ── PLAYER TASKS ──
+async function loadPlayer() {
+  const wallet = document.getElementById('wallet-input').value.trim();
+  if (!wallet || wallet.length < 10) {
+    setStatus('Please enter a valid wallet address', 'error');
+    return;
+  }
+  _currentWallet = wallet;
+  saveRecentWallet(wallet);
+  renderRecentWallets('');
+  setStatus('Loading your game data...', 'loading');
+  document.getElementById('tasks-badge').textContent = 'Loading...';
+
+  try {
+    // Use cached leaderboard if available, else fetch
+    const presaleResp = await fetchProxy('/presale/status');
+    const presale = presaleResp;
+
+    let lb = _allLeaderboard;
+    if (!lb.length) {
+      const leaderboard = await fetchProxy('/leaderboard?limit=100');
+      lb = leaderboard.leaderboard || [];
+      _allLeaderboard = lb;
+    }
+
+    // Find player in leaderboard
+    const player = lb.find(e =>
+      e.walletAddress && e.walletAddress.toLowerCase() === wallet.toLowerCase()
+    );
+
+    if (!player) {
+      // Player exists but not on leaderboard yet — show starter tasks
+      renderStarterTasks(wallet, presale);
+      setStatus('✅ Wallet found — showing starter guide', 'success');
+      switchToTasksTab();
+      return;
+    }
+
+    renderPlayerTasks(player, presale, wallet);
+    setStatus(`✅ Loaded data for ${player.xHandle || wallet.slice(0,10)+'...'}`, 'success');
+    switchToTasksTab();
+
+  } catch(e) {
+    setStatus(`Error: ${e.message}`, 'error');
+  }
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('wallet-status');
+  el.textContent = msg;
+  el.className = `wallet-status ${type}`;
+}
+
+// ── RECENT WALLETS ───────────────────────────────────────────────────────
+function saveRecentWallet(wallet) {
+  if (!wallet || wallet.length < 10) return;
+  try {
+    let recents = JSON.parse(localStorage.getItem('mantis_recent_wallets') || '[]');
+    recents = recents.filter(w => w !== wallet); // remove if already exists
+    recents.unshift(wallet); // add to front
+    recents = recents.slice(0, 5); // keep max 5
+    localStorage.setItem('mantis_recent_wallets', JSON.stringify(recents));
+  } catch(e) {}
+}
+
+function getRecentWallets() {
+  try {
+    return JSON.parse(localStorage.getItem('mantis_recent_wallets') || '[]');
+  } catch(e) { return []; }
+}
+
+function renderRecentWallets(filter) {
+  const container = document.getElementById('recent-wallets-row');
+  const recents = getRecentWallets();
+  const filtered = filter ? recents.filter(w => w.toLowerCase().includes(filter.toLowerCase())) : recents;
+
+  if (!filtered.length) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  const existing = container.querySelectorAll('.recent-wallet-btn');
+  existing.forEach(e => e.remove());
+
+  filtered.forEach(wallet => {
+    const btn = document.createElement('button');
+    btn.className = 'recent-wallet-btn';
+    btn.textContent = wallet.slice(0,6) + '...' + wallet.slice(-4);
+    btn.title = wallet;
+    btn.onclick = () => {
+      document.getElementById('wallet-input').value = wallet;
+      container.style.display = 'none';
+      loadPlayer();
+    };
+    container.appendChild(btn);
+  });
+}
+
+function filterRecent(val) {
+  renderRecentWallets(val);
+}
+
+// ── QUEST ENGINE ────────────────────────────────────────────────────────────
+const TODAY = new Date().toISOString().slice(0, 10);
+
+const QUESTS = [
+  // Phase 1 — First Day
+  { id:'p1_press',    phase:'🟢 Phase 1 — First Day',    phaseClass:'free',
+    title:'Press the button for the first time',
+    desc:'Go to <a href="https://bunnybutton.xyz" target="_blank" class="task-link">bunnybutton.xyz</a> and press the big button. Keep pressing until your energy hits 0. Each press earns carrots based on your steal multiplier.',
+    daily: false },
+  { id:'p1_steal',    phase:null, phaseClass:'free',
+    title:'Buy your first Steal upgrade',
+    desc:'<a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal</a>. Most important upgrade — multiplies every carrot you earn per press. Do this before anything else.',
+    daily: false },
+  { id:'p1_regen',    phase:null, phaseClass:'free',
+    title:'Buy your first Regen upgrade',
+    desc:'<a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Regen</a>. Faster energy refill = more presses per day. Alternate between Steal and Regen upgrades going forward.',
+    daily: false },
+  { id:'p1_farm',     phase:null, phaseClass:'free',
+    title:'Buy Farm Level 1 — passive income while you sleep',
+    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → buy Level 1</a>. Earns carrots automatically even offline. Do before more than 2–3 stat upgrades.',
+    daily: false },
+  { id:'p1_x',        phase:null, phaseClass:'free',
+    title:'Connect your X (Twitter) account',
+    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu → connect X</a>. Your handle shows on the leaderboard. Completes the "Blue Check Toll Bridge" quest.',
+    daily: false },
+  { id:'p1_discord',  phase:null, phaseClass:'free',
+    title:'Connect your Discord account',
+    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu → connect Discord</a>. Unlocks username, Discord commands, and leaderboard sync.',
+    daily: false },
+
+  // Phase 2 — Daily (resets every day)
+  { id:'p2_press',    phase:'🔵 Phase 2 — Daily Routine (resets every day)',  phaseClass:'daily',
+    title:'Press the button until energy hits 0 <span class="daily-badge">daily</span>',
+    desc:'Drain energy completely then let it refill. <a href="https://bunnybutton.xyz" target="_blank" class="task-link">Go press now →</a>',
+    daily: true },
+  { id:'p2_potion',   phase:null, phaseClass:'daily',
+    title:'Use your free daily Energy Potion <span class="daily-badge">daily</span>',
+    desc:'After energy hits 0 → <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Energy Potion</a>. Fully refills energy once per day free. A whole extra session at zero cost.',
+    daily: true },
+  { id:'p2_farm',     phase:null, phaseClass:'daily',
+    title:'Collect your farm carrots <span class="daily-badge">daily</span>',
+    desc:'Farm caps at 8 hours offline — after that it stops earning until you collect. <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → claim</a>. Do at least twice a day.',
+    daily: true },
+  { id:'p2_streak',   phase:null, phaseClass:'daily',
+    title:'Log in to keep your streak alive <span class="daily-badge">daily</span>',
+    desc:'Just signing in counts. <a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab</a>: 7 days = 500 carrots, 30 days = 2,500 carrots, 100 days = 10,000 carrots.',
+    daily: true },
+  { id:'p2_upgrade',  phase:null, phaseClass:'daily',
+    title:'Buy at least one upgrade today <span class="daily-badge">daily</span>',
+    desc:'Pattern: Steal → Regen → Steal → Regen → Farm upgrade. Every upgrade compounds. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop →</a>',
+    daily: true },
+
+  // Phase 3 — Mid Game
+  { id:'p3_steal1',   phase:'🟡 Phase 3 — Mid Game',  phaseClass:'mid',
+    title:'Reach 1.0x steal multiplier',
+    desc:'Keep buying Steal upgrades until multiplier hits 1.0x. At this point each press earns 5x more than the starting 0.2x. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal →</a>',
+    daily: false },
+  { id:'p3_farm2',    phase:null, phaseClass:'mid',
+    title:'Upgrade Farm to Level 2',
+    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Upgrades → Level 2</a>. More passive income per second. Do when you have surplus after stat upgrades.',
+    daily: false },
+  { id:'p3_refer',    phase:null, phaseClass:'mid',
+    title:'Refer 2 friends to unlock Parties (+5% bonus)',
+    desc:'Get referral code from <a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu</a>. Share on X or Discord. 2 sign-ups = Parties unlock. Full 5-person party = +5% per press for everyone.',
+    daily: false },
+  { id:'p3_party',    phase:null, phaseClass:'mid',
+    title:'Join a party for the group bonus',
+    desc:'<a href="https://bunnybutton.xyz/party" target="_blank" class="task-link">Party tab → browse parties</a> or ask in Bunny Button Discord. Full party = +5% on every press.',
+    daily: false },
+  { id:'p3_milestone',phase:null, phaseClass:'mid',
+    title:'Claim your milestone rewards',
+    desc:'<a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab → Milestones</a>. Claim 1K carrots, 1K clicks rewards. Check after every big session — free carrots sitting there.',
+    daily: false },
+
+  // Phase 4 — Late Game
+  { id:'p4_jackalope',phase:'🟠 Phase 4 — Late Game',  phaseClass:'late',
+    title:'Earn 25,000 total carrots → unlock Jackalope FREE (1.5x steal)',
+    desc:'Just keep pressing daily. No spending needed. At 25,000 total carrots, Jackalope breed unlocks automatically — 1.5x steal for free. Massive upgrade over Sprout's 0.2x.',
+    daily: false },
+  { id:'p4_moonburrow',phase:null, phaseClass:'late',
+    title:'Reach 2.25x steal → unlock Moonburrow FREE (1.25x steal)',
+    desc:'Buy Steal upgrades until total multiplier hits 2.25x. Moonburrow unlocks automatically — no spending needed. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal →</a>',
+    daily: false },
+  { id:'p4_burn',     phase:null, phaseClass:'late',
+    title:'Burn 50,000 carrots on upgrades → earn 5,000 carrot reward',
+    desc:'Keep buying upgrades — burned carrots count automatically. At 50,000 burned, Burnt Offerings quest rewards 5,000 carrots. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop →</a>',
+    daily: false },
+  { id:'p4_farm3',    phase:null, phaseClass:'late',
+    title:'Upgrade Farm to Level 3',
+    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Upgrades → Level 3</a>. Higher levels = significantly more passive income. Alternate with stat upgrades.',
+    daily: false },
+  { id:'p4_crate',    phase:null, phaseClass:'late',
+    title:'Open a Carrot Crate for gear bonus',
+    desc:'Wait until steal is level 3+. <a href="https://bunnybutton.xyz/gacha" target="_blank" class="task-link">Gacha → open Crate</a>. Get Cape (+steal), Boots (+regen), or Hat (+energy). Gear stacks on top of all upgrades.',
+    daily: false },
+  { id:'p4_stake',    phase:null, phaseClass:'late',
+    title:'Stake surplus carrots for APY rewards',
+    desc:'Once balance exceeds 2,000 and you don't need it soon — <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Stake</a>. Lock 30/90/365 days. Longer = higher APY.',
+    daily: false },
+  { id:'p4_creator',  phase:null, phaseClass:'late',
+    title:'Submit content to the Creator Program',
+    desc:'Post about Bunny Button on X, then submit at <a href="https://bunnybutton.xyz/creator-program" target="_blank" class="task-link">Creator Program</a>. Rewards: crates, CARROT tokens, unique items.',
+    daily: false },
+
+  // Paid Path
+  { id:'p5_bandit',   phase:'⚡ Paid Path — Accelerate Fast (Optional)',  phaseClass:'paid',
+    title:'Upgrade to Bandit breed (~$15) — instantly 1.8x steal',
+    desc:'Best value paid breed. With Warrior class (+15%) = 2.07x steal day one. <a href="https://bunnybutton.xyz/profile" target="_blank" class="task-link orange">Profile → Change Breed →</a>',
+    daily: false },
+  { id:'p5_presale',  phase:null, phaseClass:'paid',
+    title:'Buy CARROT in presale — 40% more than launch price',
+    desc:'Presale: 350K CARROT/ETH. Launch: 250K/ETH. Buy now = 40% more. Ends June 27, 2026. Min 0.01 ETH. <a href="https://bunnybutton.xyz/presale" target="_blank" class="task-link orange">Join Presale →</a>',
+    daily: false },
+];
+
+const TOTAL_QUESTS = QUESTS.length;
+
+function qKey(id) {
+  return 'mantis_q_' + id;
+}
+function qIsDone(id) {
+  try {
+    const v = localStorage.getItem(qKey(id));
+    if (!v) return false;
+    const { done, date } = JSON.parse(v);
+    const q = QUESTS.find(q => q.id === id);
+    if (q && q.daily) return done && date === TODAY;
+    return done;
+  } catch(e) { return false; }
+}
+function qSetDone(id, val) {
+  try {
+    localStorage.setItem(qKey(id), JSON.stringify({ done: val, date: TODAY }));
+  } catch(e) {}
+}
+
+function getQuestState(id, index) {
+  if (qIsDone(id)) return 'done';
+  // A quest is active if all previous non-daily quests in same phase-group are done
+  // For simplicity: active if the quest immediately before it is done (or it's first)
+  if (index === 0) return 'active';
+  const prev = QUESTS[index - 1];
+  // Phase 2 daily tasks are always active once phase 1 is fully done
+  const phase1Done = QUESTS.filter(q => q.id.startsWith('p1_')).every(q => qIsDone(q.id));
+  if (prev.id.startsWith('p1_') && QUESTS[index].id.startsWith('p2_')) {
+    return phase1Done ? 'active' : 'locked';
+  }
+  if (qIsDone(prev.id) || (prev.daily && phase1Done)) return 'active';
+  return 'locked';
+}
+
+window.completeQuest = function(id) {
+  qSetDone(id, true);
+  renderQuests();
+}
+window.undoQuest = function(id) {
+  qSetDone(id, false);
+  renderQuests();
+}
+
+function renderQuests() {
+  const container = document.getElementById('quest-list');
+  if (!container) return;
+
+  let doneCount = 0;
+  let html = '';
+  let lastPhase = null;
+
+  QUESTS.forEach((q, i) => {
+    const state = getQuestState(q.id, i);
+    if (state === 'done') doneCount++;
+
+    // Phase header
+    if (q.phase && q.phase !== lastPhase) {
+      lastPhase = q.phase;
+      html += `<div class="phase-header">
+        <span class="phase-label ${q.phaseClass}">${q.phase}</span>
+        <div class="phase-divider"></div>
+      </div>`;
+    }
+
+    if (state === 'done') {
+      html += `<div class="quest-item done">
+        <div class="quest-check">✅</div>
+        <div class="quest-title-done">
+          <span>${q.title.replace(/<[^>]+>/g,'')}</span>
+          <button class="quest-undo" onclick="undoQuest('${q.id}')">undo</button>
+        </div>
+      </div>`;
+    } else if (state === 'active') {
+      html += `<div class="quest-item active" id="row_${q.id}">
+        <div class="quest-check">🔲</div>
+        <div class="quest-body-full">
+          <div class="quest-title">${q.title}</div>
+          <div class="quest-desc">${q.desc}</div>
+          <button class="mark-done-btn" onclick="completeQuest('${q.id}')">✅ Mark as Done</button>
+        </div>
+      </div>`;
+    } else {
+      html += `<div class="quest-item locked">
+        <div class="quest-check">🔒</div>
+        <div class="quest-body-full">
+          <div class="quest-title">${q.title.replace(/<[^>]+>/g,'')}</div>
+        </div>
+      </div>`;
+    }
+  });
+
+  container.innerHTML = html;
+
+  // Update progress bar
+  const pct = Math.round((doneCount / TOTAL_QUESTS) * 100);
+  const fill = document.getElementById('progress-fill');
+  const text = document.getElementById('progress-text');
+  if (fill) fill.style.width = pct + '%';
+  if (text) text.textContent = `${doneCount} / ${TOTAL_QUESTS} tasks (${pct}%)`;
+}
+
+// Render on tab switch
+document.addEventListener('DOMContentLoaded', renderQuests);
+setTimeout(renderQuests, 100);
 
 async function fetchProxy(endpoint) {
   const res = await fetch('/api/bunny-proxy?endpoint=' + endpoint);
@@ -1315,6 +1668,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   event.target.classList.add('active');
+  if (name === 'tasks') renderQuests();
 
 }
 
