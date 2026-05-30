@@ -191,6 +191,7 @@
     <button class="tab-btn" onclick="switchTab('party',this)">👥 Party Finder</button>
     <button class="tab-btn" onclick="switchTab('calc',this)">🧮 Calculator</button>
     <button class="tab-btn" onclick="switchTab('analytics',this)">📊 Analytics</button>
+    <button class="tab-btn" onclick="switchTab('roi',this)">💰 Presale ROI</button>
   </div>
 
   <!-- LEADERBOARD TAB -->
@@ -472,6 +473,103 @@
       <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:16px;">
         <div style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:12px;">🥕 Carrot Distribution</div>
         <div id="carrot-dist"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PRESALE ROI TAB -->
+  <div class="tab-content" id="tab-roi">
+    <div class="panel" style="padding:20px 24px;">
+
+      <div class="guide-section-title" style="margin-top:0;">💰 Presale ROI Calculator</div>
+      <div class="guide-tip" style="margin-bottom:20px;">
+        The CARROT presale gives you <b>40% more tokens</b> than the launch price. Enter how much ETH you want to spend and see exactly what you get — now vs waiting.
+      </div>
+
+      <!-- INPUT -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+        <div>
+          <label style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:block;margin-bottom:6px;">ETH Amount to Spend</label>
+          <input id="roi-eth" type="number" value="0.1" step="0.01" min="0.01" max="100" oninput="calcROI()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:10px 14px;color:var(--white);font-size:18px;font-weight:700;outline:none;font-family:'Space Mono',monospace;" />
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Minimum: 0.01 ETH · Maximum: 100 ETH</div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:block;margin-bottom:6px;">ETH Price (USD)</label>
+          <div id="roi-eth-price" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:10px 14px;color:var(--green-light);font-size:18px;font-weight:700;font-family:'Space Mono',monospace;">Loading...</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Live price from Bunny Button API</div>
+        </div>
+      </div>
+
+      <!-- COMPARISON CARDS -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+
+        <!-- PRESALE -->
+        <div style="background:rgba(46,204,113,.06);border:2px solid rgba(46,204,113,.3);border-radius:10px;padding:20px;position:relative;overflow:hidden;">
+          <div style="position:absolute;top:10px;right:10px;background:var(--green);color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:1px;">BUY NOW</div>
+          <div style="font-size:12px;color:var(--green-light);font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">🟢 Presale Price</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Rate</div>
+          <div style="font-size:16px;font-weight:700;color:var(--white);margin-bottom:12px;">350,000 CARROT / ETH</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">You get</div>
+          <div id="roi-presale-amount" style="font-size:28px;font-weight:700;color:var(--green-light);">—</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">CARROT tokens</div>
+          <div id="roi-presale-usd" style="font-size:13px;color:var(--muted);margin-top:8px;"></div>
+        </div>
+
+        <!-- LAUNCH -->
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:20px;position:relative;">
+          <div style="position:absolute;top:10px;right:10px;background:rgba(255,140,0,.2);color:var(--orange);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:1px;border:1px solid rgba(255,140,0,.3);">WAIT</div>
+          <div style="font-size:12px;color:var(--muted);font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">🔴 Launch Price</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Rate</div>
+          <div style="font-size:16px;font-weight:700;color:var(--white);margin-bottom:12px;">250,000 CARROT / ETH</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">You get</div>
+          <div id="roi-launch-amount" style="font-size:28px;font-weight:700;color:var(--muted);">—</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">CARROT tokens</div>
+          <div id="roi-launch-usd" style="font-size:13px;color:var(--muted);margin-top:8px;"></div>
+        </div>
+
+      </div>
+
+      <!-- SAVINGS BOX -->
+      <div id="roi-savings" style="background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.25);border-radius:10px;padding:20px;margin-bottom:24px;text-align:center;">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px;">By buying in presale instead of waiting</div>
+        <div id="roi-extra" style="font-size:32px;font-weight:700;color:var(--gold);">—</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;">extra CARROT tokens for <b style="color:var(--white);">the same ETH</b></div>
+        <div id="roi-pct" style="font-size:14px;color:var(--gold);font-weight:600;margin-top:8px;"></div>
+      </div>
+
+      <!-- QUICK AMOUNTS -->
+      <div style="margin-bottom:20px;">
+        <div style="font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:10px;">Quick Select</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${['0.01','0.05','0.1','0.25','0.5','1'].map(v =>
+            `<button onclick="document.getElementById('roi-eth').value='${v}';calcROI()" style="padding:6px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:var(--white);font-size:12px;cursor:pointer;font-family:'Space Mono',monospace;transition:all .2s;" onmouseover="this.style.borderColor='var(--green-light)'" onmouseout="this.style.borderColor='rgba(255,255,255,.15)'">${v} ETH</button>`
+          ).join('')}
+        </div>
+      </div>
+
+      <!-- PRESALE INFO -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:20px;" id="roi-presale-info">
+        <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:4px;">Ends</div>
+          <div style="font-size:14px;font-weight:700;color:var(--white);">June 27, 2026</div>
+        </div>
+        <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:4px;">Min Buy</div>
+          <div style="font-size:14px;font-weight:700;color:var(--white);">0.01 ETH</div>
+        </div>
+        <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:4px;">Hard Cap</div>
+          <div style="font-size:14px;font-weight:700;color:var(--white);">100 ETH</div>
+        </div>
+        <div style="background:rgba(255,255,255,.03);border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;margin-bottom:4px;">Advantage</div>
+          <div style="font-size:14px;font-weight:700;color:var(--green-light);">+40% more</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;">
+        <a href="https://bunnybutton.xyz/presale" target="_blank" style="display:inline-block;padding:12px 36px;background:var(--green);color:#fff;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;">Join the Presale →</a>
       </div>
 
     </div>
@@ -1070,6 +1168,42 @@ const _prevSwitch = window.switchTab;
 window.switchTab = function(name, btn) {
   _prevSwitch(name, btn);
   if (name === 'analytics' && analyticsData.length === 0) loadAnalytics();
+  if (name === 'roi') initROI();
+}
+
+// ── PRESALE ROI CALCULATOR ────────────────────────────────────────────────
+let liveEthUsd = 2000;
+
+async function initROI() {
+  try {
+    const data = await fetchProxy('/eth-price');
+    liveEthUsd = data.ethUsd || 2000;
+    document.getElementById('roi-eth-price').textContent = '$' + Number(liveEthUsd).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  } catch(e) {
+    document.getElementById('roi-eth-price').textContent = '$2,000 (est)';
+  }
+  calcROI();
+}
+
+function calcROI() {
+  const ethAmount = parseFloat(document.getElementById('roi-eth').value) || 0.1;
+  const ethUsd = liveEthUsd || 2000;
+  const usdSpent = ethAmount * ethUsd;
+
+  const presaleRate = 350000;
+  const launchRate = 250000;
+
+  const presaleCarrot = ethAmount * presaleRate;
+  const launchCarrot = ethAmount * launchRate;
+  const extraCarrot = presaleCarrot - launchCarrot;
+  const pctGain = Math.round(((presaleCarrot - launchCarrot) / launchCarrot) * 100);
+
+  document.getElementById('roi-presale-amount').textContent = fmt(presaleCarrot);
+  document.getElementById('roi-launch-amount').textContent = fmt(launchCarrot);
+  document.getElementById('roi-presale-usd').textContent = 'Spending $' + fmt(Math.round(usdSpent)) + ' USD';
+  document.getElementById('roi-launch-usd').textContent = 'Spending $' + fmt(Math.round(usdSpent)) + ' USD';
+  document.getElementById('roi-extra').textContent = '+' + fmt(extraCarrot) + ' CARROT';
+  document.getElementById('roi-pct').textContent = 'That is ' + pctGain + '% more CARROT for the exact same amount of ETH';
 }
 </script>
 </body>
