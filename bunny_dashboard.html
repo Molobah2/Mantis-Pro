@@ -3,355 +3,142 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bunny Button Live — Mantis Pro Dashboard</title>
+<title>Bunny Button Live — Mantis Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --green: #1a8a3c;
-    --green-light: #2ecc71;
-    --white: #ffffff;
-    --muted: rgba(255,255,255,0.55);
-    --card-bg: rgba(255,255,255,0.07);
-    --card-border: rgba(255,255,255,0.12);
-    --card-hover: rgba(46,204,113,0.08);
-    --card-hover-border: rgba(46,204,113,0.3);
-    --gold: #ffd700;
-    --orange: #ff8c00;
-    --red: #ff4444;
-    --blue: #64b5f6;
+    --green: #1a8a3c; --green-light: #2ecc71; --white: #fff;
+    --muted: rgba(255,255,255,0.55); --card-bg: rgba(255,255,255,0.07);
+    --card-border: rgba(255,255,255,0.12); --gold: #ffd700;
+    --orange: #ff8c00; --red: #ff4444; --blue: #64b5f6;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Space Grotesk', sans-serif; min-height: 100vh; color: var(--white); overflow-x: hidden; }
   .bg-image { position: fixed; inset: 0; background-image: url('/static/abstract-bg.png'); background-size: cover; background-position: center top; filter: brightness(0.28) saturate(1.3); z-index: 0; }
-  .bg-overlay { position: fixed; inset: 0; background: linear-gradient(160deg, rgba(8,20,12,0.55) 0%, rgba(8,20,12,0.75) 50%, rgba(8,20,12,0.92) 100%); z-index: 1; }
+  .bg-overlay { position: fixed; inset: 0; background: linear-gradient(160deg,rgba(8,20,12,.55) 0%,rgba(8,20,12,.75) 50%,rgba(8,20,12,.92) 100%); z-index: 1; }
   header, main, footer { position: relative; z-index: 2; }
 
   header { padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(8,20,12,0.7); backdrop-filter: blur(16px); position: sticky; top: 0; z-index: 100; }
   .logo { display: flex; align-items: center; gap: 12px; }
-  .logo-icon { font-size: 24px; }
   .logo-title { font-size: 15px; font-weight: 700; }
   .logo-sub { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; font-family: 'Space Mono', monospace; }
   .live-badge { display: flex; align-items: center; gap: 8px; background: rgba(46,204,113,0.1); border: 1px solid rgba(46,204,113,0.3); border-radius: 20px; padding: 6px 14px; font-size: 11px; color: var(--green-light); letter-spacing: 2px; font-family: 'Space Mono', monospace; }
-  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-light); animation: blink 1.2s infinite; flex-shrink: 0; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-light); animation: blink 1.2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-  main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; }
-  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; text-decoration: none; letter-spacing: 1px; margin-bottom: 20px; font-family: 'Space Mono', monospace; transition: color 0.2s; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 24px 60px; }
+  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; text-decoration: none; letter-spacing: 1px; margin-bottom: 20px; font-family: 'Space Mono', monospace; transition: color .2s; }
   .back-link:hover { color: var(--green-light); }
 
-  /* STATS ROW */
-  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 18px; backdrop-filter: blur(8px); transition: all 0.25s; position: relative; overflow: hidden; }
-  .stat-card::after { content:''; position:absolute; top:0;left:0;right:0; height:2px; background: linear-gradient(90deg, var(--green), var(--green-light)); opacity:0.5; }
-  .stat-card:hover { background: var(--card-hover); border-color: var(--card-hover-border); }
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 18px; backdrop-filter: blur(8px); transition: all .25s; position: relative; overflow: hidden; }
+  .stat-card::after { content:''; position:absolute; top:0;left:0;right:0; height:2px; background: linear-gradient(90deg,var(--green),var(--green-light)); opacity:.5; }
   .stat-label { font-size: 10px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 8px; font-family: 'Space Mono', monospace; }
-  .stat-value { font-size: 24px; font-weight: 700; color: var(--green-light); line-height: 1; }
-  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .stat-value { font-size: 22px; font-weight: 700; color: var(--green-light); line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
-  /* WALLET INPUT */
-  .wallet-box { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 20px 24px; backdrop-filter: blur(8px); margin-bottom: 24px; }
-  .wallet-box h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--white); }
-  .wallet-box p { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
-  .wallet-input-row { display: flex; gap: 10px; }
-  .wallet-input { flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 10px 14px; color: var(--white); font-size: 13px; font-family: 'Space Mono', monospace; outline: none; transition: border-color 0.2s; }
-  .wallet-input:focus { border-color: rgba(46,204,113,0.5); }
-  .wallet-input::placeholder { color: var(--muted); }
-  .wallet-btn { background: var(--green); color: white; border: none; border-radius: 6px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'Space Grotesk', sans-serif; white-space: nowrap; }
-  .wallet-btn:hover { background: var(--green-light); transform: translateY(-1px); }
-  .wallet-status { margin-top: 10px; font-size: 12px; font-family: 'Space Mono', monospace; }
-  .wallet-status.loading { color: var(--muted); }
-  .wallet-status.error { color: var(--red); }
-  .wallet-status.success { color: var(--green-light); }
+  /* TABS */
+  .tabs { display: flex; gap: 0; margin-bottom: 20px; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden; background: var(--card-bg); backdrop-filter: blur(8px); }
+  .tab-btn { flex: 1; padding: 11px 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: transparent; color: var(--muted); letter-spacing: .5px; transition: all .2s; font-family: 'Space Grotesk', sans-serif; border-right: 1px solid var(--card-border); }
+  .tab-btn:last-child { border-right: none; }
+  .tab-btn:hover { color: var(--white); background: rgba(255,255,255,.04); }
+  .tab-btn.active { background: rgba(46,204,113,.12); color: var(--green-light); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
 
-  /* THREE COLUMN LAYOUT */
-  .main-grid { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 18px; }
-  @media(max-width:900px) { .main-grid { grid-template-columns: 1fr; } }
-
-  /* PANELS */
+  /* PANEL */
   .panel { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(8px); }
-  .panel-header { padding: 13px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); }
+  .panel-header { padding: 13px 18px; border-bottom: 1px solid rgba(255,255,255,.08); display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,.03); }
   .panel-title { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--green-light); font-weight: 600; }
   .panel-badge { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
 
   /* LEADERBOARD */
-  .lb-row { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 8px; padding: 9px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.2s; animation: slideIn 0.3s ease both; }
+  .lb-row { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.04); transition: background .2s; animation: slideIn .3s ease both; }
   .lb-row:last-child { border-bottom: none; }
-  .lb-row:hover { background: rgba(46,204,113,0.05); }
+  .lb-row:hover { background: rgba(46,204,113,.05); }
   @keyframes slideIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
-  .lb-rank { font-size: 12px; color: var(--muted); text-align: center; font-family: 'Space Mono', monospace; }
-  .lb-rank.top1 { color: var(--gold); font-weight: 700; }
-  .lb-rank.top2 { color: #c0c0c0; }
-  .lb-rank.top3 { color: #cd7f32; }
+  .lb-rank { font-size: 13px; color: var(--muted); text-align: center; font-family: 'Space Mono', monospace; }
+  .lb-rank.top1{color:var(--gold);font-weight:700} .lb-rank.top2{color:#c0c0c0} .lb-rank.top3{color:#cd7f32}
   .lb-name { font-size: 13px; color: var(--white); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
   .lb-right { text-align: right; }
   .lb-carrots { font-size: 12px; color: var(--green-light); font-weight: 600; }
-  .lb-breed { font-size: 9px; color: var(--muted); font-family: 'Space Mono', monospace; text-transform: uppercase; }
-  .breed-pill { display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; letter-spacing:1px; text-transform:uppercase; border:1px solid rgba(255,255,255,0.1); color:var(--muted); }
-  .breed-pill.meadow{border-color:rgba(46,204,113,0.3);color:#4caf50}
-  .breed-pill.spark{border-color:rgba(255,193,7,0.3);color:#ffc107}
-  .breed-pill.burrow{border-color:rgba(100,181,246,0.3);color:#64b5f6}
-  .breed-pill.bandit{border-color:rgba(239,83,80,0.3);color:#ef5350}
-  .breed-pill.jackalope{border-color:rgba(206,147,216,0.3);color:#ce93d8}
+  .lb-breed { font-size: 9px; color: var(--muted); text-transform: uppercase; }
+  .breed-pill { display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; letter-spacing:1px; text-transform:uppercase; border:1px solid rgba(255,255,255,.1); color:var(--muted); }
+  .breed-pill.meadow{border-color:rgba(46,204,113,.3);color:#4caf50} .breed-pill.spark{border-color:rgba(255,193,7,.3);color:#ffc107}
+  .breed-pill.burrow{border-color:rgba(100,181,246,.3);color:#64b5f6} .breed-pill.bandit{border-color:rgba(239,83,80,.3);color:#ef5350}
+  .breed-pill.jackalope{border-color:rgba(206,147,216,.3);color:#ce93d8}
 
-  /* TASK LIST */
-  .tasks-panel { display: flex; flex-direction: column; }
-  .tasks-placeholder { padding: 24px 18px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; }
-  .tasks-placeholder .icon { font-size: 32px; margin-bottom: 10px; }
-
-  .path-section { border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .path-section:last-child { border-bottom: none; }
-  .path-label { padding: 10px 16px; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-family: 'Space Mono', monospace; display: flex; align-items: center; gap: 8px; }
-  .path-label.free { color: var(--green-light); background: rgba(46,204,113,0.05); }
-  .path-label.paid { color: var(--orange); background: rgba(255,140,0,0.05); }
-  .path-label.social { color: var(--blue); background: rgba(100,181,246,0.05); }
-
-  .task-item { padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; gap: 10px; align-items: flex-start; transition: background 0.15s; }
-  .task-item:hover { background: rgba(255,255,255,0.02); }
-  .task-item.done { opacity: 0.5; }
-  .task-check { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
-  .task-body { flex: 1; min-width: 0; }
-  .task-title { font-size: 13px; font-weight: 600; color: var(--white); margin-bottom: 3px; line-height: 1.3; }
-  .task-item.done .task-title { text-decoration: line-through; color: var(--muted); }
-  .task-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
-  .task-link { display: inline-block; margin-top: 5px; font-size: 11px; color: var(--green-light); text-decoration: none; font-family: 'Space Mono', monospace; transition: opacity 0.2s; }
-  .task-link:hover { opacity: 0.7; }
-  .task-link.orange { color: var(--orange); }
-  .task-link.blue { color: var(--blue); }
-
-  /* PRESALE PANEL */
+  /* PRESALE */
   .presale-body { padding: 16px; }
-  .presale-row { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:13px; }
-  .presale-row:last-of-type { border-bottom:none; }
+  .presale-row { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.05); font-size:13px; }
+  .presale-row:last-of-type{border-bottom:none}
   .presale-key { color:var(--muted); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; font-family:'Space Mono',monospace; }
-  .presale-val { color:var(--white); font-weight:600; }
-  .presale-val.green{color:var(--green-light)}
-  .presale-val.orange{color:var(--orange)}
-  .presale-val.red{color:var(--red)}
-  .progress-bar { margin-top:14px; }
-  .progress-label { display:flex; justify-content:space-between; font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; font-family:'Space Mono',monospace; }
-  .progress-track { background:rgba(255,255,255,0.06); border-radius:4px; height:5px; overflow:hidden; border:1px solid rgba(255,255,255,0.08); }
-  .progress-fill { height:100%; background:linear-gradient(90deg, var(--green), var(--green-light)); border-radius:4px; transition:width 1s ease; box-shadow:0 0 10px rgba(46,204,113,0.4); }
+  .presale-val{color:var(--white);font-weight:600} .presale-val.green{color:var(--green-light)} .presale-val.orange{color:var(--orange)} .presale-val.red{color:var(--red)}
+  .progress-bar{margin-top:14px} .progress-label{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;font-family:'Space Mono',monospace}
+  .progress-track{background:rgba(255,255,255,.06);border-radius:4px;height:5px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--green-light));border-radius:4px;transition:width 1s ease;box-shadow:0 0 10px rgba(46,204,113,.4)}
 
-  #last-updated { font-size:10px; color:var(--muted); letter-spacing:2px; text-align:center; margin-top:18px; font-family:'Space Mono',monospace; }
-  .loading { color:var(--muted); font-size:11px; padding:20px 16px; letter-spacing:2px; font-family:'Space Mono',monospace; }
-  .error-msg { color:var(--red); font-size:11px; padding:14px 16px; font-family:'Space Mono',monospace; }
+  /* QUEST SYSTEM */
+  .phase-header { display:flex; align-items:center; gap:10px; padding:14px 0 8px; margin-top:4px; }
+  .phase-label { font-size:10px; letter-spacing:2px; text-transform:uppercase; font-family:'Space Mono',monospace; font-weight:700; }
+  .phase-label.free{color:var(--green-light)} .phase-label.daily{color:var(--blue)} .phase-label.mid{color:#ffc107} .phase-label.late{color:var(--orange)} .phase-label.paid{color:#ce93d8}
+  .phase-divider{flex:1;height:1px;background:rgba(255,255,255,.07)}
 
-  footer { text-align:center; padding:20px; font-size:11px; color:var(--muted); letter-spacing:2px; border-top:1px solid rgba(255,255,255,0.07); font-family:'Space Mono',monospace; position:relative; z-index:2; }
+  .quest-item { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border-radius:8px; margin:3px 0; transition:all .2s; border:1px solid transparent; position:relative; }
+  .quest-item.locked { opacity:.3; }
+  .quest-item.active { background:rgba(46,204,113,.06); border-color:rgba(46,204,113,.25); }
+  .quest-item.active::before { content:''; position:absolute; left:0;top:0;bottom:0; width:3px; background:var(--green-light); border-radius:8px 0 0 8px; }
+  .quest-item.done { padding:7px 14px; background:rgba(46,204,113,.03); border-color:rgba(46,204,113,.1); }
+  .quest-item.done .quest-full { display:none; }
+  .quest-item:not(.done) .quest-full { display:block; }
+  .quest-item:not(.done) .quest-done-line { display:none; }
+  .quest-item.done .quest-done-line { display:flex; align-items:center; gap:8px; flex:1; }
 
-  /* TABS */
-  .tabs { display:flex; gap:0; margin-bottom:20px; border:1px solid var(--card-border); border-radius:8px; overflow:hidden; background:var(--card-bg); backdrop-filter:blur(8px); }
-  .tab-btn { flex:1; padding:11px 8px; font-size:12px; font-weight:600; cursor:pointer; border:none; background:transparent; color:var(--muted); letter-spacing:1px; transition:all 0.2s; font-family:'Space Grotesk',sans-serif; border-right:1px solid var(--card-border); }
-  .tab-btn:last-child { border-right:none; }
-  .tab-btn:hover { color:var(--white); background:rgba(255,255,255,0.04); }
-  .tab-btn.active { background:rgba(46,204,113,0.12); color:var(--green-light); border-bottom:2px solid var(--green-light); }
-  .tab-content { display:none; }
-  .tab-content.active { display:block; }
+  .quest-check { font-size:16px; flex-shrink:0; margin-top:1px; line-height:1; }
+  .quest-title { font-size:13px; font-weight:600; color:var(--white); margin-bottom:4px; line-height:1.3; }
+  .quest-item.locked .quest-title { color:var(--muted); }
+  .quest-desc { font-size:12px; color:var(--muted); line-height:1.6; margin-bottom:8px; }
+  .quest-done-line span { font-size:12px; color:rgba(46,204,113,.6); font-weight:500; text-decoration:line-through; }
+  .quest-undo { font-size:10px; color:var(--muted); cursor:pointer; font-family:'Space Mono',monospace; letter-spacing:1px; padding:2px 7px; border:1px solid rgba(255,255,255,.1); border-radius:4px; margin-left:auto; background:transparent; transition:all .2s; }
+  .quest-undo:hover { border-color:var(--muted); color:var(--white); }
+  .mark-done-btn { display:inline-block; padding:6px 16px; font-size:12px; font-family:'Space Grotesk',sans-serif; color:var(--white); border:1px solid rgba(46,204,113,.4); border-radius:6px; cursor:pointer; background:rgba(46,204,113,.1); transition:all .2s; font-weight:600; }
+  .mark-done-btn:hover { background:rgba(46,204,113,.2); border-color:var(--green-light); }
+  .daily-badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:9px; letter-spacing:1px; text-transform:uppercase; border:1px solid rgba(100,181,246,.3); color:var(--blue); font-family:'Space Mono',monospace; margin-left:6px; vertical-align:middle; }
 
-  /* GUIDE CARDS */
-  .guide-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
-  .guide-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:18px; backdrop-filter:blur(8px); transition:all 0.2s; }
-  .guide-card:hover { border-color:var(--card-hover-border); background:var(--card-hover); }
-  .guide-card-icon { font-size:24px; margin-bottom:10px; }
-  .guide-card-title { font-size:14px; font-weight:700; color:var(--white); margin-bottom:6px; }
-  .guide-card-desc { font-size:13px; color:var(--muted); line-height:1.6; }
-  .guide-table { width:100%; border-collapse:collapse; font-size:13px; }
-  .guide-table th { text-align:left; padding:8px 12px; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--green-light); border-bottom:1px solid var(--card-border); font-family:'Space Mono',monospace; }
-  .guide-table td { padding:9px 12px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--white); vertical-align:top; }
+  /* GUIDE */
+  .guide-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:16px; }
+  .guide-card { background:var(--card-bg); border:1px solid var(--card-border); border-radius:10px; padding:16px; transition:all .2s; }
+  .guide-card:hover { border-color:rgba(46,204,113,.3); }
+  .guide-card-icon { font-size:22px; margin-bottom:8px; }
+  .guide-card-title { font-size:14px; font-weight:700; margin-bottom:5px; }
+  .guide-card-desc { font-size:12px; color:var(--muted); line-height:1.6; }
+  .guide-section-title { font-size:11px; font-weight:700; color:var(--green-light); letter-spacing:2px; text-transform:uppercase; margin:18px 0 10px; font-family:'Space Mono',monospace; }
+  .guide-table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:4px; }
+  .guide-table th { text-align:left; padding:7px 10px; font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--green-light); border-bottom:1px solid var(--card-border); font-family:'Space Mono',monospace; }
+  .guide-table td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.04); color:var(--white); vertical-align:top; }
   .guide-table td:first-child { color:var(--green-light); font-weight:600; white-space:nowrap; }
   .guide-table tr:last-child td { border-bottom:none; }
-  .guide-section-title { font-size:13px; font-weight:700; color:var(--green-light); letter-spacing:1px; text-transform:uppercase; margin:20px 0 10px; font-family:'Space Mono',monospace; }
-  .guide-tip { background:rgba(46,204,113,0.06); border:1px solid rgba(46,204,113,0.2); border-radius:8px; padding:12px 14px; margin:10px 0; font-size:13px; color:var(--white); line-height:1.6; }
-  .guide-tip.orange { background:rgba(255,140,0,0.06); border-color:rgba(255,140,0,0.2); }
+  .guide-tip { background:rgba(46,204,113,.06); border:1px solid rgba(46,204,113,.2); border-radius:8px; padding:11px 14px; margin:8px 0; font-size:12px; color:var(--white); line-height:1.6; }
+  .guide-tip.orange { background:rgba(255,140,0,.06); border-color:rgba(255,140,0,.2); }
   .guide-tip b { color:var(--green-light); }
   .guide-tip.orange b { color:var(--orange); }
 
-  /* AUTOMATION SECTION */
-  .auto-row { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
-  .auto-row:last-child { border-bottom:none; }
+  /* AUTO */
+  .auto-row { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+  .auto-row:last-child{border-bottom:none}
   .auto-icon { font-size:20px; flex-shrink:0; margin-top:2px; }
-  .auto-title { font-size:14px; font-weight:600; color:var(--white); margin-bottom:3px; }
+  .auto-title { font-size:13px; font-weight:600; margin-bottom:3px; }
   .auto-desc { font-size:12px; color:var(--muted); line-height:1.5; }
-  .auto-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-family:'Space Mono',monospace; margin-left:8px; }
-  .auto-badge.live { background:rgba(46,204,113,0.15); color:var(--green-light); border:1px solid rgba(46,204,113,0.3); }
-  .auto-badge.soon { background:rgba(255,140,0,0.1); color:var(--orange); border:1px solid rgba(255,140,0,0.2); }
+  .auto-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-family:'Space Mono',monospace; margin-left:8px; background:rgba(46,204,113,.15); color:var(--green-light); border:1px solid rgba(46,204,113,.3); }
 
-  /* SELF ASSESSMENT */
-  .assessment-box { padding: 16px; }
-  .assessment-title { font-size: 14px; font-weight: 700; color: var(--white); margin-bottom: 4px; }
-  .assessment-sub { font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
-  .assessment-question { margin-bottom: 16px; }
-  .assessment-question label { font-size: 12px; color: var(--green-light); letter-spacing: 1px; text-transform: uppercase; font-family: 'Space Mono', monospace; display: block; margin-bottom: 8px; }
-  .assessment-options { display: flex; flex-wrap: wrap; gap: 8px; }
-  .assessment-opt { padding: 7px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; background: rgba(255,255,255,0.04); color: var(--white); font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: 'Space Grotesk', sans-serif; }
-  .assessment-opt:hover { border-color: rgba(46,204,113,0.4); background: rgba(46,204,113,0.06); }
-  .assessment-opt.selected { border-color: var(--green-light); background: rgba(46,204,113,0.12); color: var(--green-light); font-weight: 600; }
-  .assessment-submit { margin-top: 16px; background: var(--green); color: white; border: none; border-radius: 6px; padding: 10px 24px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Space Grotesk', sans-serif; transition: all 0.2s; }
-  .assessment-submit:hover { background: var(--green-light); }
-
-  /* RECENT WALLETS */
-  .recent-wallets { margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
-  .recent-wallet-btn { padding:4px 10px; font-size:11px; font-family:'Space Mono',monospace; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:4px; color:var(--muted); cursor:pointer; transition:all 0.2s; letter-spacing:0.5px; }
-  .recent-wallet-btn:hover { border-color:var(--green-light); color:var(--green-light); }
-
-  /* QUEST SYSTEM */
-  .phase-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 0 8px;
-    margin-top: 8px;
-  }
-  .phase-label {
-    font-size: 10px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    font-family: 'Space Mono', monospace;
-    font-weight: 700;
-  }
-  .phase-label.free { color: var(--green-light); }
-  .phase-label.daily { color: var(--blue); }
-  .phase-label.mid { color: #ffc107; }
-  .phase-label.late { color: var(--orange); }
-  .phase-label.paid { color: #ce93d8; }
-  .phase-divider { flex:1; height:1px; background:rgba(255,255,255,0.07); }
-
-  /* QUEST ITEM STATES */
-  .quest-item {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    padding: 12px 14px;
-    border-radius: 8px;
-    margin: 4px 0;
-    transition: all 0.25s;
-    border: 1px solid transparent;
-    position: relative;
-  }
-
-  /* LOCKED */
-  .quest-item.locked {
-    opacity: 0.35;
-    cursor: default;
-    background: transparent;
-  }
-  .quest-item.locked .quest-check { color: rgba(255,255,255,0.2); }
-
-  /* ACTIVE */
-  .quest-item.active {
-    background: rgba(46,204,113,0.06);
-    border-color: rgba(46,204,113,0.25);
-    box-shadow: 0 0 0 1px rgba(46,204,113,0.1);
-  }
-  .quest-item.active::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 3px;
-    background: var(--green-light);
-    border-radius: 8px 0 0 8px;
-  }
-
-  /* DONE — collapsed */
-  .quest-item.done {
-    padding: 7px 14px;
-    background: rgba(46,204,113,0.03);
-    border-color: rgba(46,204,113,0.1);
-  }
-  .quest-item.done .quest-body-full { display: none; }
-  .quest-item.done .quest-title-done { display: flex; }
-
-  /* ACTIVE/LOCKED — show full, hide done summary */
-  .quest-item:not(.done) .quest-body-full { display: block; }
-  .quest-item:not(.done) .quest-title-done { display: none; }
-
-  .quest-check {
-    font-size: 16px;
-    flex-shrink: 0;
-    margin-top: 1px;
-    line-height: 1;
-  }
-
-  .quest-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--white);
-    margin-bottom: 4px;
-    line-height: 1.3;
-  }
-  .quest-item.locked .quest-title { color: var(--muted); }
-
-  .quest-desc {
-    font-size: 12px;
-    color: var(--muted);
-    line-height: 1.6;
-    margin-bottom: 6px;
-  }
-
-  .quest-title-done {
-    align-items: center;
-    gap: 8px;
-    flex: 1;
-  }
-  .quest-title-done span {
-    font-size: 12px;
-    color: rgba(46,204,113,0.6);
-    font-weight: 500;
-    text-decoration: line-through;
-  }
-  .quest-undo {
-    font-size: 10px;
-    color: var(--muted);
-    cursor: pointer;
-    font-family: 'Space Mono', monospace;
-    letter-spacing: 1px;
-    padding: 2px 6px;
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 4px;
-    margin-left: auto;
-    background: transparent;
-    transition: all 0.2s;
-  }
-  .quest-undo:hover { border-color: var(--muted); color: var(--white); }
-
-  /* MARK DONE BUTTON */
-  .mark-done-btn {
-    display: inline-block;
-    margin-top: 2px;
-    padding: 6px 14px;
-    font-size: 12px;
-    font-family: 'Space Grotesk', sans-serif;
-    color: var(--white);
-    border: 1px solid rgba(46,204,113,0.4);
-    border-radius: 6px;
-    cursor: pointer;
-    background: rgba(46,204,113,0.1);
-    transition: all 0.2s;
-    font-weight: 600;
-  }
-  .mark-done-btn:hover { background: rgba(46,204,113,0.2); border-color: var(--green-light); }
-
-  /* DAILY RESET BADGE */
-  .daily-badge {
-    display: inline-block;
-    padding: 1px 7px;
-    border-radius: 10px;
-    font-size: 9px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    border: 1px solid rgba(100,181,246,0.3);
-    color: var(--blue);
-    font-family: 'Space Mono', monospace;
-    margin-left: 6px;
-    vertical-align: middle;
-  }
+  .task-link { color:var(--green-light); text-decoration:none; }
+  .task-link:hover { opacity:.7; }
+  .task-link.orange { color:var(--orange); }
+  .loading { color:var(--muted); font-size:11px; padding:20px 16px; letter-spacing:2px; font-family:'Space Mono',monospace; }
+  .error-msg { color:var(--red); font-size:11px; padding:14px 16px; font-family:'Space Mono',monospace; }
+  #last-updated { font-size:10px; color:var(--muted); letter-spacing:2px; text-align:center; margin-top:18px; font-family:'Space Mono',monospace; }
+  footer { text-align:center; padding:20px; font-size:11px; color:var(--muted); letter-spacing:2px; border-top:1px solid rgba(255,255,255,.07); font-family:'Space Mono',monospace; position:relative; z-index:2; }
   footer a { color:var(--green-light); text-decoration:none; }
-
-  /* PLAYER STATS STRIP */
-  .player-strip { background: rgba(46,204,113,0.06); border: 1px solid rgba(46,204,113,0.2); border-radius:8px; padding:12px 16px; margin-bottom:16px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
-  .player-strip-item { font-size:12px; }
-  .player-strip-label { color:var(--muted); font-size:10px; letter-spacing:1px; text-transform:uppercase; font-family:'Space Mono',monospace; }
-  .player-strip-val { color:var(--white); font-weight:600; font-size:14px; }
-  .player-strip-val.green { color:var(--green-light); }
 </style>
 </head>
 <body>
@@ -360,7 +147,7 @@
 
 <header>
   <div class="logo">
-    <span class="logo-icon">🥕</span>
+    <span style="font-size:24px;">🥕</span>
     <div>
       <div class="logo-title">Bunny Button Live</div>
       <div class="logo-sub">Mantis Pro · Agent #857 · Abstract Chain</div>
@@ -372,7 +159,6 @@
 <main>
   <a href="/" class="back-link">← Back to Mantis Pro</a>
 
-  <!-- STAT CARDS -->
   <div class="stats-row">
     <div class="stat-card">
       <div class="stat-label">ETH / USD</div>
@@ -396,18 +182,15 @@
     </div>
   </div>
 
-
-
-  <!-- TABS -->
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
-    <button class="tab-btn" onclick="switchTab('tasks')">📋 My Tasks</button>
-    <button class="tab-btn" onclick="switchTab('presale')">🥕 Presale</button>
-    <button class="tab-btn" onclick="switchTab('guide')">📖 Game Guide</button>
-    <button class="tab-btn" onclick="switchTab('automation')">🤖 Mantis Bot</button>
+    <button class="tab-btn active" onclick="switchTab('leaderboard',this)">🏆 Leaderboard</button>
+    <button class="tab-btn" onclick="switchTab('tasks',this)">📋 My Tasks</button>
+    <button class="tab-btn" onclick="switchTab('presale',this)">🥕 Presale</button>
+    <button class="tab-btn" onclick="switchTab('guide',this)">📖 Game Guide</button>
+    <button class="tab-btn" onclick="switchTab('bot',this)">🤖 Mantis Bot</button>
   </div>
 
-  <!-- TAB: LEADERBOARD -->
+  <!-- LEADERBOARD TAB -->
   <div class="tab-content active" id="tab-leaderboard">
     <div class="panel">
       <div class="panel-header">
@@ -418,56 +201,51 @@
     </div>
   </div>
 
-  <!-- TAB: MY TASKS -->
+  <!-- TASKS TAB -->
   <div class="tab-content" id="tab-tasks">
     <div class="panel" style="padding:20px 24px;">
-
-      <!-- PROGRESS BAR -->
-      <div id="overall-progress" style="margin-bottom:20px;">
+      <div style="margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;">Overall Progress</span>
-          <span id="progress-text" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">0 / 21 tasks</span>
+          <span style="font-size:11px;color:var(--green-light);letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;">Your Progress</span>
+          <span id="progress-text" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">0 / 24 tasks</span>
         </div>
-        <div style="background:rgba(255,255,255,0.06);border-radius:4px;height:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
-          <div id="progress-fill" style="height:100%;background:linear-gradient(90deg,var(--green),var(--green-light));border-radius:4px;transition:width 0.5s ease;width:0%;box-shadow:0 0 8px rgba(46,204,113,0.4);"></div>
+        <div style="background:rgba(255,255,255,.06);border-radius:4px;height:6px;overflow:hidden;border:1px solid rgba(255,255,255,.08);">
+          <div id="progress-fill" style="height:100%;background:linear-gradient(90deg,var(--green),var(--green-light));border-radius:4px;transition:width .5s ease;width:0%;box-shadow:0 0 8px rgba(46,204,113,.4);"></div>
         </div>
       </div>
-
       <div id="quest-list"></div>
-
-      <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;text-align:center;font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">
+      <div style="margin-top:14px;padding:10px;background:rgba(255,255,255,.03);border-radius:8px;text-align:center;font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">
         ✅ Progress saves in your browser · Daily tasks reset at midnight
       </div>
     </div>
   </div>
 
-  <!-- TAB: PRESALE -->
+  <!-- PRESALE TAB -->
   <div class="tab-content" id="tab-presale">
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">🥕 CARROT Presale Details</span>
+        <span class="panel-title">🥕 CARROT Presale</span>
         <span class="panel-badge">LIVE</span>
       </div>
       <div class="presale-body" id="presale-body"><div class="loading">FETCHING...</div></div>
     </div>
   </div>
 
-  <!-- TAB: GAME GUIDE -->
+  <!-- GUIDE TAB -->
   <div class="tab-content" id="tab-guide">
     <div class="panel" style="padding:20px 24px;">
+      <div class="guide-section-title" style="margin-top:0;">What is Bunny Button?</div>
+      <div class="guide-tip">A click-to-earn game on Abstract Chain. Press a button, spend energy, earn carrots. Upgrade your steal multiplier to earn more per press. Use carrots for upgrades, staking, or unlocking better breeds.</div>
 
-      <div class="guide-section-title">🎮 What is Bunny Button?</div>
-      <div class="guide-tip">Bunny Button is a click-to-earn game on Abstract Chain. You press a button, spend energy, and earn carrots. The more you upgrade your steal multiplier, the more carrots you earn per press. Carrots can be spent on upgrades, staked for yield, or used to unlock better breeds.</div>
-
-      <div class="guide-section-title">⚡ Core Game Loop</div>
-      <div class="guide-grid" style="margin-bottom:16px;">
-        <div class="guide-card"><div class="guide-card-icon">1️⃣</div><div class="guide-card-title">Press the Button</div><div class="guide-card-desc">Each press costs 1 energy and earns carrots based on your steal multiplier. Keep pressing until energy hits 0.</div></div>
-        <div class="guide-card"><div class="guide-card-icon">2️⃣</div><div class="guide-card-title">Wait for Energy</div><div class="guide-card-desc">Energy regens over time based on your regen stat. Use the free daily Energy Potion to get an extra session.</div></div>
-        <div class="guide-card"><div class="guide-card-icon">3️⃣</div><div class="guide-card-title">Spend Carrots</div><div class="guide-card-desc">Buy Steal, Regen, and Energy upgrades from the Shop. Also upgrade your Farm for passive offline income.</div></div>
-        <div class="guide-card"><div class="guide-card-icon">4️⃣</div><div class="guide-card-title">Get Stronger</div><div class="guide-card-desc">Unlock better breeds, join a party, open crates for gear, stake surplus carrots, and climb the leaderboard.</div></div>
+      <div class="guide-section-title">Core Game Loop</div>
+      <div class="guide-grid">
+        <div class="guide-card"><div class="guide-card-icon">1️⃣</div><div class="guide-card-title">Press the Button</div><div class="guide-card-desc">Each press costs 1 energy and earns carrots × your steal multiplier. Press until energy = 0.</div></div>
+        <div class="guide-card"><div class="guide-card-icon">2️⃣</div><div class="guide-card-title">Wait for Energy</div><div class="guide-card-desc">Energy regens over time. Use the free daily Energy Potion for an extra full session.</div></div>
+        <div class="guide-card"><div class="guide-card-icon">3️⃣</div><div class="guide-card-title">Spend Carrots</div><div class="guide-card-desc">Buy Steal, Regen, and Energy upgrades from the Shop. Upgrade your Farm for passive offline income.</div></div>
+        <div class="guide-card"><div class="guide-card-icon">4️⃣</div><div class="guide-card-title">Get Stronger</div><div class="guide-card-desc">Unlock better breeds, join a party, open gear crates, stake surplus carrots, climb the leaderboard.</div></div>
       </div>
 
-      <div class="guide-section-title">🐰 Breeds Comparison</div>
+      <div class="guide-section-title">Breeds Comparison</div>
       <table class="guide-table">
         <thead><tr><th>Breed</th><th>Steal</th><th>Energy</th><th>Regen/hr</th><th>How to get</th></tr></thead>
         <tbody>
@@ -481,91 +259,74 @@
         </tbody>
       </table>
 
-      <div class="guide-section-title">⚔️ Classes Comparison</div>
+      <div class="guide-section-title">Classes</div>
       <table class="guide-table">
         <thead><tr><th>Class</th><th>Bonus</th><th>Best for</th></tr></thead>
         <tbody>
           <tr><td>Warrior</td><td>+15% steal</td><td>Max carrots per press</td></tr>
-          <tr><td>Mage</td><td>+15% regen</td><td>Frequent short sessions</td></tr>
-          <tr><td>Knight</td><td>+15% max energy</td><td>Long sessions, fewer logins</td></tr>
-          <tr><td>Shaman</td><td>1.4x lucky carrot</td><td>High variance, fun</td></tr>
+          <tr><td>Mage</td><td>+15% regen</td><td>Frequent sessions</td></tr>
+          <tr><td>Knight</td><td>+15% max energy</td><td>Long infrequent sessions</td></tr>
+          <tr><td>Shaman</td><td>1.4x lucky chance</td><td>High variance, fun</td></tr>
         </tbody>
       </table>
 
-      <div class="guide-section-title">🎯 Quests Roadmap</div>
+      <div class="guide-section-title">Quests Roadmap</div>
       <table class="guide-table">
         <thead><tr><th>Quest</th><th>How to complete</th><th>Reward</th></tr></thead>
         <tbody>
           <tr><td>First Hop</td><td>Press the button once</td><td>XP</td></tr>
-          <tr><td>Carrot Pickpocket</td><td>Earn first carrots</td><td>XP</td></tr>
           <tr><td>Goblin Diplomacy</td><td>Refer 2 friends</td><td>Parties unlocked</td></tr>
-          <tr><td>Blue Check Toll Bridge</td><td>Connect X account</td><td>XP + leaderboard handle</td></tr>
+          <tr><td>Blue Check Toll Bridge</td><td>Connect X account</td><td>Leaderboard handle</td></tr>
           <tr><td>Ratcatchers</td><td>Join a party</td><td>XP</td></tr>
           <tr><td>Five Bunnies Walk Into A Pub</td><td>Fill party to 5 members</td><td>XP</td></tr>
-          <tr><td>Wizards Hate This Bunny</td><td>Reach 2.25x steal</td><td>Moonburrow breed FREE</td></tr>
-          <tr><td>The Carrot Cartel</td><td>Earn 25,000 total carrots</td><td>Jackalope breed FREE</td></tr>
+          <tr><td>Wizards Hate This Bunny</td><td>Reach 2.25x steal</td><td>Moonburrow FREE</td></tr>
+          <tr><td>The Carrot Cartel</td><td>Earn 25,000 total carrots</td><td>Jackalope FREE</td></tr>
           <tr><td>Burnt Offerings</td><td>Burn 50,000 carrots on upgrades</td><td>5,000 carrots</td></tr>
-          <tr><td>Recipe For Disaster</td><td>Complete all 19 quests</td><td>Quest cape + 20,000 carrots</td></tr>
+          <tr><td>Recipe For Disaster</td><td>Complete all 19 quests</td><td>Cape + 20,000 carrots</td></tr>
         </tbody>
       </table>
 
-      <div class="guide-section-title">💡 Tips to Climb the Leaderboard Fast</div>
-      <div class="guide-tip"><b>Priority order:</b> Steal upgrades first → Buy Farm Level 1 → Regen upgrades → Farm upgrades → repeat</div>
-      <div class="guide-tip"><b>Free path to top:</b> Earn 25K carrots → Jackalope (1.5x steal) → keep upgrading steal → Moonburrow at 2.25x → join party for +5%</div>
-      <div class="guide-tip orange"><b>Paid shortcut:</b> Buy Bandit breed (~$15) → instantly 1.8x steal → combine with Warrior class for +15% = effectively 2.07x steal day one</div>
-      <div class="guide-tip"><b>Daily must-dos:</b> Press until energy = 0 → use Energy Potion → collect farm → repeat. Consistency beats big one-time sessions.</div>
-      <div class="guide-tip"><b>8-hour farm rule:</b> Farm stops earning after 8 hours offline. Log in at least twice a day to keep passive income flowing.</div>
-
-      <div style="margin-top:20px;text-align:center;">
-        <a href="https://bunnybutton.xyz/docs" target="_blank" style="display:inline-block;padding:10px 28px;background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.3);border-radius:6px;color:var(--green-light);text-decoration:none;font-size:13px;font-weight:600;">Read Full Docs →</a>
-      </div>
+      <div class="guide-section-title">Tips to Climb Fast</div>
+      <div class="guide-tip"><b>Priority:</b> Steal upgrades first → Farm Level 1 → Regen upgrades → Farm upgrades → repeat.</div>
+      <div class="guide-tip"><b>Free path to top:</b> Earn 25K carrots → Jackalope (1.5x steal) → upgrade steal to 2.25x → Moonburrow → join party for +5%.</div>
+      <div class="guide-tip orange"><b>Paid shortcut:</b> Buy Bandit breed (~$15) + Warrior class = 2.07x steal day one.</div>
+      <div class="guide-tip"><b>Daily rule:</b> Press until energy = 0 → use Energy Potion → collect farm → buy one upgrade. Consistency beats everything.</div>
+      <div class="guide-tip"><b>8-hour farm rule:</b> Farm stops earning after 8hrs offline. Log in at least twice a day.</div>
+      <div style="margin-top:16px;text-align:center;"><a href="https://bunnybutton.xyz/docs" target="_blank" style="display:inline-block;padding:10px 24px;background:rgba(46,204,113,.12);border:1px solid rgba(46,204,113,.3);border-radius:6px;color:var(--green-light);text-decoration:none;font-size:13px;font-weight:600;">Read Full Docs →</a></div>
     </div>
   </div>
 
-  <!-- TAB: MANTIS BOT -->
-  <div class="tab-content" id="tab-automation">
+  <!-- BOT TAB -->
+  <div class="tab-content" id="tab-bot">
     <div class="panel" style="padding:20px 24px;">
+      <div class="guide-section-title" style="margin-top:0;">What is Mantis Pro?</div>
+      <div class="guide-tip">Mantis Pro is an autonomous AI agent (Agent #857) running 24/7 on Abstract Chain. It monitors your Bunny Button game and sends you smart email alerts and coaching so you never miss energy, farm carrots, or daily rewards.</div>
 
-      <div class="guide-section-title">🤖 Mantis Pro — Bunny Button AI Assistant</div>
-      <div class="guide-tip">Mantis Pro is an AI agent running 24/7 that monitors your Bunny Button game and sends you smart email alerts so you never miss energy, farm carrots, or daily tasks. Register your email and wallet below to get started.</div>
-
-      <!-- EMAIL SIGNUP FORM -->
-      <div style="background:rgba(46,204,113,0.06);border:1px solid rgba(46,204,113,0.25);border-radius:10px;padding:20px;margin:16px 0;">
-        <div style="font-size:14px;font-weight:700;color:var(--white);margin-bottom:6px;">📬 Get Bunny Button Email Alerts</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6;">Enter your wallet address and email. Mantis Pro will send you personalised alerts every hour — energy full notifications, farm cap warnings, daily task coaching, and leaderboard updates.</div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <input id="signup-wallet" type="text" placeholder="0x... your wallet address" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:10px 14px;color:var(--white);font-size:13px;font-family:'Space Mono',monospace;outline:none;" />
-          <input id="signup-email" type="email" placeholder="your@email.com" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:10px 14px;color:var(--white);font-size:13px;font-family:'Space Mono',monospace;outline:none;" />
-          <button onclick="registerAlerts()" style="background:var(--green);color:white;border:none;border-radius:6px;padding:11px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;transition:all 0.2s;">Register for Alerts →</button>
-        </div>
-        <div id="signup-status" style="margin-top:10px;font-size:12px;font-family:'Space Mono',monospace;"></div>
-      </div>
-
-      <div class="guide-section-title">⚡ What Alerts You Get</div>
-
+      <div class="guide-section-title">Live Bunny Button Automations</div>
       <div class="auto-row">
         <div class="auto-icon">⚡</div>
-        <div><div class="auto-title">Energy Full Alert <span class="auto-badge live">LIVE</span></div><div class="auto-desc">The moment your energy hits 100% you get an email — with your current stats, next quest, daily potion reminder, and a direct link to go play.</div></div>
+        <div><div class="auto-title">Energy Full Alert <span class="auto-badge">LIVE</span></div><div class="auto-desc">Checks energy every hour. When it hits 100% you get an email with your stats, next quest, and daily potion reminder.</div></div>
       </div>
       <div class="auto-row">
         <div class="auto-icon">📋</div>
-        <div><div class="auto-title">Hourly Coaching Email <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Every hour Mantis sends a personalised task list — exactly what to do next to climb the leaderboard. Free path and paid path separated. Tasks update based on your real progress. Resets at midnight.</div></div>
+        <div><div class="auto-title">Hourly Coaching Email <span class="auto-badge">LIVE</span></div><div class="auto-desc">Every hour, Mantis sends a personalised task list showing exactly what to do to climb the leaderboard. Resets at midnight.</div></div>
       </div>
       <div class="auto-row">
         <div class="auto-icon">🌾</div>
-        <div><div class="auto-title">Farm Cap Warning <span class="auto-badge live">LIVE</span></div><div class="auto-desc">When your farm is within 1 hour of hitting the 8-hour offline cap, you get an urgent email to go collect before you lose passive yield.</div></div>
-      </div>
-      <div class="auto-row">
-        <div class="auto-icon">🏆</div>
-        <div><div class="auto-title">Leaderboard Rank Updates <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Every hourly email shows your current rank and the gap to the top player so you always know where you stand and how many carrots you need to climb.</div></div>
-      </div>
-      <div class="auto-row">
-        <div class="auto-icon">🎯</div>
-        <div><div class="auto-title">Quest & Milestone Alerts <span class="auto-badge live">LIVE</span></div><div class="auto-desc">Mantis tracks your quest progress and carrot milestones. When you are close to a reward — like the free Jackalope breed at 25,000 carrots — it tells you exactly how many more you need.</div></div>
+        <div><div class="auto-title">Farm Cap Warning <span class="auto-badge">LIVE</span></div><div class="auto-desc">When your farm is within 1 hour of the 8-hour offline cap, you get an urgent email to claim before you lose yield.</div></div>
       </div>
 
-      <div class="guide-tip orange" style="margin-top:16px;"><b>Built by</b> <a href="https://x.com/newguy_gn" target="_blank" style="color:var(--orange);">@newguy_gn</a> — Agent #857 on Abstract Chain. Building in public.</div>
-
+      <div class="guide-section-title">Get Your Email Alerts</div>
+      <div class="guide-tip" style="margin-bottom:14px;">Enter your email and wallet address to receive personalised Bunny Button coaching emails from Mantis Pro — energy alerts, farm warnings, and hourly task coaching.</div>
+      <div style="background:rgba(255,255,255,.04);border:1px solid var(--card-border);border-radius:8px;padding:18px;">
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <input id="signup-wallet" type="text" placeholder="Your wallet address (0x...)" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:10px 14px;color:var(--white);font-size:13px;font-family:'Space Mono',monospace;outline:none;" />
+          <input id="signup-email" type="email" placeholder="Your email address" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:10px 14px;color:var(--white);font-size:13px;outline:none;" />
+          <button onclick="submitSignup()" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:11px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Space Grotesk',sans-serif;">Get Reminders →</button>
+        </div>
+        <div id="signup-status" style="margin-top:10px;font-size:12px;font-family:'Space Mono',monospace;color:var(--muted);"></div>
+      </div>
+      <div class="guide-tip orange" style="margin-top:14px;"><b>Built by</b> <a href="https://x.com/newguy_gn" target="_blank" style="color:var(--orange);">@newguy_gn</a> — Agent #857 on Abstract Chain. <a href="https://github.com/Molobah2/Mantis-Pro" target="_blank" style="color:var(--orange);">View on GitHub →</a></div>
     </div>
   </div>
 
@@ -579,471 +340,170 @@
 </footer>
 
 <script>
-const BASE_URL = 'https://www.bunnybutton.xyz';
-
-async function fetchProxy(endpoint) {
-  const res = await fetch('/api/bunny-proxy?endpoint=' + endpoint);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+// ── TAB SWITCHING ─────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name === 'tasks') renderQuests();
 }
 
-async function fetchDirect(endpoint, wallet) {
-  // Route through Mantis Pro proxy to avoid CORS
-  const ep = endpoint + (wallet ? (endpoint.includes('?') ? '&' : '?') + 'wallet=' + encodeURIComponent(wallet) : '');
-  return fetchProxy(ep);
-}
-
-function fmt(n) { return Number(n).toLocaleString(); }
-
-function breedClass(b) {
-  if (!b) return '';
-  const bl = b.toLowerCase();
-  return ['meadow','spark','burrow','bandit','jackalope'].includes(bl) ? bl : '';
-}
-
-function rankEmoji(r) {
-  if (r===1) return '🥇'; if (r===2) return '🥈'; if (r===3) return '🥉';
-  return `#${r}`;
-}
-function rankClass(r) {
-  if (r===1) return 'top1'; if (r===2) return 'top2'; if (r===3) return 'top3';
-  return '';
-}
-
-// ── LEADERBOARD ──
-let _allLeaderboard = [];
-let _lbPage = 0;
-const LB_PAGE_SIZE = 20;
-
-async function loadLeaderboard() {
-  const body = document.getElementById('leaderboard-body');
-  try {
-    const data = await fetchProxy('/leaderboard?limit=100');
-    _allLeaderboard = data.leaderboard || [];
-    _lbPage = 0;
-    renderLeaderboardPage();
-    document.getElementById('lb-updated').textContent = new Date().toLocaleTimeString();
-  } catch(e) {
-    body.innerHTML = `<div class="error-msg">${e.message}</div>`;
-  }
-}
-
-function renderLeaderboardPage() {
-  const body = document.getElementById('leaderboard-body');
-  const start = _lbPage * LB_PAGE_SIZE;
-  const page = _allLeaderboard.slice(start, start + LB_PAGE_SIZE);
-  const totalPages = Math.ceil(_allLeaderboard.length / LB_PAGE_SIZE);
-
-  body.innerHTML = page.map((e, i) => {
-    const rank = e.rank || (start + i + 1);
-    const name = e.xHandle || (e.walletAddress||'???').slice(0,10)+'...';
-    const carrots = e.totalCarrotsEarned || 0;
-    const breed = e.bunnyBreed || 'sprout';
-    const bc = breedClass(breed);
-    return `<div class="lb-row" style="animation-delay:${i*0.03}s">
-      <div class="lb-rank ${rankClass(rank)}">${rankEmoji(rank)}</div>
-      <div class="lb-name">${name}</div>
-      <div class="lb-right">
-        <div class="lb-carrots">${fmt(carrots)} 🥕</div>
-        <div class="lb-breed"><span class="breed-pill ${bc}">${breed}</span></div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Pagination controls
-  if (totalPages > 1) {
-    body.innerHTML += `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid rgba(255,255,255,0.06);">
-        <button onclick="lbPrev()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${_lbPage===0?'var(--muted)':'var(--white)'};padding:5px 12px;cursor:${_lbPage===0?'default':'pointer'};font-size:12px;font-family:'Space Mono',monospace;">← Prev</button>
-        <span style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">Page ${_lbPage+1} / ${totalPages} · ${_allLeaderboard.length} players</span>
-        <button onclick="lbNext()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${_lbPage===totalPages-1?'var(--muted)':'var(--white)'};padding:5px 12px;cursor:${_lbPage===totalPages-1?'default':'pointer'};font-size:12px;font-family:'Space Mono',monospace;">Next →</button>
-      </div>`;
-  }
-}
-
-function lbPrev() {
-  if (_lbPage > 0) { _lbPage--; renderLeaderboardPage(); }
-}
-
-function lbNext() {
-  const totalPages = Math.ceil(_allLeaderboard.length / LB_PAGE_SIZE);
-  if (_lbPage < totalPages - 1) { _lbPage++; renderLeaderboardPage(); }
-}
-
-// ── STATS ──
-async function loadStats() {
-  try {
-    const [ethData, presaleData] = await Promise.all([
-      fetchProxy('/eth-price'),
-      fetchProxy('/presale/status')
-    ]);
-    const ethUsd = ethData.ethUsd || 0;
-    document.getElementById('eth-price').textContent =
-      '$' + Number(ethUsd).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-
-    const active = presaleData.active;
-    const remaining = presaleData.remainingAllocation || 0;
-    const raised = presaleData.totalRaisedEth || 0;
-    const sold = 35000000 - remaining;
-    const pct = Math.min(100, Math.round((sold/35000000)*100));
-    const raisedUsd = raised * ethUsd;
-
-    document.getElementById('presale-status').textContent = active ? 'ACTIVE' : 'ENDED';
-    document.getElementById('presale-status').style.color = active ? 'var(--green-light)' : 'var(--red)';
-    document.getElementById('presale-sub').textContent = active ? 'Presale is live now' : 'Presale ended';
-    document.getElementById('carrot-remaining').textContent = (remaining/1000000).toFixed(2)+'M';
-
-    document.getElementById('presale-body').innerHTML = `
-      <div class="presale-row"><span class="presale-key">Status</span><span class="presale-val ${active?'green':'red'}">${active?'✅ Active':'❌ Ended'}</span></div>
-      <div class="presale-row"><span class="presale-key">ETH Raised</span><span class="presale-val">${Number(raised).toFixed(4)} ETH</span></div>
-      <div class="presale-row"><span class="presale-key">USD Value</span><span class="presale-val green">$${fmt(Math.round(raisedUsd))}</span></div>
-      <div class="presale-row"><span class="presale-key">CARROT Left</span><span class="presale-val orange">${fmt(remaining)}</span></div>
-      <div class="presale-row"><span class="presale-key">Rate</span><span class="presale-val">350,000 / ETH</span></div>
-      <div class="presale-row"><span class="presale-key">Min Buy</span><span class="presale-val">0.01 ETH (~$${Math.round(ethUsd*0.01)})</span></div>
-      <div class="presale-row"><span class="presale-key">Hard Cap</span><span class="presale-val">100 ETH</span></div>
-      <div class="presale-row"><span class="presale-key">Ends</span><span class="presale-val">June 27, 2026</span></div>
-      <div class="progress-bar">
-        <div class="progress-label"><span>Sold ${pct}%</span><span>${fmt(sold)} / 35M</span></div>
-        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-      </div>`;
-  } catch(e) { console.error(e); }
-}
-
-// ── PLAYER TASKS ──
-async function loadPlayer() {
-  const wallet = document.getElementById('wallet-input').value.trim();
-  if (!wallet || wallet.length < 10) {
-    setStatus('Please enter a valid wallet address', 'error');
-    return;
-  }
-  _currentWallet = wallet;
-  saveRecentWallet(wallet);
-  renderRecentWallets('');
-  setStatus('Loading your game data...', 'loading');
-  document.getElementById('tasks-badge').textContent = 'Loading...';
-
-  try {
-    // Use cached leaderboard if available, else fetch
-    const presaleResp = await fetchProxy('/presale/status');
-    const presale = presaleResp;
-
-    let lb = _allLeaderboard;
-    if (!lb.length) {
-      const leaderboard = await fetchProxy('/leaderboard?limit=100');
-      lb = leaderboard.leaderboard || [];
-      _allLeaderboard = lb;
-    }
-
-    // Find player in leaderboard
-    const player = lb.find(e =>
-      e.walletAddress && e.walletAddress.toLowerCase() === wallet.toLowerCase()
-    );
-
-    if (!player) {
-      // Player exists but not on leaderboard yet — show starter tasks
-      renderStarterTasks(wallet, presale);
-      setStatus('✅ Wallet found — showing starter guide', 'success');
-      switchToTasksTab();
-      return;
-    }
-
-    renderPlayerTasks(player, presale, wallet);
-    setStatus(`✅ Loaded data for ${player.xHandle || wallet.slice(0,10)+'...'}`, 'success');
-    switchToTasksTab();
-
-  } catch(e) {
-    setStatus(`Error: ${e.message}`, 'error');
-  }
-}
-
-function setStatus(msg, type) {
-  const el = document.getElementById('wallet-status');
-  el.textContent = msg;
-  el.className = `wallet-status ${type}`;
-}
-
-// ── RECENT WALLETS ───────────────────────────────────────────────────────
-function saveRecentWallet(wallet) {
-  if (!wallet || wallet.length < 10) return;
-  try {
-    let recents = JSON.parse(localStorage.getItem('mantis_recent_wallets') || '[]');
-    recents = recents.filter(w => w !== wallet); // remove if already exists
-    recents.unshift(wallet); // add to front
-    recents = recents.slice(0, 5); // keep max 5
-    localStorage.setItem('mantis_recent_wallets', JSON.stringify(recents));
-  } catch(e) {}
-}
-
-function getRecentWallets() {
-  try {
-    return JSON.parse(localStorage.getItem('mantis_recent_wallets') || '[]');
-  } catch(e) { return []; }
-}
-
-function renderRecentWallets(filter) {
-  const container = document.getElementById('recent-wallets-row');
-  const recents = getRecentWallets();
-  const filtered = filter ? recents.filter(w => w.toLowerCase().includes(filter.toLowerCase())) : recents;
-
-  if (!filtered.length) {
-    container.style.display = 'none';
-    return;
-  }
-
-  container.style.display = 'flex';
-  const existing = container.querySelectorAll('.recent-wallet-btn');
-  existing.forEach(e => e.remove());
-
-  filtered.forEach(wallet => {
-    const btn = document.createElement('button');
-    btn.className = 'recent-wallet-btn';
-    btn.textContent = wallet.slice(0,6) + '...' + wallet.slice(-4);
-    btn.title = wallet;
-    btn.onclick = () => {
-      document.getElementById('wallet-input').value = wallet;
-      container.style.display = 'none';
-      loadPlayer();
-    };
-    container.appendChild(btn);
-  });
-}
-
-function filterRecent(val) {
-  renderRecentWallets(val);
-}
-
-// ── QUEST ENGINE ────────────────────────────────────────────────────────────
+// ── QUEST ENGINE ──────────────────────────────────────────────────────────
 const TODAY = new Date().toISOString().slice(0, 10);
 
 const QUESTS = [
-  // Phase 1 — First Day
-  { id:'p1_press',    phase:'🟢 Phase 1 — First Day',    phaseClass:'free',
+  { id:'p1_press',    phase:'Phase 1 — First Day', pc:'free',    daily:false,
     title:'Press the button for the first time',
-    desc:'Go to <a href="https://bunnybutton.xyz" target="_blank" class="task-link">bunnybutton.xyz</a> and press the big button. Keep pressing until your energy hits 0. Each press earns carrots based on your steal multiplier.',
-    daily: false },
-  { id:'p1_steal',    phase:null, phaseClass:'free',
+    desc:'Go to <a href="https://bunnybutton.xyz" target="_blank" class="task-link">bunnybutton.xyz</a> and press the big button. Keep pressing until energy hits 0. Each press earns carrots based on your steal multiplier.' },
+  { id:'p1_steal',    phase:null, pc:'free', daily:false,
     title:'Buy your first Steal upgrade',
-    desc:'<a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal</a>. Most important upgrade — multiplies every carrot you earn per press. Do this before anything else.',
-    daily: false },
-  { id:'p1_regen',    phase:null, phaseClass:'free',
+    desc:'<a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop then Steal</a>. Most important upgrade — multiplies every carrot you earn per press. Do this before anything else.' },
+  { id:'p1_regen',    phase:null, pc:'free', daily:false,
     title:'Buy your first Regen upgrade',
-    desc:'<a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Regen</a>. Faster energy refill = more presses per day. Alternate between Steal and Regen upgrades going forward.',
-    daily: false },
-  { id:'p1_farm',     phase:null, phaseClass:'free',
+    desc:'<a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop then Regen</a>. Faster energy refill means more presses per day. Alternate between Steal and Regen going forward.' },
+  { id:'p1_farm',     phase:null, pc:'free', daily:false,
     title:'Buy Farm Level 1 — passive income while you sleep',
-    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → buy Level 1</a>. Earns carrots automatically even offline. Do before more than 2–3 stat upgrades.',
-    daily: false },
-  { id:'p1_x',        phase:null, phaseClass:'free',
+    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab then buy Level 1</a>. Earns carrots automatically even when offline. Do before more than 2-3 stat upgrades.' },
+  { id:'p1_x',        phase:null, pc:'free', daily:false,
     title:'Connect your X (Twitter) account',
-    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu → connect X</a>. Your handle shows on the leaderboard. Completes the "Blue Check Toll Bridge" quest.',
-    daily: false },
-  { id:'p1_discord',  phase:null, phaseClass:'free',
+    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu then connect X</a>. Your handle shows on the leaderboard. Completes the Blue Check Toll Bridge quest.' },
+  { id:'p1_discord',  phase:null, pc:'free', daily:false,
     title:'Connect your Discord account',
-    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu → connect Discord</a>. Unlocks username, Discord commands, and leaderboard sync.',
-    daily: false },
+    desc:'<a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu then connect Discord</a>. Unlocks username, Discord commands, and leaderboard sync.' },
 
-  // Phase 2 — Daily (resets every day)
-  { id:'p2_press',    phase:'🔵 Phase 2 — Daily Routine (resets every day)',  phaseClass:'daily',
+  { id:'p2_press',    phase:'Phase 2 — Daily Routine', pc:'daily', daily:true,
     title:'Press the button until energy hits 0 <span class="daily-badge">daily</span>',
-    desc:'Drain energy completely then let it refill. <a href="https://bunnybutton.xyz" target="_blank" class="task-link">Go press now →</a>',
-    daily: true },
-  { id:'p2_potion',   phase:null, phaseClass:'daily',
+    desc:'Drain energy completely then let it refill. <a href="https://bunnybutton.xyz" target="_blank" class="task-link">Go press now</a>' },
+  { id:'p2_potion',   phase:null, pc:'daily', daily:true,
     title:'Use your free daily Energy Potion <span class="daily-badge">daily</span>',
-    desc:'After energy hits 0 → <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Energy Potion</a>. Fully refills energy once per day free. A whole extra session at zero cost.',
-    daily: true },
-  { id:'p2_farm',     phase:null, phaseClass:'daily',
+    desc:'After energy hits 0 go to <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop then Energy Potion</a>. Fully refills once per day for free. A whole extra session at zero cost.' },
+  { id:'p2_farm',     phase:null, pc:'daily', daily:true,
     title:'Collect your farm carrots <span class="daily-badge">daily</span>',
-    desc:'Farm caps at 8 hours offline — after that it stops earning until you collect. <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → claim</a>. Do at least twice a day.',
-    daily: true },
-  { id:'p2_streak',   phase:null, phaseClass:'daily',
+    desc:'Farm caps at 8 hours offline then stops earning until you collect. <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab then claim</a>. Do at least twice a day.' },
+  { id:'p2_streak',   phase:null, pc:'daily', daily:true,
     title:'Log in to keep your streak alive <span class="daily-badge">daily</span>',
-    desc:'Just signing in counts. <a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab</a>: 7 days = 500 carrots, 30 days = 2,500 carrots, 100 days = 10,000 carrots.',
-    daily: true },
-  { id:'p2_upgrade',  phase:null, phaseClass:'daily',
+    desc:'Just signing in counts. <a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab</a>: 7 days = 500 carrots, 30 days = 2500 carrots, 100 days = 10000 carrots.' },
+  { id:'p2_upgrade',  phase:null, pc:'daily', daily:true,
     title:'Buy at least one upgrade today <span class="daily-badge">daily</span>',
-    desc:'Pattern: Steal → Regen → Steal → Regen → Farm upgrade. Every upgrade compounds. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop →</a>',
-    daily: true },
+    desc:'Pattern: Steal then Regen then Steal then Regen then Farm upgrade. Every upgrade compounds. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop</a>' },
 
-  // Phase 3 — Mid Game
-  { id:'p3_steal1',   phase:'🟡 Phase 3 — Mid Game',  phaseClass:'mid',
+  { id:'p3_steal1',   phase:'Phase 3 — Mid Game', pc:'mid', daily:false,
     title:'Reach 1.0x steal multiplier',
-    desc:'Keep buying Steal upgrades until multiplier hits 1.0x. At this point each press earns 5x more than the starting 0.2x. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal →</a>',
-    daily: false },
-  { id:'p3_farm2',    phase:null, phaseClass:'mid',
+    desc:'Keep buying Steal upgrades until it hits 1.0x. At this point each press earns 5x more than the starting 0.2x. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop then Steal</a>' },
+  { id:'p3_farm2',    phase:null, pc:'mid', daily:false,
     title:'Upgrade Farm to Level 2',
-    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Upgrades → Level 2</a>. More passive income per second. Do when you have surplus after stat upgrades.',
-    daily: false },
-  { id:'p3_refer',    phase:null, phaseClass:'mid',
-    title:'Refer 2 friends to unlock Parties (+5% bonus)',
-    desc:'Get referral code from <a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu</a>. Share on X or Discord. 2 sign-ups = Parties unlock. Full 5-person party = +5% per press for everyone.',
-    daily: false },
-  { id:'p3_party',    phase:null, phaseClass:'mid',
+    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab then Upgrades then Level 2</a>. More passive income. Do when you have surplus after stat upgrades.' },
+  { id:'p3_refer',    phase:null, pc:'mid', daily:false,
+    title:'Refer 2 friends to unlock Parties',
+    desc:'Get referral code from <a href="https://bunnybutton.xyz/wallet" target="_blank" class="task-link">Wallet menu</a>. Share on X or Discord. 2 sign-ups unlocks Parties — a full 5-person party gives everyone +5% per press.' },
+  { id:'p3_party',    phase:null, pc:'mid', daily:false,
     title:'Join a party for the group bonus',
-    desc:'<a href="https://bunnybutton.xyz/party" target="_blank" class="task-link">Party tab → browse parties</a> or ask in Bunny Button Discord. Full party = +5% on every press.',
-    daily: false },
-  { id:'p3_milestone',phase:null, phaseClass:'mid',
-    title:'Claim your milestone rewards',
-    desc:'<a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab → Milestones</a>. Claim 1K carrots, 1K clicks rewards. Check after every big session — free carrots sitting there.',
-    daily: false },
+    desc:'<a href="https://bunnybutton.xyz/party" target="_blank" class="task-link">Party tab then browse parties</a> or ask in Bunny Button Discord. Full party = +5% on every press for everyone.' },
+  { id:'p3_milestone',phase:null, pc:'mid', daily:false,
+    title:'Claim your milestone rewards in Streaks tab',
+    desc:'<a href="https://bunnybutton.xyz/streaks" target="_blank" class="task-link">Streaks tab then Milestones</a>. Claim 1K carrots and 1K clicks rewards. Free carrots sitting there — check after every session.' },
 
-  // Phase 4 — Late Game
-  { id:'p4_jackalope',phase:'🟠 Phase 4 — Late Game',  phaseClass:'late',
-    title:'Earn 25,000 total carrots → unlock Jackalope FREE (1.5x steal)',
-    desc:'Just keep pressing daily. No spending needed. At 25,000 total carrots, Jackalope breed unlocks automatically — 1.5x steal for free. Massive upgrade over Sprout's 0.2x.',
-    daily: false },
-  { id:'p4_moonburrow',phase:null, phaseClass:'late',
-    title:'Reach 2.25x steal → unlock Moonburrow FREE (1.25x steal)',
-    desc:'Buy Steal upgrades until total multiplier hits 2.25x. Moonburrow unlocks automatically — no spending needed. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop → Steal →</a>',
-    daily: false },
-  { id:'p4_burn',     phase:null, phaseClass:'late',
-    title:'Burn 50,000 carrots on upgrades → earn 5,000 carrot reward',
-    desc:'Keep buying upgrades — burned carrots count automatically. At 50,000 burned, Burnt Offerings quest rewards 5,000 carrots. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop →</a>',
-    daily: false },
-  { id:'p4_farm3',    phase:null, phaseClass:'late',
+  { id:'p4_jackalope',phase:'Phase 4 — Late Game', pc:'late', daily:false,
+    title:'Earn 25,000 total carrots — unlocks Jackalope FREE (1.5x steal)',
+    desc:'Just keep pressing daily. No spending needed. At 25000 total carrots the Jackalope breed unlocks automatically. 1.5x steal for free — massive upgrade over 0.2x.' },
+  { id:'p4_moonburrow',phase:null, pc:'late', daily:false,
+    title:'Reach 2.25x steal — unlocks Moonburrow FREE (1.25x steal)',
+    desc:'Buy Steal upgrades until total hits 2.25x. Moonburrow unlocks automatically. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Shop then Steal</a>' },
+  { id:'p4_burn',     phase:null, pc:'late', daily:false,
+    title:'Burn 50,000 carrots on upgrades — earns 5,000 carrot reward',
+    desc:'Keep buying upgrades. Burned carrots count automatically. At 50000 burned the Burnt Offerings quest rewards 5000 carrots. <a href="https://bunnybutton.xyz/shop" target="_blank" class="task-link">Open Shop</a>' },
+  { id:'p4_farm3',    phase:null, pc:'late', daily:false,
     title:'Upgrade Farm to Level 3',
-    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Upgrades → Level 3</a>. Higher levels = significantly more passive income. Alternate with stat upgrades.',
-    daily: false },
-  { id:'p4_crate',    phase:null, phaseClass:'late',
+    desc:'<a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab then Upgrades then Level 3</a>. Much more passive income. Alternate with stat upgrades.' },
+  { id:'p4_crate',    phase:null, pc:'late', daily:false,
     title:'Open a Carrot Crate for gear bonus',
-    desc:'Wait until steal is level 3+. <a href="https://bunnybutton.xyz/gacha" target="_blank" class="task-link">Gacha → open Crate</a>. Get Cape (+steal), Boots (+regen), or Hat (+energy). Gear stacks on top of all upgrades.',
-    daily: false },
-  { id:'p4_stake',    phase:null, phaseClass:'late',
+    desc:'Wait until steal is level 3+. <a href="https://bunnybutton.xyz/gacha" target="_blank" class="task-link">Gacha page then open a Crate</a>. Get Cape (+steal), Boots (+regen), or Hat (+energy). Stacks on all other upgrades.' },
+  { id:'p4_stake',    phase:null, pc:'late', daily:false,
     title:'Stake surplus carrots for APY rewards',
-    desc:'Once balance exceeds 2,000 and you don't need it soon — <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab → Stake</a>. Lock 30/90/365 days. Longer = higher APY.',
-    daily: false },
-  { id:'p4_creator',  phase:null, phaseClass:'late',
-    title:'Submit content to the Creator Program',
-    desc:'Post about Bunny Button on X, then submit at <a href="https://bunnybutton.xyz/creator-program" target="_blank" class="task-link">Creator Program</a>. Rewards: crates, CARROT tokens, unique items.',
-    daily: false },
-
-  // Paid Path
-  { id:'p5_bandit',   phase:'⚡ Paid Path — Accelerate Fast (Optional)',  phaseClass:'paid',
+    desc:'Once balance exceeds 2000 and you do not need it for upgrades soon — <a href="https://bunnybutton.xyz/farm" target="_blank" class="task-link">Farm tab then Stake</a>. Lock 30/90/365 days. Longer = higher APY.' },
+  { id:'p5_bandit',   phase:'Paid Path — Accelerate Fast (Optional)', pc:'paid', daily:false,
     title:'Upgrade to Bandit breed (~$15) — instantly 1.8x steal',
-    desc:'Best value paid breed. With Warrior class (+15%) = 2.07x steal day one. <a href="https://bunnybutton.xyz/profile" target="_blank" class="task-link orange">Profile → Change Breed →</a>',
-    daily: false },
-  { id:'p5_presale',  phase:null, phaseClass:'paid',
+    desc:'Best value paid breed. With Warrior class (+15%) = 2.07x steal day one. <a href="https://bunnybutton.xyz/profile" target="_blank" class="task-link orange">Profile then Change Breed</a>' },
+  { id:'p5_presale',  phase:null, pc:'paid', daily:false,
     title:'Buy CARROT in presale — 40% more than launch price',
-    desc:'Presale: 350K CARROT/ETH. Launch: 250K/ETH. Buy now = 40% more. Ends June 27, 2026. Min 0.01 ETH. <a href="https://bunnybutton.xyz/presale" target="_blank" class="task-link orange">Join Presale →</a>',
-    daily: false },
+    desc:'Presale: 350K CARROT per ETH. Launch: 250K per ETH. Buy now = 40% more. Ends June 27 2026. Min 0.01 ETH. <a href="https://bunnybutton.xyz/presale" target="_blank" class="task-link orange">Join Presale</a>' },
 ];
 
-const TOTAL_QUESTS = QUESTS.length;
+const TOTAL = QUESTS.length;
 
-function qKey(id) {
-  return 'mantis_q_' + id;
-}
-function qIsDone(id) {
+function qKey(id) { return 'bq_' + id; }
+
+function qDone(id) {
   try {
     const v = localStorage.getItem(qKey(id));
     if (!v) return false;
-    const { done, date } = JSON.parse(v);
-    const q = QUESTS.find(q => q.id === id);
-    if (q && q.daily) return done && date === TODAY;
-    return done;
+    const parsed = JSON.parse(v);
+    const q = QUESTS.find(x => x.id === id);
+    if (q && q.daily) return parsed.done && parsed.date === TODAY;
+    return parsed.done;
   } catch(e) { return false; }
 }
-function qSetDone(id, val) {
-  try {
-    localStorage.setItem(qKey(id), JSON.stringify({ done: val, date: TODAY }));
-  } catch(e) {}
+
+function qSet(id, val) {
+  try { localStorage.setItem(qKey(id), JSON.stringify({done:val, date:TODAY})); } catch(e) {}
 }
 
-function getQuestState(id, index) {
-  if (qIsDone(id)) return 'done';
-  // A quest is active if all previous non-daily quests in same phase-group are done
-  // For simplicity: active if the quest immediately before it is done (or it's first)
-  if (index === 0) return 'active';
-  const prev = QUESTS[index - 1];
-  // Phase 2 daily tasks are always active once phase 1 is fully done
-  const phase1Done = QUESTS.filter(q => q.id.startsWith('p1_')).every(q => qIsDone(q.id));
-  if (prev.id.startsWith('p1_') && QUESTS[index].id.startsWith('p2_')) {
-    return phase1Done ? 'active' : 'locked';
-  }
-  if (qIsDone(prev.id) || (prev.daily && phase1Done)) return 'active';
+function qState(id, idx) {
+  if (qDone(id)) return 'done';
+  if (idx === 0) return 'active';
+  // Phase 2 unlocks when all Phase 1 done
+  const p1 = QUESTS.filter(q => q.id.startsWith('p1_'));
+  const p1Done = p1.every(q => qDone(q.id));
+  if (QUESTS[idx].id.startsWith('p2_') && !p1Done) return 'locked';
+  if (QUESTS[idx].id.startsWith('p2_') && p1Done) return 'active';
+  // Other phases: previous quest must be done
+  const prev = QUESTS[idx - 1];
+  if (qDone(prev.id)) return 'active';
   return 'locked';
 }
 
-window.completeQuest = function(id) {
-  qSetDone(id, true);
-  renderQuests();
-}
-window.undoQuest = function(id) {
-  qSetDone(id, false);
-  renderQuests();
-}
+window.completeQuest = function(id) { qSet(id, true); renderQuests(); }
+window.undoQuest = function(id) { qSet(id, false); renderQuests(); }
 
 function renderQuests() {
   const container = document.getElementById('quest-list');
   if (!container) return;
+  let done = 0, html = '', lastPhase = null;
 
-  let doneCount = 0;
-  let html = '';
-  let lastPhase = null;
+  QUESTS.forEach(function(q, i) {
+    const state = qState(q.id, i);
+    if (state === 'done') done++;
 
-  QUESTS.forEach((q, i) => {
-    const state = getQuestState(q.id, i);
-    if (state === 'done') doneCount++;
-
-    // Phase header
     if (q.phase && q.phase !== lastPhase) {
       lastPhase = q.phase;
-      html += `<div class="phase-header">
-        <span class="phase-label ${q.phaseClass}">${q.phase}</span>
-        <div class="phase-divider"></div>
-      </div>`;
+      html += '<div class="phase-header"><span class="phase-label ' + q.pc + '">' + q.phase + '</span><div class="phase-divider"></div></div>';
     }
 
+    const titleClean = q.title.replace(/<[^>]+>/g, '');
+
     if (state === 'done') {
-      html += `<div class="quest-item done">
-        <div class="quest-check">✅</div>
-        <div class="quest-title-done">
-          <span>${q.title.replace(/<[^>]+>/g,'')}</span>
-          <button class="quest-undo" onclick="undoQuest('${q.id}')">undo</button>
-        </div>
-      </div>`;
+      html += '<div class="quest-item done"><div class="quest-check">✅</div><div class="quest-full"></div><div class="quest-done-line"><span>' + titleClean + '</span><button class="quest-undo" onclick="undoQuest(\'' + q.id + '\')">undo</button></div></div>';
     } else if (state === 'active') {
-      html += `<div class="quest-item active" id="row_${q.id}">
-        <div class="quest-check">🔲</div>
-        <div class="quest-body-full">
-          <div class="quest-title">${q.title}</div>
-          <div class="quest-desc">${q.desc}</div>
-          <button class="mark-done-btn" onclick="completeQuest('${q.id}')">✅ Mark as Done</button>
-        </div>
-      </div>`;
+      html += '<div class="quest-item active"><div class="quest-check">🔲</div><div class="quest-full"><div class="quest-title">' + q.title + '</div><div class="quest-desc">' + q.desc + '</div><button class="mark-done-btn" onclick="completeQuest(\'' + q.id + '\')">✅ Mark as Done</button></div><div class="quest-done-line"></div></div>';
     } else {
-      html += `<div class="quest-item locked">
-        <div class="quest-check">🔒</div>
-        <div class="quest-body-full">
-          <div class="quest-title">${q.title.replace(/<[^>]+>/g,'')}</div>
-        </div>
-      </div>`;
+      html += '<div class="quest-item locked"><div class="quest-check">🔒</div><div class="quest-full"><div class="quest-title">' + titleClean + '</div></div><div class="quest-done-line"></div></div>';
     }
   });
 
   container.innerHTML = html;
-
-  // Update progress bar
-  const pct = Math.round((doneCount / TOTAL_QUESTS) * 100);
+  const pct = Math.round((done / TOTAL) * 100);
   const fill = document.getElementById('progress-fill');
   const text = document.getElementById('progress-text');
   if (fill) fill.style.width = pct + '%';
-  if (text) text.textContent = `${doneCount} / ${TOTAL_QUESTS} tasks (${pct}%)`;
+  if (text) text.textContent = done + ' / ' + TOTAL + ' tasks (' + pct + '%)';
 }
 
-// Render on tab switch
-document.addEventListener('DOMContentLoaded', renderQuests);
-setTimeout(renderQuests, 100);
-
+// ── API ───────────────────────────────────────────────────────────────────
 async function fetchProxy(endpoint) {
-  const res = await fetch('/api/bunny-proxy?endpoint=' + endpoint);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const res = await fetch('/api/bunny-proxy?endpoint=' + encodeURIComponent(endpoint));
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
-}
-
-async function fetchDirect(endpoint, wallet) {
-  // Route through Mantis Pro proxy to avoid CORS
-  const ep = endpoint + (wallet ? (endpoint.includes('?') ? '&' : '?') + 'wallet=' + encodeURIComponent(wallet) : '');
-  return fetchProxy(ep);
 }
 
 function fmt(n) { return Number(n).toLocaleString(); }
@@ -1053,633 +513,70 @@ function breedClass(b) {
   const bl = b.toLowerCase();
   return ['meadow','spark','burrow','bandit','jackalope'].includes(bl) ? bl : '';
 }
-
-function rankEmoji(r) {
-  if (r===1) return '🥇'; if (r===2) return '🥈'; if (r===3) return '🥉';
-  return `#${r}`;
-}
-function rankClass(r) {
-  if (r===1) return 'top1'; if (r===2) return 'top2'; if (r===3) return 'top3';
-  return '';
-}
-
-// ── LEADERBOARD ──
-let _allLeaderboard = [];
-let _lbPage = 0;
-const LB_PAGE_SIZE = 20;
+function rankEmoji(r) { return r===1?'🥇':r===2?'🥈':r===3?'🥉':'#'+r; }
+function rankClass(r) { return r===1?'top1':r===2?'top2':r===3?'top3':''; }
 
 async function loadLeaderboard() {
   const body = document.getElementById('leaderboard-body');
   try {
-    const data = await fetchProxy('/leaderboard?limit=100');
-    _allLeaderboard = data.leaderboard || [];
-    _lbPage = 0;
-    renderLeaderboardPage();
+    const data = await fetchProxy('/leaderboard?limit=20');
+    const lb = data.leaderboard || [];
+    if (!lb.length) { body.innerHTML = '<div class="error-msg">No data</div>'; return; }
+    body.innerHTML = lb.map(function(e, i) {
+      const rank = e.rank || (i+1);
+      const name = e.xHandle || ((e.walletAddress||'???').slice(0,10)+'...');
+      const carrots = e.totalCarrotsEarned || 0;
+      const breed = e.bunnyBreed || 'sprout';
+      return '<div class="lb-row" style="animation-delay:' + (i*0.04) + 's"><div class="lb-rank ' + rankClass(rank) + '">' + rankEmoji(rank) + '</div><div class="lb-name">' + name + '</div><div class="lb-right"><div class="lb-carrots">' + fmt(carrots) + ' 🥕</div><div class="lb-breed"><span class="breed-pill ' + breedClass(breed) + '">' + breed + '</span></div></div></div>';
+    }).join('');
     document.getElementById('lb-updated').textContent = new Date().toLocaleTimeString();
-  } catch(e) {
-    body.innerHTML = `<div class="error-msg">${e.message}</div>`;
-  }
+  } catch(e) { body.innerHTML = '<div class="error-msg">' + e.message + '</div>'; }
 }
 
-function renderLeaderboardPage() {
-  const body = document.getElementById('leaderboard-body');
-  const start = _lbPage * LB_PAGE_SIZE;
-  const page = _allLeaderboard.slice(start, start + LB_PAGE_SIZE);
-  const totalPages = Math.ceil(_allLeaderboard.length / LB_PAGE_SIZE);
-
-  body.innerHTML = page.map((e, i) => {
-    const rank = e.rank || (start + i + 1);
-    const name = e.xHandle || (e.walletAddress||'???').slice(0,10)+'...';
-    const carrots = e.totalCarrotsEarned || 0;
-    const breed = e.bunnyBreed || 'sprout';
-    const bc = breedClass(breed);
-    return `<div class="lb-row" style="animation-delay:${i*0.03}s">
-      <div class="lb-rank ${rankClass(rank)}">${rankEmoji(rank)}</div>
-      <div class="lb-name">${name}</div>
-      <div class="lb-right">
-        <div class="lb-carrots">${fmt(carrots)} 🥕</div>
-        <div class="lb-breed"><span class="breed-pill ${bc}">${breed}</span></div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Pagination controls
-  if (totalPages > 1) {
-    body.innerHTML += `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid rgba(255,255,255,0.06);">
-        <button onclick="lbPrev()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${_lbPage===0?'var(--muted)':'var(--white)'};padding:5px 12px;cursor:${_lbPage===0?'default':'pointer'};font-size:12px;font-family:'Space Mono',monospace;">← Prev</button>
-        <span style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">Page ${_lbPage+1} / ${totalPages} · ${_allLeaderboard.length} players</span>
-        <button onclick="lbNext()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${_lbPage===totalPages-1?'var(--muted)':'var(--white)'};padding:5px 12px;cursor:${_lbPage===totalPages-1?'default':'pointer'};font-size:12px;font-family:'Space Mono',monospace;">Next →</button>
-      </div>`;
-  }
-}
-
-function lbPrev() {
-  if (_lbPage > 0) { _lbPage--; renderLeaderboardPage(); }
-}
-
-function lbNext() {
-  const totalPages = Math.ceil(_allLeaderboard.length / LB_PAGE_SIZE);
-  if (_lbPage < totalPages - 1) { _lbPage++; renderLeaderboardPage(); }
-}
-
-// ── STATS ──
 async function loadStats() {
   try {
-    const [ethData, presaleData] = await Promise.all([
-      fetchProxy('/eth-price'),
-      fetchProxy('/presale/status')
-    ]);
-    const ethUsd = ethData.ethUsd || 0;
-    document.getElementById('eth-price').textContent =
-      '$' + Number(ethUsd).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-
-    const active = presaleData.active;
-    const remaining = presaleData.remainingAllocation || 0;
-    const raised = presaleData.totalRaisedEth || 0;
+    const eth = await fetchProxy('/eth-price');
+    const presale = await fetchProxy('/presale/status');
+    const ethUsd = eth.ethUsd || 0;
+    document.getElementById('eth-price').textContent = '$' + Number(ethUsd).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    const active = presale.active;
+    const remaining = presale.remainingAllocation || 0;
+    const raised = presale.totalRaisedEth || 0;
     const sold = 35000000 - remaining;
     const pct = Math.min(100, Math.round((sold/35000000)*100));
-    const raisedUsd = raised * ethUsd;
-
     document.getElementById('presale-status').textContent = active ? 'ACTIVE' : 'ENDED';
     document.getElementById('presale-status').style.color = active ? 'var(--green-light)' : 'var(--red)';
     document.getElementById('presale-sub').textContent = active ? 'Presale is live now' : 'Presale ended';
-    document.getElementById('carrot-remaining').textContent = (remaining/1000000).toFixed(2)+'M';
-
-    document.getElementById('presale-body').innerHTML = `
-      <div class="presale-row"><span class="presale-key">Status</span><span class="presale-val ${active?'green':'red'}">${active?'✅ Active':'❌ Ended'}</span></div>
-      <div class="presale-row"><span class="presale-key">ETH Raised</span><span class="presale-val">${Number(raised).toFixed(4)} ETH</span></div>
-      <div class="presale-row"><span class="presale-key">USD Value</span><span class="presale-val green">$${fmt(Math.round(raisedUsd))}</span></div>
-      <div class="presale-row"><span class="presale-key">CARROT Left</span><span class="presale-val orange">${fmt(remaining)}</span></div>
-      <div class="presale-row"><span class="presale-key">Rate</span><span class="presale-val">350,000 / ETH</span></div>
-      <div class="presale-row"><span class="presale-key">Min Buy</span><span class="presale-val">0.01 ETH (~$${Math.round(ethUsd*0.01)})</span></div>
-      <div class="presale-row"><span class="presale-key">Hard Cap</span><span class="presale-val">100 ETH</span></div>
-      <div class="presale-row"><span class="presale-key">Ends</span><span class="presale-val">June 27, 2026</span></div>
-      <div class="progress-bar">
-        <div class="progress-label"><span>Sold ${pct}%</span><span>${fmt(sold)} / 35M</span></div>
-        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-      </div>`;
+    document.getElementById('carrot-remaining').textContent = (remaining/1000000).toFixed(2) + 'M';
+    document.getElementById('presale-body').innerHTML =
+      '<div class="presale-row"><span class="presale-key">Status</span><span class="presale-val ' + (active?'green':'red') + '">' + (active?'Active':'Ended') + '</span></div>' +
+      '<div class="presale-row"><span class="presale-key">ETH Raised</span><span class="presale-val">' + Number(raised).toFixed(4) + ' ETH</span></div>' +
+      '<div class="presale-row"><span class="presale-key">USD Value</span><span class="presale-val green">$' + fmt(Math.round(raised*ethUsd)) + '</span></div>' +
+      '<div class="presale-row"><span class="presale-key">CARROT Left</span><span class="presale-val orange">' + fmt(remaining) + '</span></div>' +
+      '<div class="presale-row"><span class="presale-key">Rate</span><span class="presale-val">350,000 CARROT / ETH</span></div>' +
+      '<div class="presale-row"><span class="presale-key">Min Buy</span><span class="presale-val">0.01 ETH (~$' + Math.round(ethUsd*0.01) + ')</span></div>' +
+      '<div class="presale-row"><span class="presale-key">Ends</span><span class="presale-val">June 27, 2026</span></div>' +
+      '<div class="progress-bar"><div class="progress-label"><span>Sold ' + pct + '%</span><span>' + fmt(sold) + ' / 35M</span></div><div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div></div>';
   } catch(e) { console.error(e); }
 }
 
-// ── PLAYER TASKS ──
-async function loadPlayer() {
-  const wallet = document.getElementById('wallet-input').value.trim();
-  if (!wallet || wallet.length < 10) {
-    setStatus('Please enter a valid wallet address', 'error');
-    return;
-  }
-  _currentWallet = wallet;
-  saveRecentWallet(wallet);
-  renderRecentWallets('');
-  setStatus('Loading your game data...', 'loading');
-  document.getElementById('tasks-badge').textContent = 'Loading...';
-
-  try {
-    // Use cached leaderboard if available, else fetch
-    const presaleResp = await fetchProxy('/presale/status');
-    const presale = presaleResp;
-
-    let lb = _allLeaderboard;
-    if (!lb.length) {
-      const leaderboard = await fetchProxy('/leaderboard?limit=100');
-      lb = leaderboard.leaderboard || [];
-      _allLeaderboard = lb;
-    }
-
-    // Find player in leaderboard
-    const player = lb.find(e =>
-      e.walletAddress && e.walletAddress.toLowerCase() === wallet.toLowerCase()
-    );
-
-    if (!player) {
-      // Player exists but not on leaderboard yet — show starter tasks
-      renderStarterTasks(wallet, presale);
-      setStatus('✅ Wallet found — showing starter guide', 'success');
-      switchToTasksTab();
-      return;
-    }
-
-    renderPlayerTasks(player, presale, wallet);
-    setStatus(`✅ Loaded data for ${player.xHandle || wallet.slice(0,10)+'...'}`, 'success');
-    switchToTasksTab();
-
-  } catch(e) {
-    setStatus(`Error: ${e.message}`, 'error');
-  }
-}
-
-function setStatus(msg, type) {
-  const el = document.getElementById('wallet-status');
-  el.textContent = msg;
-  el.className = `wallet-status ${type}`;
-}
-
-// ── RECENT WALLETS ───────────────────────────────────────────────────────
-function saveRecentWallet(wallet) {
-  if (!wallet || wallet.length < 10) return;
-  try {
-    let recents = JSON.parse(localStorage.getItem('mantis_recent_wallets') || '[]');
-    recents = recents.filter(w => w !== wallet); // remove if already exists
-    recents.unshift(wallet); // add to front
-    recents = recents.slice(0, 5); // keep max 5
-    localStorage.setItem('mantis_recent_wallets', JSON.stringify(recents));
-  } catch(e) {}
-}
-
-function getRecentWallets() {
-  try {
-    return JSON.parse(localStorage.getItem('mantis_recent_wallets') || '[]');
-  } catch(e) { return []; }
-}
-
-function renderRecentWallets(filter) {
-  const container = document.getElementById('recent-wallets-row');
-  const recents = getRecentWallets();
-  const filtered = filter ? recents.filter(w => w.toLowerCase().includes(filter.toLowerCase())) : recents;
-
-  if (!filtered.length) {
-    container.style.display = 'none';
-    return;
-  }
-
-  container.style.display = 'flex';
-  const existing = container.querySelectorAll('.recent-wallet-btn');
-  existing.forEach(e => e.remove());
-
-  filtered.forEach(wallet => {
-    const btn = document.createElement('button');
-    btn.className = 'recent-wallet-btn';
-    btn.textContent = wallet.slice(0,6) + '...' + wallet.slice(-4);
-    btn.title = wallet;
-    btn.onclick = () => {
-      document.getElementById('wallet-input').value = wallet;
-      container.style.display = 'none';
-      loadPlayer();
-    };
-    container.appendChild(btn);
-  });
-}
-
-function filterRecent(val) {
-  renderRecentWallets(val);
-}
-
-// ── STORAGE ───────────────────────────────────────────────────────────────
-let _currentWallet = '';
-const TODAY = new Date().toISOString().slice(0, 10); // "2026-05-30"
-
-function sKey(wallet, taskId) {
-  return `mantis_${wallet.toLowerCase()}_${taskId}`;
-}
-function isDone(wallet, taskId) {
-  try {
-    const v = localStorage.getItem(sKey(wallet, taskId));
-    if (!v) return false;
-    const { date, done } = JSON.parse(v);
-    // Daily tasks: only done if marked today
-    const dailyTasks = ['press_btn','potion'];
-    if (dailyTasks.includes(taskId)) return done && date === TODAY;
-    return done;
-  } catch(e) { return false; }
-}
-function setDone(wallet, taskId, val) {
-  try {
-    localStorage.setItem(sKey(wallet, taskId), JSON.stringify({ done: val, date: TODAY }));
-  } catch(e) {}
-}
-
-window.toggleTask = function(taskId) {
-  if (!_currentWallet) return;
-  const btn = document.getElementById('btn_' + taskId);
-  const row = document.getElementById('row_' + taskId);
-  const nowDone = !isDone(_currentWallet, taskId);
-  setDone(_currentWallet, taskId, nowDone);
-  btn.textContent = nowDone ? '✅ Done' : 'Mark as done';
-  btn.classList.toggle('marked', nowDone);
-  row.classList.toggle('done', nowDone);
-  row.querySelector('.task-check').textContent = nowDone ? '✅' : '🔲';
-}
-
-// ── TASK RENDERER ─────────────────────────────────────────────────────────
-// apiDone = verified by live API data
-// taskId  = storage key; if set, shows Mark as done button
-function task(apiDone, title, desc, link, linkText, linkColor='', taskId='') {
-  const manDone = taskId && _currentWallet ? isDone(_currentWallet, taskId) : false;
-  const done = apiDone || manDone;
-  const id = taskId ? ` id="row_${taskId}"` : '';
-  const showBtn = taskId && !apiDone; // only show button if API can't verify it
-  const markBtn = showBtn ? `
-    <button id="btn_${taskId}" class="mark-done-btn ${manDone?'marked':''}" onclick="toggleTask('${taskId}')">
-      ${manDone ? '✅ Done' : 'Mark as done'}
-    </button>` : '';
-  return `<div class="task-item ${done?'done':''}"${id}>
-    <div class="task-check">${done?'✅':'🔲'}</div>
-    <div class="task-body">
-      <div class="task-title">${title}</div>
-      <div class="task-desc">${desc}</div>
-      ${link ? `<a href="${link}" target="_blank" class="task-link ${linkColor}">${linkText} →</a>` : ''}
-      ${markBtn}
-    </div>
-  </div>`;
-}
-
-function pathHeader(label, emoji, type) {
-  return `<div class="path-section"><div class="path-label ${type}">${emoji} ${label}</div>`;
-}
-
-function pathHeader(label, emoji, type) {
-  return `<div class="path-section"><div class="path-label ${type}">${emoji} ${label}</div>`;
-}
-
-function renderAssessment(wallet) {
-  const body = document.getElementById('tasks-body');
-  document.getElementById('tasks-badge').textContent = 'Quick Setup';
-
-  const questions = [
-    { id: 'steal', label: "What's your current steal multiplier?", options: ['0.2x (just started)', '0.25–0.5x', '0.5–1.0x', '1.0x+', '1.5x+', '2.0x+'] },
-    { id: 'farm', label: 'Do you have a Carrot Farm?', options: ['No farm yet', 'Farm Level 1', 'Farm Level 2', 'Farm Level 3+'] },
-    { id: 'breed', label: "What's your current breed?", options: ['Sprout (starter)', 'Meadow / Spark / Burrow', 'Bandit (1.8x)', 'Moonburrow (free)', 'Jackalope (free)'] },
-    { id: 'social', label: 'What have you connected?', options: ['Nothing yet', 'X (Twitter)', 'Discord', 'Both X + Discord'] },
-    { id: 'party', label: 'Are you in a party?', options: ['Not in a party', 'In a party'] },
-    { id: 'carrots', label: 'Roughly how many total carrots earned?', options: ['Under 1,000', '1,000–5,000', '5,000–10,000', '10,000–25,000', '25,000+'] },
-  ];
-
-  const optionsHtml = questions.map(q => `
-    <div class="assessment-question">
-      <label>${q.label}</label>
-      <div class="assessment-options" data-qid="${q.id}">
-        ${q.options.map(o => `<button class="assessment-opt" onclick="selectOpt(this,'${q.id}')">${o}</button>`).join('')}
-      </div>
-    </div>`).join('');
-
-  body.innerHTML = `
-    <div class="assessment-box">
-      <div class="assessment-title">📋 Tell us about your progress</div>
-      <div class="assessment-sub">Your wallet is not in the top 100 yet — no problem! Answer these quick questions and we will build your personalised task list.</div>
-      ${optionsHtml}
-      <button class="assessment-submit" onclick="submitAssessment('${wallet}')">Generate My Task List →</button>
-      <div id="assessment-status" style="margin-top:10px;font-size:12px;color:var(--red);font-family:'Space Mono',monospace;"></div>
-    </div>`;
-}
-
-window.selectOpt = function(btn, qid) {
-  const group = btn.closest('[data-qid]');
-  group.querySelectorAll('.assessment-opt').forEach(b => b.classList.remove('selected'));
-  btn.classList.add('selected');
-}
-
-window.submitAssessment = function(wallet) {
-  const answers = {};
-  document.querySelectorAll('[data-qid]').forEach(group => {
-    const qid = group.dataset.qid;
-    const selected = group.querySelector('.selected');
-    answers[qid] = selected ? selected.textContent.trim() : null;
-  });
-
-  const unanswered = Object.entries(answers).filter(([k,v]) => !v);
-  if (unanswered.length) {
-    document.getElementById('assessment-status').textContent = 'Please answer all questions before continuing.';
-    return;
-  }
-
-  // Build synthetic player from answers
-  const stealMap = {'0.2x (just started)':0.2,'0.25–0.5x':0.3,'0.5–1.0x':0.75,'1.0x+':1.0,'1.5x+':1.5,'2.0x+':2.0};
-  const steal = stealMap[answers.steal] || 0.2;
-  const stealLevel = steal <= 0.2 ? 0 : steal <= 0.5 ? 2 : steal <= 1.0 ? 4 : steal <= 1.5 ? 6 : 9;
-  const regenLevel = steal <= 0.5 ? 1 : steal <= 1.0 ? 3 : steal <= 1.5 ? 5 : 8;
-  const farmLevel = answers.farm === 'No farm yet' ? 0 : answers.farm === 'Farm Level 1' ? 1 : answers.farm === 'Farm Level 2' ? 2 : 3;
-  const breedMap = {'Sprout (starter)':'sprout','Meadow / Spark / Burrow':'meadow','Bandit (1.8x)':'bandit','Moonburrow (free)':'moonburrow','Jackalope (free)':'jackalope'};
-  const breed = breedMap[answers.breed] || 'sprout';
-  const hasX = answers.social === 'X (Twitter)' || answers.social === 'Both X + Discord';
-  const hasDiscord = answers.social === 'Discord' || answers.social === 'Both X + Discord';
-  const inParty = answers.party === 'In a party';
-  const carrotMap = {'Under 1,000':500,'1,000–5,000':3000,'5,000–10,000':7500,'10,000–25,000':17000,'25,000+':30000};
-  const totalCarrots = carrotMap[answers.carrots] || 500;
-  const burned = Math.round(totalCarrots * 0.4);
-
-  const syntheticPlayer = {
-    rank: '100+', totalCarrotsEarned: totalCarrots, carrotBalance: Math.round(totalCarrots * 0.2),
-    stealMultiplier: steal, stealLevel, regenLevel, bunnyBreed: breed, bunnyClass: 'warrior',
-    xHandle: hasX ? 'connected' : null, carrotsBurned: burned, totalClicks: Math.round(totalCarrots / steal),
-    referralCode: 'CHECK IN GAME', energyPotionCost: 100
-  };
-
-  // Store farm level in localStorage
-  if (farmLevel >= 1) setDone(wallet, 'farm_l1', true);
-  if (farmLevel >= 2) setDone(wallet, 'farm_l2', true);
-  if (farmLevel >= 3) setDone(wallet, 'farm_l3', true);
-  if (inParty) setDone(wallet, 'party', true);
-  if (hasDiscord) setDone(wallet, 'connect_discord', true);
-
-  renderPlayerTasks(syntheticPlayer, {}, wallet);
-  document.getElementById('tasks-badge').textContent = 'Your Tasks (Self-assessed)';
-  switchToTasksTab();
-}
-
-function renderStarterTasks(wallet, presale) {
-  // Show assessment instead of generic starter tasks
-  renderAssessment(wallet);
-}
-
-function renderPlayerTasks(player, presale, wallet) {
-  const body = document.getElementById('tasks-body');
-
-  const rank = player.rank || '?';
-  const totalCarrots = player.totalCarrotsEarned || 0;
-  const balance = player.carrotBalance || 0;
-  const steal = parseFloat(player.stealMultiplier || 0.2);
-  const breed = (player.bunnyBreed || 'sprout').toLowerCase();
-  const bunnyClass = (player.bunnyClass || 'none').toLowerCase();
-  const stealLevel = player.stealLevel || 0;
-  const regenLevel = player.regenLevel || 0;
-  const referralCode = player.referralCode || '?';
-  const xHandle = player.xHandle;
-  const burned = player.carrotsBurned || 0;
-  const totalClicks = player.totalClicks || 0;
-
-  // Farm level from stored progress
-  const farmLevel = isDone(wallet,'farm_l3') ? 3 : isDone(wallet,'farm_l2') ? 2 : isDone(wallet,'farm_l1') ? 1 : 0;
-
-  // Steal progression targets
-  const stealTargets = [0.5, 1.0, 1.5, 2.0, 2.25];
-  const nextStealTarget = stealTargets.find(t => steal < t) || null;
-
-  // Regen progression targets
-  const regenTargets = [3, 6, 10];
-  const nextRegenTarget = regenTargets.find(t => regenLevel < t) || null;
-
-  // Carrot milestones
-  const carrotMilestones = [1000, 5000, 10000, 25000, 50000, 100000];
-  const nextCarrotMilestone = carrotMilestones.find(m => totalCarrots < m);
-
-  // Click milestones
-  const clickMilestones = [100, 1000, 10000, 100000];
-  const nextClickMilestone = clickMilestones.find(m => totalClicks < m);
-
-  // Burn milestones
-  const burnMilestones = [10000, 25000, 50000];
-  const nextBurnMilestone = burnMilestones.find(m => burned < m);
-
-  const goodBreed = !['sprout','none',''].includes(breed);
-  const canStake = balance > 2000;
-
-  document.getElementById('tasks-badge').textContent = `Rank #${rank}`;
-
-  body.innerHTML = `
-    <div class="player-strip">
-      <div class="player-strip-item"><div class="player-strip-label">Rank</div><div class="player-strip-val green">#${rank}</div></div>
-      <div class="player-strip-item"><div class="player-strip-label">Carrots</div><div class="player-strip-val">${fmt(totalCarrots)}</div></div>
-      <div class="player-strip-item"><div class="player-strip-label">Balance</div><div class="player-strip-val">${fmt(balance)}</div></div>
-      <div class="player-strip-item"><div class="player-strip-label">Steal</div><div class="player-strip-val">${steal}x</div></div>
-      <div class="player-strip-item"><div class="player-strip-label">Breed</div><div class="player-strip-val">${breed}</div></div>
-      <div class="player-strip-item"><div class="player-strip-label">Clicks</div><div class="player-strip-val">${fmt(totalClicks)}</div></div>
-    </div>
-
-    ${pathHeader('FREE PATH — Daily Grind', '🆓', 'free')}
-      ${task(false, '⚡ Press the button until energy hits 0',
-        'Drain energy completely, let it refill, repeat. Your steal multiplier determines how many carrots each press earns.',
-        'https://bunnybutton.xyz', 'Press the Button', '', 'press_btn')}
-      ${task(false, '💊 Use your free daily Energy Potion',
-        'After energy hits 0 → Shop → Energy Potion. Fully refills once per day for free. That is a whole extra session at no cost.',
-        'https://bunnybutton.xyz/shop', 'Open Shop', '', 'potion')}
-      ${task(false, '🌾 Collect your farm carrots',
-        'Farm caps at 8 hours offline. If you do not collect, it stops earning. Farm tab → claim before the bar fills.',
-        'https://bunnybutton.xyz/farm', 'Open Farm', '', 'collect_farm')}
-    </div>
-
-    ${pathHeader('UPGRADE PATH — Get Stronger Step by Step', '📈', 'free')}
-      ${farmLevel === 0
-        ? task(false, '🌾 Buy Farm Level 1 — start earning passively',
-            'Farm tab → buy Level 1. Earns carrots offline. Do this before 3+ stat upgrades.',
-            'https://bunnybutton.xyz/farm', 'Open Farm', '', 'farm_l1')
-        : farmLevel === 1
-        ? task(false, '🌾 Upgrade Farm to Level 2',
-            'Farm Level 1 done. Level 2 increases passive carrot income. Farm tab → Upgrades.',
-            'https://bunnybutton.xyz/farm', 'Open Farm', '', 'farm_l2')
-        : farmLevel === 2
-        ? task(false, '🌾 Upgrade Farm to Level 3',
-            'Farm Level 2 done. Level 3 gives significantly more carrots per second.',
-            'https://bunnybutton.xyz/farm', 'Open Farm', '', 'farm_l3')
-        : task(true, `🌾 Farm Level ${farmLevel}+ — keep upgrading`, 'Great progress. Keep upgrading the farm for more passive income.', 'https://bunnybutton.xyz/farm', 'Open Farm', '', '')}
-
-      ${nextStealTarget
-        ? task(steal >= nextStealTarget, `🗡️ Upgrade Steal to ${nextStealTarget}x (at ${steal}x now)`,
-            steal >= nextStealTarget
-              ? `Steal ${steal}x reached. Next: ${stealTargets[stealTargets.indexOf(nextStealTarget)+1] || 'max'}x`
-              : `Shop → Steal. Need ${(nextStealTarget - steal).toFixed(2)}x more. Steal multiplies every carrot you earn — most powerful upgrade.`,
-            'https://bunnybutton.xyz/shop', 'Open Shop', '', 'steal_up')
-        : task(true, `🗡️ Steal at ${steal}x — fully upgraded!`, 'Maximum steal reached.', '', '', '', '')}
-
-      ${nextRegenTarget
-        ? task(regenLevel >= nextRegenTarget, `⚡ Upgrade Regen to level ${nextRegenTarget} (at level ${regenLevel} now)`,
-            regenLevel >= nextRegenTarget
-              ? `Regen level ${regenLevel} done. Next target: level ${regenTargets[regenTargets.indexOf(nextRegenTarget)+1] || 'max'}`
-              : `Shop → Regen. Faster refill = more sessions = more carrots. Target level ${nextRegenTarget}.`,
-            'https://bunnybutton.xyz/shop', 'Open Shop', '', 'regen_up')
-        : task(true, `⚡ Regen maxed at level ${regenLevel}!`, 'Max regen reached.', '', '', '', '')}
-
-      ${nextCarrotMilestone
-        ? task(totalCarrots >= nextCarrotMilestone,
-            `🥕 Reach ${fmt(nextCarrotMilestone)} total carrots (${fmt(totalCarrots)} so far)`,
-            totalCarrots >= nextCarrotMilestone
-              ? `${fmt(nextCarrotMilestone)} milestone hit! ${nextCarrotMilestone === 25000 ? 'Jackalope breed (1.5x steal) now unlocked for FREE!' : 'Check Streaks tab for rewards.'}`
-              : `${fmt(nextCarrotMilestone - totalCarrots)} more to go. ${nextCarrotMilestone === 25000 ? 'Hitting 25,000 unlocks Jackalope (1.5x steal) for FREE!' : 'Keep pressing daily.'}`,
-            'https://bunnybutton.xyz', 'Keep Pressing', '', '')
-        : task(true, '🥕 All carrot milestones done!', 'Incredible.', '', '', '', '')}
-
-      ${nextClickMilestone
-        ? task(totalClicks >= nextClickMilestone,
-            `👆 Reach ${fmt(nextClickMilestone)} total clicks (${fmt(totalClicks)} so far)`,
-            totalClicks >= nextClickMilestone
-              ? `${fmt(nextClickMilestone)} clicks done! Claim reward in Streaks tab.`
-              : `${fmt(nextClickMilestone - totalClicks)} more clicks needed. Streaks tab → Milestones → claim when done.`,
-            'https://bunnybutton.xyz/streaks', 'View Milestones', '', '')
-        : task(true, '👆 All click milestones done!', 'Incredible.', '', '', '', '')}
-    </div>
-
-    ${pathHeader('BREED PATH — Unlock Better Bunnies Free', '🐰', 'free')}
-      ${task(!!xHandle, '🐦 Connect X account',
-        xHandle ? `Connected as ${xHandle}` : 'Wallet menu → connect X. Handle shows on leaderboard. Completes a quest.',
-        'https://bunnybutton.xyz/wallet', 'Open Wallet Settings', '', 'connect_x')}
-      ${task(steal >= 2.25, `🌙 Reach 2.25x steal → FREE Moonburrow breed (${steal}x / 2.25x)`,
-        steal >= 2.25 ? 'Moonburrow unlocked! 1.25x steal breed for free.'
-          : `${(2.25 - steal).toFixed(2)}x more steal needed. Shop → Steal upgrades.`,
-        'https://bunnybutton.xyz/shop', 'Buy Steal Upgrades', '', '')}
-      ${task(totalCarrots >= 25000, `🐇 Earn 25,000 carrots → FREE Jackalope breed (${fmt(totalCarrots)} / 25,000)`,
-        totalCarrots >= 25000 ? 'Jackalope unlocked! 1.5x steal breed for free.'
-          : `${fmt(25000 - totalCarrots)} more needed. No spending — just press daily.`,
-        'https://bunnybutton.xyz', 'Keep Pressing', '', '')}
-    </div>
-
-    ${pathHeader('SOCIAL PATH — Free Bonuses', '👥', 'social')}
-      ${task(false, `👥 Refer 2 friends → unlock Parties (code: ${referralCode})`,
-        `Share code ${referralCode} on X or Discord. 2 sign-ups = Parties unlock (+5% bonus per press for group).`,
-        'https://bunnybutton.xyz/wallet', 'Get Referral Link', 'blue', 'refer')}
-      ${task(false, '🎉 Join a party for group bonus',
-        'Party tab → join any party. Full 5 members = +5% per press for everyone. Ask in Bunny Button Discord.',
-        'https://bunnybutton.xyz/party', 'Browse Parties', 'blue', 'party')}
-      ${task(false, '🎬 Submit content → Creator Program rewards',
-        'Post about Bunny Button on X, then submit URL at Creator Program. Rewards: crates, tokens, unique items.',
-        'https://bunnybutton.xyz/creator-program', 'Creator Program', 'blue', 'creator')}
-    </div>
-
-    ${pathHeader('PAID PATH — Accelerate Fast', '⚡', 'paid')}
-      ${task(goodBreed && breed !== 'sprout',
-        `🐰 Upgrade breed — ${breed} (target: Bandit = 1.8x steal, ~$15)`,
-        goodBreed && breed !== 'sprout'
-          ? `${breed} breed active. Consider Bandit (1.8x steal) for maximum carrots per press.`
-          : 'Sprout = 0.2x steal only. Bandit = 1.8x steal (~$15 ETH). Fastest way to multiply income. Profile → Change Breed.',
-        'https://bunnybutton.xyz/profile', 'Change Breed', 'orange', 'breed_up')}
-      ${nextBurnMilestone
-        ? task(burned >= nextBurnMilestone,
-            `🔥 Burn ${fmt(nextBurnMilestone)} carrots on upgrades (${fmt(burned)} burned so far)`,
-            burned >= nextBurnMilestone
-              ? `${fmt(nextBurnMilestone)} burn milestone hit! Next: ${fmt(burnMilestones[burnMilestones.indexOf(nextBurnMilestone)+1] || nextBurnMilestone)}`
-              : `${fmt(nextBurnMilestone - burned)} more to spend on upgrades. Shop upgrades count automatically. Burnt Offerings quest = 5,000 carrot reward at 50,000 burned.`,
-            'https://bunnybutton.xyz/shop', 'Open Shop', 'orange', '')
-        : task(true, '🔥 Burnt Offerings complete! 5,000 carrot reward earned.', '', '', '', '', '')}
-      ${task(false, '🎁 Open a Carrot Crate for gear bonus',
-        'Gacha → open a Crate. Cape (+steal), Boots (+regen), or Hat (+energy). Wait until steal is level 3+ before opening.',
-        'https://bunnybutton.xyz/gacha', 'Open Gacha', 'orange', 'crate')}
-      ${task(false, `💰 Stake surplus carrots for APY (balance: ${fmt(balance)})`,
-        canStake
-          ? `${fmt(balance)} carrots idle. Farm tab → Stake. Lock 30/90/365 days for APY. Only stake what you will not need for upgrades soon.`
-          : 'Once balance exceeds 2,000, stake surplus in Farm tab → Stake for yield.',
-        'https://bunnybutton.xyz/farm', 'Open Farm / Stake', 'orange', 'stake')}
-      ${task(false, '🥕 Buy CARROT in presale — 1.4x discount',
-        'Presale: 350K per ETH. Launch: 250K per ETH. Buy now = 40% more CARROT. Ends June 27, 2026. Min 0.01 ETH.',
-        'https://bunnybutton.xyz/presale', 'Join Presale', 'orange', 'presale')}
-    </div>`;
+function submitSignup() {
+  const wallet = document.getElementById('signup-wallet').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const status = document.getElementById('signup-status');
+  if (!wallet || !email) { status.textContent = 'Please fill in both fields.'; status.style.color = 'var(--red)'; return; }
+  status.textContent = 'Coming soon — email signup backend is being built. Follow @newguy_gn on X for updates.';
+  status.style.color = 'var(--orange)';
 }
 
 async function refresh() {
   await Promise.all([loadLeaderboard(), loadStats()]);
-  document.getElementById('last-updated').textContent =
-    'Last updated: ' + new Date().toLocaleTimeString() + ' — auto-refreshes every 60s';
+  document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString() + ' — auto-refreshes every 60s';
 }
 
+renderQuests();
 refresh();
 setInterval(refresh, 60000);
-
-// Auto-fill last used wallet on page load and auto-load tasks
-document.addEventListener('DOMContentLoaded', function() {
-  const recents = getRecentWallets();
-  if (recents.length) {
-    const input = document.getElementById('wallet-input');
-    input.value = recents[0];
-    renderRecentWallets('');
-  }
-});
-
-// Also run immediately in case DOMContentLoaded already fired
-(function tryAutoFill() {
-  const recents = getRecentWallets();
-  const input = document.getElementById('wallet-input');
-  if (recents.length && input) {
-    input.value = recents[0];
-    renderRecentWallets('');
-  }
-})();
-
-// Register for alerts
-async function registerAlerts() {
-  const wallet = document.getElementById('signup-wallet').value.trim();
-  const email = document.getElementById('signup-email').value.trim();
-  const status = document.getElementById('signup-status');
-
-  if (!wallet || wallet.length < 10) {
-    status.style.color = 'var(--red)';
-    status.textContent = 'Please enter a valid wallet address.';
-    return;
-  }
-  if (!email || !email.includes('@')) {
-    status.style.color = 'var(--red)';
-    status.textContent = 'Please enter a valid email address.';
-    return;
-  }
-
-  status.style.color = 'var(--muted)';
-  status.textContent = 'Registering...';
-
-  try {
-    const res = await fetch('/bunny/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet, email })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      status.style.color = 'var(--green-light)';
-      status.textContent = '✅ Registered! You will receive your first email within the hour.';
-    } else {
-      status.style.color = 'var(--red)';
-      status.textContent = 'Error: ' + (data.error || 'Something went wrong.');
-    }
-  } catch(e) {
-    status.style.color = 'var(--red)';
-    status.textContent = 'Error: ' + e.message;
-  }
-}
-
-// Tab switching
-function switchTab(name) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
-  if (name === 'tasks') renderQuests();
-
-}
-
-// Auto-switch to tasks tab after wallet load — patched after definition
-function switchToTasksTab() {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-tasks').classList.add('active');
-  const taskBtn = document.querySelector('.tab-btn:nth-child(2)');
-  if (taskBtn) taskBtn.classList.add('active');
-}
 </script>
 </body>
 </html>
