@@ -137,6 +137,24 @@
   .error-msg { color:var(--red); font-size:11px; padding:14px 16px; font-family:'Space Mono',monospace; }
 
   footer { text-align:center; padding:20px; font-size:11px; color:var(--muted); letter-spacing:2px; border-top:1px solid rgba(255,255,255,0.07); font-family:'Space Mono',monospace; position:relative; z-index:2; }
+
+  /* MARK DONE BUTTON */
+  .mark-done-btn {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+  .mark-done-btn:hover { border-color: var(--green-light); color: var(--green-light); }
+  .mark-done-btn.marked { border-color: var(--green); color: var(--green-light); background: rgba(46,204,113,0.08); cursor: default; }
   footer a { color:var(--green-light); text-decoration:none; }
 
   /* PLAYER STATS STRIP */
@@ -352,6 +370,7 @@ async function loadPlayer() {
     setStatus('Please enter a valid wallet address', 'error');
     return;
   }
+  _currentWallet = wallet;
   setStatus('Loading your game data...', 'loading');
   document.getElementById('tasks-badge').textContent = 'Loading...';
 
@@ -390,13 +409,60 @@ function setStatus(msg, type) {
   el.className = `wallet-status ${type}`;
 }
 
-function task(done, title, desc, link, linkText, linkColor='') {
-  return `<div class="task-item ${done?'done':''}">
-    <div class="task-check">${done ? '✅' : '🔲'}</div>
+// localStorage helpers
+function storageKey(wallet, taskId) {
+  return `mantis_task_${wallet.toLowerCase()}_${taskId}`;
+}
+function isManuallyDone(wallet, taskId) {
+  try { return localStorage.getItem(storageKey(wallet, taskId)) === '1'; } catch(e) { return false; }
+}
+function markManuallyDone(wallet, taskId) {
+  try { localStorage.setItem(storageKey(wallet, taskId), '1'); } catch(e) {}
+}
+function unmarkManuallyDone(wallet, taskId) {
+  try { localStorage.removeItem(storageKey(wallet, taskId)); } catch(e) {}
+}
+
+// Current wallet for mark-done callbacks
+let _currentWallet = '';
+
+window.toggleTask = function(taskId) {
+  if (!_currentWallet) return;
+  const btn = document.getElementById('btn_' + taskId);
+  const row = document.getElementById('row_' + taskId);
+  if (isManuallyDone(_currentWallet, taskId)) {
+    unmarkManuallyDone(_currentWallet, taskId);
+    btn.textContent = 'Mark as done';
+    btn.classList.remove('marked');
+    row.classList.remove('done');
+    row.querySelector('.task-check').textContent = '🔲';
+  } else {
+    markManuallyDone(_currentWallet, taskId);
+    btn.textContent = '✅ Done';
+    btn.classList.add('marked');
+    row.classList.add('done');
+    row.querySelector('.task-check').textContent = '✅';
+  }
+}
+
+// task() — auto=true means verified by API, auto=false means manual mark-done button shown
+function task(done, title, desc, link, linkText, linkColor='', taskId='', manual=false) {
+  const manualDone = manual && _currentWallet ? isManuallyDone(_currentWallet, taskId) : false;
+  const isDone = done || manualDone;
+  const id = taskId ? ` id="row_${taskId}"` : '';
+
+  const markBtn = (manual && taskId && !done) ? `
+    <button id="btn_${taskId}" class="mark-done-btn ${manualDone ? 'marked' : ''}" onclick="toggleTask('${taskId}')">
+      ${manualDone ? '✅ Done' : 'Mark as done'}
+    </button>` : '';
+
+  return `<div class="task-item ${isDone?'done':''}"${id}>
+    <div class="task-check">${isDone ? '✅' : '🔲'}</div>
     <div class="task-body">
       <div class="task-title">${title}</div>
       <div class="task-desc">${desc}</div>
       ${link ? `<a href="${link}" target="_blank" class="task-link ${linkColor}">${linkText} →</a>` : ''}
+      ${markBtn}
     </div>
   </div>`;
 }
@@ -416,19 +482,19 @@ function renderStarterTasks(wallet, presale) {
     </div>
 
     ${pathHeader('FREE PATH — Start Here', '🆓', 'free')}
-      ${task(false, 'Press the button to earn your first carrots', 'Open Bunny Button and click the big button. Every press earns carrots based on your steal multiplier.', 'https://bunnybutton.xyz', 'Go to Bunny Button')}
-      ${task(false, 'Buy your first Steal upgrade', 'Steal multiplier = more carrots per press. This is the most important upgrade. Start here before anything else.', 'https://bunnybutton.xyz/shop', 'Open Shop')}
-      ${task(false, 'Buy your first Regen upgrade', 'Faster regen = energy refills faster = more presses per day. Alternate between Steal and Regen upgrades.', 'https://bunnybutton.xyz/shop', 'Open Shop')}
-      ${task(false, 'Buy Farm Level 1 — passive income!', 'The farm makes carrots even while you sleep. Buy it early. Goes in Farm tab, not Shop.', 'https://bunnybutton.xyz/farm', 'Go to Farm')}
-      ${task(false, 'Connect your X (Twitter) account', 'Wallet menu → connect X. Shows your handle on the leaderboard and completes a quest.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings')}
-      ${task(false, 'Connect your Discord account', 'Wallet menu → connect Discord. Unlocks username and Discord commands.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings')}
-      ${task(false, 'Log in every day to build your streak', 'Just signing in counts. 7-day streak = 500 carrot reward. 30-day streak = 2,500 carrots.', 'https://bunnybutton.xyz', 'Open Bunny Button')}
+      ${task(false, 'Press the button to earn your first carrots', 'Open Bunny Button and click the big button. Every press earns carrots based on your steal multiplier.', 'https://bunnybutton.xyz', 'Go to Bunny Button', '', 'press_first', true)}
+      ${task(false, 'Buy your first Steal upgrade', 'Steal multiplier = more carrots per press. This is the most important upgrade. Start here before anything else.', 'https://bunnybutton.xyz/shop', 'Open Shop', '', 'steal_first', true)}
+      ${task(false, 'Buy your first Regen upgrade', 'Faster regen = energy refills faster = more presses per day. Alternate between Steal and Regen upgrades.', 'https://bunnybutton.xyz/shop', 'Open Shop', '', 'regen_first', true)}
+      ${task(false, 'Buy Farm Level 1 — passive income!', 'The farm makes carrots even while you sleep. Buy it early. Goes in Farm tab, not Shop.', 'https://bunnybutton.xyz/farm', 'Go to Farm', '', 'farm_first', true)}
+      ${task(false, 'Connect your X (Twitter) account', 'Wallet menu → connect X. Shows your handle on the leaderboard and completes a quest.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings', '', 'connect_x_s', true)}
+      ${task(false, 'Connect your Discord account', 'Wallet menu → connect Discord. Unlocks username and Discord commands.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings', '', 'connect_discord_s', true)}
+      ${task(false, 'Log in every day to build your streak', 'Just signing in counts. 7-day streak = 500 carrot reward. 30-day streak = 2,500 carrots.', 'https://bunnybutton.xyz', 'Open Bunny Button', '', 'streak_s', true)}
     </div>
 
     ${pathHeader('SOCIAL PATH — Free Bonuses', '👥', 'social')}
-      ${task(false, 'Refer 2 friends to unlock Parties', 'Share your referral code from Wallet menu. When 2 people sign up using it, you unlock Parties — which gives +5% carrots per press for the whole group.', 'https://bunnybutton.xyz/wallet', 'Get Your Referral Code')}
-      ${task(false, 'Join a party for the +5% bonus', 'Once parties are unlocked (after referring 2 friends), go to Party tab and join one. A full 5-person party = +5% bonus on every press.', 'https://bunnybutton.xyz/party', 'Browse Parties')}
-      ${task(false, 'Post content about Bunny Button', 'Make an X post or short video about the game and submit it to the Creator Program. Rewards include carrot crates and tokens.', 'https://bunnybutton.xyz/creator-program', 'Creator Program')}
+      ${task(false, 'Refer 2 friends to unlock Parties', 'Share your referral code from Wallet menu. When 2 people sign up using it, you unlock Parties — which gives +5% carrots per press for the whole group.', 'https://bunnybutton.xyz/wallet', 'Get Your Referral Code', 'blue', 'refer_s', true)}
+      ${task(false, 'Join a party for the +5% bonus', 'Once parties are unlocked (after referring 2 friends), go to Party tab and join one. A full 5-person party = +5% bonus on every press.', 'https://bunnybutton.xyz/party', 'Browse Parties', 'blue', 'party_s', true)}
+      ${task(false, 'Post content about Bunny Button', 'Make an X post or short video about the game and submit it to the Creator Program. Rewards include carrot crates and tokens.', 'https://bunnybutton.xyz/creator-program', 'Creator Program', 'blue', 'creator_s', true)}
     </div>
 
     ${pathHeader('FREE BREED UNLOCKS — Long-Term Goals', '🐰', 'free')}
@@ -482,8 +548,8 @@ function renderPlayerTasks(player, presale, wallet) {
     </div>
 
     ${pathHeader('FREE PATH — Do These Daily', '🆓', 'free')}
-      ${task(false, 'Press the button until energy hits 0', `Your steal is ${steal}x so each press earns well. Keep pressing until energy = 0, then wait for it to refill.`, 'https://bunnybutton.xyz', 'Press the Button')}
-      ${task(false, 'Use your free daily Energy Potion', 'After energy hits 0, go to Shop → Energy Potion. It fully refills your energy once per day. Free extra session!', 'https://bunnybutton.xyz/shop', 'Open Shop')}
+      ${task(false, 'Press the button until energy hits 0', `Your steal is ${steal}x so each press earns well. Keep pressing until energy = 0, then wait for it to refill.`, 'https://bunnybutton.xyz', 'Press the Button', '', 'press_btn', true)}
+      ${task(false, 'Use your free daily Energy Potion', 'After energy hits 0, go to Shop → Energy Potion. It fully refills your energy once per day. Free extra session!', 'https://bunnybutton.xyz/shop', 'Open Shop', '', 'potion', true)}
       ${task(hasFarm, 'Buy Farm Level 1 — passive income while offline', hasFarm ? `Farm active at ${(farmCps*3600).toFixed(1)} carrots/hr. Upgrade it when you can.` : 'Go to Farm tab and buy Level 1. Earns carrots even while you sleep. Do this before more stat upgrades.', 'https://bunnybutton.xyz/farm', 'Open Farm')}
       ${task(goodSteal, `Buy Steal upgrades — currently at ${steal}x (target 1.0x+)`, goodSteal ? 'Steal is solid. Keep upgrading it.' : 'Shop → Steal. Most important upgrade. Keep buying until you reach 1.0x steal.', 'https://bunnybutton.xyz/shop', 'Open Shop')}
       ${task(goodRegen, `Buy Regen upgrades — level ${regenLevel} (target level 3+)`, goodRegen ? 'Regen is good. Alternate with Steal upgrades.' : 'Shop → Regen. Faster refill = more sessions per day. Alternate with Steal upgrades.', 'https://bunnybutton.xyz/shop', 'Open Shop')}
@@ -492,16 +558,16 @@ function renderPlayerTasks(player, presale, wallet) {
     </div>
 
     ${pathHeader('SOCIAL PATH — Free Bonuses', '👥', 'social')}
-      ${task(hasX, 'Connect your X account', hasX ? `Connected as ${xHandle}` : 'Wallet menu → connect X. Completes quest + shows your handle on leaderboard.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings', 'blue')}
-      ${task(false, `Refer friends to unlock parties (your code: ${referralCode})`, `Share code ${referralCode} on X or Discord. 2 referrals = Parties unlocked (+5% bonus per press). You also earn 8% of their carrot earnings.`, 'https://bunnybutton.xyz/wallet', 'Get Referral Link', 'blue')}
-      ${task(false, 'Join a party for group bonus', 'Party tab → join any open party. Full 5-person party = +5% bonus per press for everyone. Ask in Bunny Button Discord.', 'https://bunnybutton.xyz/party', 'Browse Parties', 'blue')}
-      ${task(false, 'Submit content to Creator Program', 'Post about Bunny Button on X, then submit your post URL. Rewards: carrot crates, tokens, unique items.', 'https://bunnybutton.xyz/creator-program', 'Creator Program', 'blue')}
+      ${task(hasX, 'Connect your X account', hasX ? `Connected as ${xHandle} ✅` : 'Wallet menu → connect X. Completes quest + shows your handle on leaderboard.', 'https://bunnybutton.xyz/wallet', 'Open Wallet Settings', 'blue', 'connect_x', false)}
+      ${task(false, `Refer friends to unlock parties (your code: ${referralCode})`, `Share code ${referralCode} on X or Discord. 2 referrals = Parties unlocked (+5% bonus per press). You also earn 8% of their carrot earnings.`, 'https://bunnybutton.xyz/wallet', 'Get Referral Link', 'blue', 'refer', true)}
+      ${task(false, 'Join a party for group bonus', 'Party tab → join any open party. Full 5-person party = +5% bonus per press for everyone. Ask in Bunny Button Discord.', 'https://bunnybutton.xyz/party', 'Browse Parties', 'blue', 'party', true)}
+      ${task(false, 'Submit content to Creator Program', 'Post about Bunny Button on X, then submit your post URL. Rewards: carrot crates, tokens, unique items.', 'https://bunnybutton.xyz/creator-program', 'Creator Program', 'blue', 'creator', true)}
     </div>
 
     ${pathHeader('PAID PATH — Move Up Fast', '⚡', 'paid')}
       ${task(goodBreed, `Upgrade your breed — ${breed} gives ${steal}x steal`, goodBreed ? `${breed} is a good breed. Consider Bandit (1.8x steal) for max carrots.` : `Sprout only gives 0.2x steal. Paid breeds: Meadow ($15, 1x steal), Spark ($15, fast regen), Bandit ($15, 1.8x steal — best value). Go to Profile → Breed Change.`, 'https://bunnybutton.xyz/profile', 'Change Breed', 'orange')}
       ${task(false, 'Open a Carrot Crate for gear bonus', 'Gacha page → open a Crate (~$10 worth of carrots). Get Cape (+steal), Boots (+regen), or Hat (+energy). Wait until steal is at level 3+ before opening.', 'https://bunnybutton.xyz/gacha', 'Open Crates', 'orange')}
-      ${task(canStake, `Stake surplus carrots (balance: ${fmt(balance)})`, canStake ? `You have ${fmt(balance)} carrots. Stake the surplus in Farm tab → Stake. Lock for 30/90/365 days for APY rewards. Only stake what you won't need for upgrades.` : 'Once your carrot balance exceeds 5,000, stake the surplus for APY rewards. Farm tab → Stake.', 'https://bunnybutton.xyz/farm', 'Open Farm / Stake', 'orange')}
+      ${task(false, `Stake surplus carrots (balance: ${fmt(balance)})`, canStake ? `You have ${fmt(balance)} carrots idle. Farm tab → Stake. Lock for 30/90/365 days for APY rewards. Only stake what you won't need for upgrades soon.` : 'Once your carrot balance exceeds 5,000, stake the surplus in Farm tab → Stake for APY rewards.', 'https://bunnybutton.xyz/farm', 'Open Farm / Stake', 'orange', 'stake', true)}
       ${task(hasBurntOfferings, `Burn 50,000 carrots on upgrades for 5,000 carrot reward (${fmt(burned)}/${fmt(50000)})`, hasBurntOfferings ? 'Quest complete! You earned 5,000 carrots.' : `${fmt(50000-burned)} more to burn. Just keep buying upgrades in the Shop — burned carrots count automatically.`, 'https://bunnybutton.xyz/shop', 'Open Shop', 'orange')}
       ${task(false, 'Buy CARROT in presale at 1.4x discount', `Presale price: 350K CARROT per ETH. Launch price: 250K CARROT per ETH. Buying now = 1.4x more CARROT. Min buy: 0.01 ETH.`, 'https://bunnybutton.xyz/presale', 'Join Presale', 'orange')}
     </div>`;
