@@ -466,31 +466,63 @@ function rankClass(r) {
 }
 
 // ── LEADERBOARD ──
+let _allLeaderboard = [];
+let _lbPage = 0;
+const LB_PAGE_SIZE = 20;
+
 async function loadLeaderboard() {
   const body = document.getElementById('leaderboard-body');
   try {
-    const data = await fetchProxy('/leaderboard?limit=15');
-    const lb = data.leaderboard || [];
-    if (!lb.length) { body.innerHTML = '<div class="error-msg">No data</div>'; return; }
-    body.innerHTML = lb.map((e,i) => {
-      const rank = e.rank || (i+1);
-      const name = e.xHandle || (e.walletAddress||'???').slice(0,10)+'...';
-      const carrots = e.totalCarrotsEarned || 0;
-      const breed = e.bunnyBreed || 'sprout';
-      const bc = breedClass(breed);
-      return `<div class="lb-row" style="animation-delay:${i*0.04}s">
-        <div class="lb-rank ${rankClass(rank)}">${rankEmoji(rank)}</div>
-        <div class="lb-name">${name}</div>
-        <div class="lb-right">
-          <div class="lb-carrots">${fmt(carrots)} 🥕</div>
-          <div class="lb-breed"><span class="breed-pill ${bc}">${breed}</span></div>
-        </div>
-      </div>`;
-    }).join('');
+    const data = await fetchProxy('/leaderboard?limit=100');
+    _allLeaderboard = data.leaderboard || [];
+    _lbPage = 0;
+    renderLeaderboardPage();
     document.getElementById('lb-updated').textContent = new Date().toLocaleTimeString();
   } catch(e) {
     body.innerHTML = `<div class="error-msg">${e.message}</div>`;
   }
+}
+
+function renderLeaderboardPage() {
+  const body = document.getElementById('leaderboard-body');
+  const start = _lbPage * LB_PAGE_SIZE;
+  const page = _allLeaderboard.slice(start, start + LB_PAGE_SIZE);
+  const totalPages = Math.ceil(_allLeaderboard.length / LB_PAGE_SIZE);
+
+  body.innerHTML = page.map((e, i) => {
+    const rank = e.rank || (start + i + 1);
+    const name = e.xHandle || (e.walletAddress||'???').slice(0,10)+'...';
+    const carrots = e.totalCarrotsEarned || 0;
+    const breed = e.bunnyBreed || 'sprout';
+    const bc = breedClass(breed);
+    return `<div class="lb-row" style="animation-delay:${i*0.03}s">
+      <div class="lb-rank ${rankClass(rank)}">${rankEmoji(rank)}</div>
+      <div class="lb-name">${name}</div>
+      <div class="lb-right">
+        <div class="lb-carrots">${fmt(carrots)} 🥕</div>
+        <div class="lb-breed"><span class="breed-pill ${bc}">${breed}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Pagination controls
+  if (totalPages > 1) {
+    body.innerHTML += `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-top:1px solid rgba(255,255,255,0.06);">
+        <button onclick="lbPrev()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${_lbPage===0?'var(--muted)':'var(--white)'};padding:5px 12px;cursor:${_lbPage===0?'default':'pointer'};font-size:12px;font-family:'Space Mono',monospace;">← Prev</button>
+        <span style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;">Page ${_lbPage+1} / ${totalPages} · ${_allLeaderboard.length} players</span>
+        <button onclick="lbNext()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:${_lbPage===totalPages-1?'var(--muted)':'var(--white)'};padding:5px 12px;cursor:${_lbPage===totalPages-1?'default':'pointer'};font-size:12px;font-family:'Space Mono',monospace;">Next →</button>
+      </div>`;
+  }
+}
+
+function lbPrev() {
+  if (_lbPage > 0) { _lbPage--; renderLeaderboardPage(); }
+}
+
+function lbNext() {
+  const totalPages = Math.ceil(_allLeaderboard.length / LB_PAGE_SIZE);
+  if (_lbPage < totalPages - 1) { _lbPage++; renderLeaderboardPage(); }
 }
 
 // ── STATS ──
@@ -546,13 +578,16 @@ async function loadPlayer() {
   document.getElementById('tasks-badge').textContent = 'Loading...';
 
   try {
-    // Fetch leaderboard and presale via proxy
-    const [presaleResp, leaderboard] = await Promise.all([
-      fetchProxy('/presale/status'),
-      fetchProxy('/leaderboard?limit=100')
-    ]);
+    // Use cached leaderboard if available, else fetch
+    const presaleResp = await fetchProxy('/presale/status');
     const presale = presaleResp;
-    const lb = leaderboard.leaderboard || [];
+
+    let lb = _allLeaderboard;
+    if (!lb.length) {
+      const leaderboard = await fetchProxy('/leaderboard?limit=100');
+      lb = leaderboard.leaderboard || [];
+      _allLeaderboard = lb;
+    }
 
     // Find player in leaderboard
     const player = lb.find(e =>
