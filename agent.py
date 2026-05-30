@@ -11,6 +11,10 @@ from flask import Flask, jsonify
 
 load_dotenv()
 
+# ── BUNNY BUTTON ────────────────────────────
+from bunny_routes import register_bunny_routes
+from bunny_agent import bunny_session
+
 # ── FLASK HEALTH SERVER ─────────────────────
 app = Flask(__name__)
 
