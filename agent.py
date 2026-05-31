@@ -57,6 +57,15 @@ def mcp():
 def metadata():
     return jsonify(AGENT_METADATA)
 
+@app.route("/bunny")
+def bunny_hub():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "bunny.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
 register_bunny_routes(app)
 
 @app.route("/moody/woke")

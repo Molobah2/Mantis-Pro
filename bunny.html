@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bunny Button Toolkit — Mantis Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1a8a3c;
+    --green-light: #2ecc71;
+    --green-bright: #00ff6a;
+    --dark: #0a1a10;
+    --carrot: #ff7a18;
+    --carrot-light: #ff9d4d;
+    --white: #ffffff;
+    --muted: rgba(255,255,255,0.55);
+    --card-bg: rgba(255,255,255,0.04);
+    --card-border: rgba(255,255,255,0.1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    background: var(--dark);
+    color: var(--white);
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(900px circle at 80% -10%, rgba(255,122,24,0.10), transparent 55%),
+      radial-gradient(900px circle at 0% 0%, rgba(46,204,113,0.10), transparent 50%);
+  }
+
+  /* ── TOP NAV ── */
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+  .nav-left { color: var(--muted); }
+  .nav-left b { color: var(--white); }
+  .nav-left .crumb { color: var(--carrot-light); }
+  .nav a {
+    color: var(--green-light);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav a:hover { color: var(--green-bright); }
+
+  /* ── HEADER ── */
+  .header {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 64px 24px 36px;
+    text-align: center;
+  }
+  .badge {
+    display: inline-block;
+    background: rgba(255,122,24,0.12);
+    border: 1px solid rgba(255,122,24,0.4);
+    border-radius: 20px;
+    padding: 6px 18px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--carrot-light);
+    margin-bottom: 24px;
+    font-family: 'Space Mono', monospace;
+  }
+  .header h1 {
+    font-size: clamp(40px, 7vw, 72px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -2px;
+    margin-bottom: 16px;
+  }
+  .header h1 span { color: var(--carrot); }
+  .header p {
+    font-size: 17px;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.6;
+    max-width: 520px;
+    margin: 0 auto;
+    font-weight: 300;
+  }
+  .select-line {
+    margin-top: 28px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--green-light);
+  }
+
+  /* ── TOOL GRID ── */
+  .grid {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+  }
+
+  .tool {
+    position: relative;
+    display: block;
+    text-decoration: none;
+    color: var(--white);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    padding: 28px 26px;
+    transition: transform 0.25s, border-color 0.25s, background 0.25s;
+    opacity: 0;
+    transform: translateY(14px);
+    animation: rise 0.5s ease forwards;
+  }
+  .tool:hover {
+    transform: translateY(-4px);
+    background: rgba(255,122,24,0.06);
+    border-color: rgba(255,122,24,0.4);
+  }
+  .tool:nth-child(1) { animation-delay: 0.05s; }
+  .tool:nth-child(2) { animation-delay: 0.10s; }
+  .tool:nth-child(3) { animation-delay: 0.15s; }
+  .tool:nth-child(4) { animation-delay: 0.20s; }
+  .tool:nth-child(5) { animation-delay: 0.25s; }
+  .tool:nth-child(6) { animation-delay: 0.30s; }
+
+  @keyframes rise {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .tool-icon { font-size: 30px; margin-bottom: 16px; }
+  .tool-name {
+    font-size: 19px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .tool-desc {
+    font-size: 14px;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.6;
+    margin-bottom: 18px;
+  }
+  .tool-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(46,204,113,0.12);
+    color: var(--green-light);
+    border: 1px solid rgba(46,204,113,0.25);
+  }
+  .tag.calc {
+    background: rgba(255,122,24,0.12);
+    color: var(--carrot-light);
+    border-color: rgba(255,122,24,0.3);
+  }
+  .arrow {
+    color: var(--carrot-light);
+    font-size: 20px;
+    transition: transform 0.2s;
+  }
+  .tool:hover .arrow { transform: translateX(4px); }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid rgba(255,255,255,0.07);
+    padding: 28px 24px;
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    line-height: 1.9;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,0.32);
+  }
+  footer a { color: var(--green-light); text-decoration: none; }
+  footer .warn { color: rgba(255,122,24,0.7); }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-left"><b>MANTIS PRO</b> <span class="crumb">/ Bunny Button</span></div>
+  <a href="/">← Home</a>
+</div>
+
+<div class="header">
+  <div class="badge">🥕 Bunny Button Toolkit</div>
+  <h1>BUNNY <span>TOOLS</span></h1>
+  <p>Free, beginner-friendly tools for the Bunny Button game on Abstract. No setup, no login required for live data — just open and use.</p>
+  <div class="select-line">— Select a tool —</div>
+</div>
+
+<div class="grid">
+
+  <a href="/bunny/leaderboard" class="tool">
+    <div class="tool-icon">🏆</div>
+    <div class="tool-name">Leaderboard</div>
+    <div class="tool-desc">See the top carrot earners and their breed, class and steal power.</div>
+    <div class="tool-foot"><span class="tag">Live Data</span><span class="arrow">→</span></div>
+  </a>
+
+  <a href="/bunny/presale" class="tool">
+    <div class="tool-icon">🎟️</div>
+    <div class="tool-name">Presale Tracker</div>
+    <div class="tool-desc">Track ETH raised, CARROT sold and the countdown to presale close.</div>
+    <div class="tool-foot"><span class="tag">Live Data</span><span class="arrow">→</span></div>
+  </a>
+
+  <a href="/bunny/farm" class="tool">
+    <div class="tool-icon">🌱</div>
+    <div class="tool-name">Farm & Energy Assistant</div>
+    <div class="tool-desc">Never lose yield — see your 8-hour farm cap and energy refill timer.</div>
+    <div class="tool-foot"><span class="tag calc">Tool</span><span class="arrow">→</span></div>
+  </a>
+
+  <a href="/bunny/build" class="tool">
+    <div class="tool-icon">⚙️</div>
+    <div class="tool-name">Loadout Builder</div>
+    <div class="tool-desc">Mix breed, class and gear to see your real steal, regen and max energy.</div>
+    <div class="tool-foot"><span class="tag calc">Calculator</span><span class="arrow">→</span></div>
+  </a>
+
+  <a href="/bunny/value" class="tool">
+    <div class="tool-icon">💰</div>
+    <div class="tool-name">Carrot Value</div>
+    <div class="tool-desc">Convert carrots to CARROT and USD at the live ETH price.</div>
+    <div class="tool-foot"><span class="tag calc">Calculator</span><span class="arrow">→</span></div>
+  </a>
+
+  <a href="/bunny/party" class="tool">
+    <div class="tool-icon">👥</div>
+    <div class="tool-name">Party Finder</div>
+    <div class="tool-desc">Browse open parties and see the bonus each fill level gives.</div>
+    <div class="tool-foot"><span class="tag">Live Data</span><span class="arrow">→</span></div>
+  </a>
+
+</div>
+
+<footer>
+  <div class="warn">⚠ We will never DM you first or ask for your seed phrase.</div>
+  Unofficial community toolkit · not affiliated with Bunny Button<br>
+  Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Mantis Pro · Agent #857
+</footer>
+
+</body>
+</html>
