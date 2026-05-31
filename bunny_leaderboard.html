@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leaderboard — Bunny Button Toolkit</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1a8a3c;
+    --green-light: #2ecc71;
+    --green-bright: #00ff6a;
+    --dark: #0a1a10;
+    --carrot: #ff7a18;
+    --carrot-light: #ff9d4d;
+    --white: #ffffff;
+    --muted: rgba(255,255,255,0.55);
+    --card-bg: rgba(255,255,255,0.04);
+    --card-border: rgba(255,255,255,0.1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    background: var(--dark);
+    color: var(--white);
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(900px circle at 80% -10%, rgba(255,122,24,0.10), transparent 55%),
+      radial-gradient(900px circle at 0% 0%, rgba(46,204,113,0.10), transparent 50%);
+  }
+
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.07);
+    font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: 1px;
+  }
+  .nav-left { color: var(--muted); }
+  .nav-left b { color: var(--white); }
+  .nav-left .crumb { color: var(--carrot-light); }
+  .nav a { color: var(--green-light); text-decoration: none; transition: color 0.2s; }
+  .nav a:hover { color: var(--green-bright); }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  .head { text-align: center; margin-bottom: 32px; }
+  .head .icon { font-size: 40px; margin-bottom: 12px; }
+  .head h1 {
+    font-size: clamp(32px, 5vw, 48px); font-weight: 700;
+    letter-spacing: -1px; margin-bottom: 10px;
+  }
+  .head p { color: rgba(255,255,255,0.65); font-weight: 300; font-size: 15px; }
+
+  .controls {
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+    margin-bottom: 22px;
+  }
+  .search {
+    flex: 1; min-width: 200px;
+    background: var(--card-bg); border: 1px solid var(--card-border);
+    border-radius: 10px; padding: 12px 16px; color: var(--white);
+    font-family: inherit; font-size: 14px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .search:focus { border-color: rgba(255,122,24,0.5); }
+  .search::placeholder { color: rgba(255,255,255,0.35); }
+  .btn {
+    background: rgba(46,204,113,0.12); border: 1px solid rgba(46,204,113,0.3);
+    color: var(--green-light); border-radius: 10px; padding: 12px 20px;
+    font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: 1px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn:hover { background: rgba(46,204,113,0.2); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+
+  .meta {
+    font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 14px; text-align: right;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--muted); text-align: left;
+    padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  thead th.num, tbody td.num { text-align: right; }
+  tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    transition: background 0.15s;
+  }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  tbody td { padding: 14px; font-size: 14px; vertical-align: middle; }
+
+  .rank {
+    font-family: 'Space Mono', monospace; font-weight: 700;
+    color: rgba(255,255,255,0.5); width: 48px;
+  }
+  tr.top .rank { color: var(--carrot); }
+  tr.top1 { background: rgba(255,122,24,0.07); }
+  tr.top1 .rank, tr.top2 .rank, tr.top3 .rank { font-size: 16px; }
+
+  .player { font-weight: 600; }
+  .player .wallet { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--muted); }
+  .carrots { font-family: 'Space Mono', monospace; font-weight: 700; color: var(--green-light); }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 6px;
+    background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .steal { font-family: 'Space Mono', monospace; color: var(--carrot-light); }
+
+  .state {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+    font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 1px;
+  }
+  .state.err { color: var(--carrot-light); }
+  .spinner {
+    width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: var(--carrot); border-radius: 50%;
+    margin: 0 auto 16px; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 620px) {
+    .hide-sm { display: none; }
+    tbody td { padding: 12px 10px; }
+  }
+
+  footer {
+    border-top: 1px solid rgba(255,255,255,0.07); padding: 24px;
+    text-align: center; font-family: 'Space Mono', monospace; font-size: 11px;
+    line-height: 1.9; letter-spacing: 1px; color: rgba(255,255,255,0.3);
+  }
+  footer a { color: var(--green-light); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-left"><b>MANTIS PRO</b> <span class="crumb">/ Bunny Button / Leaderboard</span></div>
+  <a href="/bunny">← Tools</a>
+</div>
+
+<div class="wrap">
+  <div class="head">
+    <div class="icon">🏆</div>
+    <h1>Leaderboard</h1>
+    <p>Top carrot earners on Bunny Button — live, ranked by total carrots.</p>
+  </div>
+
+  <div class="controls">
+    <input id="search" class="search" type="text" placeholder="Search by name or wallet…" autocomplete="off">
+    <button id="refresh" class="btn">↻ Refresh</button>
+  </div>
+
+  <div id="meta" class="meta"></div>
+
+  <div id="content">
+    <div class="state"><div class="spinner"></div>Loading leaderboard…</div>
+  </div>
+</div>
+
+<footer>
+  Unofficial community tool · not affiliated with Bunny Button<br>
+  Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Mantis Pro
+</footer>
+
+<script>
+  const PROXY = "/api/bunny-proxy?endpoint=";
+  const content = document.getElementById("content");
+  const meta = document.getElementById("meta");
+  const searchEl = document.getElementById("search");
+  const refreshBtn = document.getElementById("refresh");
+
+  let rows = [];
+
+  function shortWallet(addr) {
+    if (!addr) return "—";
+    return addr.slice(0, 6) + "…" + addr.slice(-4);
+  }
+  function fmt(n) {
+    n = Number(n) || 0;
+    return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  }
+  function steal(m) {
+    if (m === undefined || m === null) return "—";
+    return (Number(m)).toFixed(2).replace(/\.00$/, "") + "x";
+  }
+
+  async function load() {
+    refreshBtn.disabled = true;
+    content.innerHTML = '<div class="state"><div class="spinner"></div>Loading leaderboard…</div>';
+    meta.textContent = "";
+    try {
+      const url = PROXY + encodeURIComponent("/leaderboard?limit=100");
+      const res = await fetch(url);
+      if (res.status === 429) throw new Error("Rate limited — wait a moment and refresh.");
+      if (!res.ok) throw new Error("Could not reach the leaderboard (status " + res.status + ").");
+      const data = await res.json();
+      rows = data.leaderboard || data || [];
+      if (!Array.isArray(rows) || rows.length === 0) {
+        content.innerHTML = '<div class="state">No players on the board yet.</div>';
+        return;
+      }
+      meta.textContent = "Top " + rows.length + " · updated " + new Date().toLocaleTimeString();
+      render();
+    } catch (e) {
+      content.innerHTML = '<div class="state err">⚠ ' + e.message + '</div>';
+    } finally {
+      refreshBtn.disabled = false;
+    }
+  }
+
+  function render() {
+    const q = searchEl.value.trim().toLowerCase();
+    const list = rows.filter(r => {
+      if (!q) return true;
+      const h = (r.xHandle || "").toLowerCase();
+      const w = (r.walletAddress || "").toLowerCase();
+      return h.includes(q) || w.includes(q);
+    });
+
+    if (list.length === 0) {
+      content.innerHTML = '<div class="state">No players match "' + searchEl.value + '".</div>';
+      return;
+    }
+
+    let html = '<table><thead><tr>' +
+      '<th class="num">#</th>' +
+      '<th>Player</th>' +
+      '<th class="num">Carrots</th>' +
+      '<th class="hide-sm">Breed</th>' +
+      '<th class="hide-sm">Class</th>' +
+      '<th class="num hide-sm">Steal</th>' +
+      '</tr></thead><tbody>';
+
+    list.forEach(r => {
+      const rank = r.rank ?? (rows.indexOf(r) + 1);
+      const topCls = rank === 1 ? "top top1" : rank === 2 ? "top top2" : rank === 3 ? "top top3" : "";
+      const name = r.xHandle
+        ? '<span class="player">@' + r.xHandle + '</span>'
+        : '<span class="player wallet">' + shortWallet(r.walletAddress) + '</span>';
+      html += '<tr class="' + topCls + '">' +
+        '<td class="rank num">' + rank + '</td>' +
+        '<td>' + name + (r.partyName ? ' <span class="pill">' + r.partyName + '</span>' : '') + '</td>' +
+        '<td class="num carrots">' + fmt(r.totalCarrotsEarned) + '</td>' +
+        '<td class="hide-sm"><span class="pill">' + (r.bunnyBreed || "—") + '</span></td>' +
+        '<td class="hide-sm"><span class="pill">' + (r.bunnyClass || "—") + '</span></td>' +
+        '<td class="num steal hide-sm">' + steal(r.stealMultiplier) + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+    content.innerHTML = html;
+  }
+
+  searchEl.addEventListener("input", () => { if (rows.length) render(); });
+  refreshBtn.addEventListener("click", load);
+  load();
+</script>
+
+</body>
+</html>
