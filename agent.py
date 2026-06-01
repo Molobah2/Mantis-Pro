@@ -129,6 +129,15 @@ def litany_dashboard():
     from flask import Response
     return Response(html, mimetype="text/html")
 
+@app.route("/litany/scanner")
+def litany_scanner():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "litany_scanner.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
 @app.route("/api/abstract-rpc", methods=["POST"])
 def abstract_rpc():
     import requests
