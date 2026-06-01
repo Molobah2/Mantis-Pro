@@ -102,6 +102,15 @@ def bunny_build():
     from flask import Response
     return Response(html, mimetype="text/html")
 
+@app.route("/bunny/value")
+def bunny_value():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "bunny_value.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
 register_bunny_routes(app)
 
 @app.route("/moody/woke")
