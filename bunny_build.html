@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loadout Builder — Bunny Button Toolkit</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1a8a3c; --green-light: #2ecc71; --green-bright: #00ff6a;
+    --dark: #0a1a10; --carrot: #ff7a18; --carrot-light: #ff9d4d;
+    --white: #ffffff; --muted: rgba(255,255,255,0.55);
+    --card-bg: rgba(255,255,255,0.04); --card-border: rgba(255,255,255,0.1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Space Grotesk', sans-serif; min-height: 100vh;
+    background: var(--dark); color: var(--white); overflow-x: hidden;
+    background-image:
+      radial-gradient(900px circle at 80% -10%, rgba(255,122,24,0.10), transparent 55%),
+      radial-gradient(900px circle at 0% 0%, rgba(46,204,113,0.10), transparent 50%);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.07); font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: 1px; }
+  .nav-left { color: var(--muted); } .nav-left b { color: var(--white); } .nav-left .crumb { color: var(--carrot-light); }
+  .nav a { color: var(--green-light); text-decoration: none; transition: color 0.2s; } .nav a:hover { color: var(--green-bright); }
+
+  .wrap { max-width: 800px; margin: 0 auto; padding: 48px 24px 80px; }
+  .head { text-align: center; margin-bottom: 28px; }
+  .head .icon { font-size: 40px; margin-bottom: 12px; }
+  .head h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 700; letter-spacing: -1px; margin-bottom: 10px; }
+  .head p { color: rgba(255,255,255,0.65); font-weight: 300; font-size: 15px; max-width: 500px; margin: 0 auto; }
+
+  .pickers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .picker label { display: block; font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+  select {
+    width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border);
+    border-radius: 10px; padding: 12px 14px; color: var(--white); font-family: inherit; font-size: 15px; outline: none; cursor: pointer;
+  }
+  select:focus { border-color: rgba(255,122,24,0.5); }
+
+  .totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+  .tstat { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px; text-align: center; }
+  .tstat .k { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .tstat .v { font-size: 26px; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .tstat.steal .v { color: var(--carrot-light); } .tstat.regen .v { color: var(--green-light); } .tstat.energy .v { color: var(--white); }
+  .est-note { text-align: center; font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-bottom: 24px; }
+
+  .components { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+  .comp { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 16px 18px; }
+  .comp .name { font-weight: 600; font-size: 15px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .comp .tag { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; padding: 2px 8px; border-radius: 5px; background: rgba(255,255,255,0.06); color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-family: 'Space Mono', monospace; font-size: 12px; padding: 5px 11px; border-radius: 7px; background: rgba(46,204,113,0.1); color: var(--green-light); border: 1px solid rgba(46,204,113,0.2); }
+  .chip span { color: var(--muted); }
+
+  details { border: 1px solid var(--card-border); border-radius: 10px; background: rgba(0,0,0,0.2); }
+  summary { cursor: pointer; padding: 12px 16px; font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 1px; color: var(--muted); }
+  details pre { padding: 0 16px 16px; font-size: 11px; color: rgba(255,255,255,0.6); overflow-x: auto; line-height: 1.5; max-height: 360px; }
+
+  .state { text-align: center; padding: 50px 20px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 13px; }
+  .state.err { color: var(--carrot-light); }
+  .spinner { width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--carrot); border-radius: 50%; margin: 0 auto 16px; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer { border-top: 1px solid rgba(255,255,255,0.07); padding: 24px; text-align: center; font-family: 'Space Mono', monospace; font-size: 11px; line-height: 1.9; letter-spacing: 1px; color: rgba(255,255,255,0.3); }
+  footer a { color: var(--green-light); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-left"><b>MANTIS PRO</b> <span class="crumb">/ Bunny Button / Loadout</span></div>
+  <a href="/bunny">← Tools</a>
+</div>
+
+<div class="wrap">
+  <div class="head">
+    <div class="icon">⚙️</div>
+    <h1>Loadout Builder</h1>
+    <p>Mix breed, class and gear to compare steal, regen and max energy. Stats come straight from Bunny Button's reference data.</p>
+  </div>
+  <div id="content">
+    <div class="state"><div class="spinner"></div>Loading asset catalog…</div>
+  </div>
+</div>
+
+<footer>
+  Unofficial community tool · not affiliated with Bunny Button<br>
+  Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Mantis Pro
+</footer>
+
+<script>
+  const PROXY = "/api/bunny-proxy?endpoint=";
+  const content = document.getElementById("content");
+
+  const STAT_KEYS = {
+    steal:  ["stealMultiplier","steal","stealBonus","stealMult","stealPower","stealRate"],
+    regen:  ["energyRegen","regen","energyRegenPerHour","regenPerHour","energyPerHour","energyRegenRate"],
+    energy: ["maxEnergy","energyMax","maxEnergyBonus","energyCap","energy"]
+  };
+
+  let cats = { breed: [], class: [], gear: [] };
+
+  function pickName(it) {
+    return it.name || it.displayName || it.title || it.label || it.id || "Unknown";
+  }
+  function readStat(it, keys) {
+    for (const k of keys) {
+      if (it && it[k] !== undefined && it[k] !== null && !isNaN(Number(it[k]))) return Number(it[k]);
+    }
+    // also check a nested modifiers/stats object
+    const nested = it.modifiers || it.stats || it.bonuses;
+    if (nested) for (const k of keys) if (nested[k] !== undefined && !isNaN(Number(nested[k]))) return Number(nested[k]);
+    return null;
+  }
+
+  async function load() {
+    content.innerHTML = '<div class="state"><div class="spinner"></div>Loading asset catalog…</div>';
+    try {
+      const res = await fetch(PROXY + encodeURIComponent("/reference/assets"));
+      if (res.status === 429) throw new Error("Rate limited — wait a moment and reload.");
+      if (!res.ok) throw new Error("Could not load assets (status " + res.status + ").");
+      const data = await res.json();
+      const root = data.assets || data.data || data;
+      cats = { breed: [], class: [], gear: [] };
+      for (const [key, val] of Object.entries(root)) {
+        if (!Array.isArray(val) || val.length === 0) continue;
+        const k = key.toLowerCase();
+        if (k.includes("breed")) cats.breed = val;
+        else if (k.includes("class")) cats.class = val;
+        else if (k.includes("gear") || k.includes("item") || k.includes("equip")) cats.gear = val;
+      }
+
+      const found = cats.breed.length || cats.class.length || cats.gear.length;
+      if (!found) {
+        content.innerHTML =
+          '<div class="state err">⚠ Loaded the catalog, but I couldn\'t auto-detect the breed/class/gear lists.</div>' +
+          rawPanel(data) +
+          '<div class="state">Open the raw data above and send it to me — I\'ll wire the dropdowns to the exact field names.</div>';
+        document.querySelector("details").open = true;
+        return;
+      }
+      renderUI(data);
+    } catch (e) {
+      content.innerHTML = '<div class="state err">⚠ ' + e.message + '</div>';
+    }
+  }
+
+  function rawPanel(data) {
+    return '<details><summary>▸ Raw API data (for debugging field names)</summary><pre>' +
+      JSON.stringify(data, null, 2).replace(/</g, "&lt;") + '</pre></details>';
+  }
+
+  function optionsFor(list) {
+    return list.map((it, i) => '<option value="' + i + '">' + pickName(it) + '</option>').join("");
+  }
+
+  function renderUI(rawData) {
+    let html = '<div class="pickers">';
+    if (cats.breed.length) html += '<div class="picker"><label>Breed</label><select id="sel-breed">' + optionsFor(cats.breed) + '</select></div>';
+    if (cats.class.length) html += '<div class="picker"><label>Class</label><select id="sel-class">' + optionsFor(cats.class) + '</select></div>';
+    if (cats.gear.length)  html += '<div class="picker"><label>Gear</label><select id="sel-gear">' + optionsFor(cats.gear) + '</select></div>';
+    html += '</div>';
+
+    html += '<div class="totals">' +
+      '<div class="tstat steal"><div class="k">Steal</div><div class="v" id="t-steal">—</div></div>' +
+      '<div class="tstat regen"><div class="k">Regen / hr</div><div class="v" id="t-regen">—</div></div>' +
+      '<div class="tstat energy"><div class="k">Max Energy</div><div class="v" id="t-energy">—</div></div>' +
+      '</div>';
+    html += '<div class="est-note">Totals are an estimate — steal multiplied, regen &amp; energy added. Verify against the raw data below.</div>';
+
+    html += '<div class="components" id="components"></div>';
+    html += rawPanel(rawData);
+    content.innerHTML = html;
+
+    ["breed","class","gear"].forEach(c => { const el = document.getElementById("sel-" + c); if (el) el.addEventListener("change", recompute); });
+    recompute();
+  }
+
+  function recompute() {
+    const selected = [];
+    [["breed","Breed"],["class","Class"],["gear","Gear"]].forEach(([c, lbl]) => {
+      const el = document.getElementById("sel-" + c);
+      if (el && cats[c][el.value] !== undefined) selected.push({ item: cats[c][el.value], label: lbl });
+    });
+
+    let steal = 1, stealFound = false, regen = 0, energy = 0;
+    const compHtml = selected.map(({ item, label }) => {
+      const s = readStat(item, STAT_KEYS.steal);
+      const r = readStat(item, STAT_KEYS.regen);
+      const e = readStat(item, STAT_KEYS.energy);
+      if (s !== null) { steal *= s; stealFound = true; }
+      if (r !== null) regen += r;
+      if (e !== null) energy += e;
+
+      let chips = "";
+      if (s !== null) chips += '<div class="chip"><span>steal</span> ' + s + '</div>';
+      if (r !== null) chips += '<div class="chip"><span>regen</span> ' + r + '</div>';
+      if (e !== null) chips += '<div class="chip"><span>max energy</span> ' + e + '</div>';
+      if (!chips) chips = '<div class="chip"><span>no stat fields detected</span></div>';
+
+      return '<div class="comp"><div class="name">' + pickName(item) + ' <span class="tag">' + label + '</span></div><div class="chips">' + chips + '</div></div>';
+    }).join("");
+
+    document.getElementById("components").innerHTML = compHtml;
+    document.getElementById("t-steal").textContent = stealFound ? steal.toFixed(2).replace(/\.00$/, "") + "x" : "—";
+    document.getElementById("t-regen").textContent = regen ? "+" + regen : "—";
+    document.getElementById("t-energy").textContent = energy ? "+" + energy : "—";
+  }
+
+  load();
+</script>
+
+</body>
+</html>

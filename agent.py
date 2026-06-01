@@ -93,6 +93,15 @@ def bunny_farm():
     from flask import Response
     return Response(html, mimetype="text/html")
 
+@app.route("/bunny/build")
+def bunny_build():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "bunny_build.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
 register_bunny_routes(app)
 
 @app.route("/moody/woke")
@@ -200,7 +209,7 @@ def bunny_proxy():
     else:
         endpoint = "/leaderboard"
     print(f"  [Proxy] endpoint: {repr(endpoint)}")
-    allowed = ["/leaderboard", "/eth-price", "/presale/status", "/party/list"]
+    allowed = ["/leaderboard", "/eth-price", "/presale/status", "/party/list", "/reference/assets"]
     if not any(endpoint.startswith(a) for a in allowed):
         return jsonify({"error": f"endpoint not allowed: {endpoint}"}), 403
     try:
