@@ -3,262 +3,352 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bunny Button Toolkit — Mantis Pro</title>
+<title>Bunny Intelligence — Mantis Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --green: #1a8a3c;
-    --green-light: #2ecc71;
-    --green-bright: #00ff6a;
-    --dark: #0a1a10;
-    --carrot: #ff7a18;
-    --carrot-light: #ff9d4d;
-    --white: #ffffff;
-    --muted: rgba(255,255,255,0.55);
-    --card-bg: rgba(255,255,255,0.04);
-    --card-border: rgba(255,255,255,0.1);
+  :root{
+    --bg:#060a07; --bg2:#0a1410; --ink:#f1f7f3; --muted:rgba(241,247,243,.62); --faint:rgba(241,247,243,.4);
+    --green:#22c55e; --green-deep:#0d8f4f; --green-soft:rgba(34,197,94,.1);
+    --carrot:#ff7a18; --carrot-l:#ff9d4d; --gold:#f5c451; --purple:#a06bff; --cyan:#22d3ee;
+    --line:rgba(255,255,255,.08); --glass:rgba(20,32,24,.55);
+    --c-common:#9aa8a0; --c-rare:#4aa3ff; --c-epic:#a06bff; --c-leg:#f5c451; --c-anc:#ff5e3a;
   }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;overflow-x:hidden;line-height:1.55}
+  a{color:inherit;text-decoration:none}
+  .mono{font-family:'Space Mono',monospace}
+  ::selection{background:rgba(255,122,24,.25)}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* NAV */
+  .nav{position:fixed;top:0;left:0;right:0;z-index:80;display:flex;align-items:center;justify-content:space-between;padding:16px 38px;background:rgba(6,10,7,.55);backdrop-filter:blur(14px);border-bottom:1px solid transparent;transition:.3s}
+  .nav.s{background:rgba(6,10,7,.85);border-color:var(--line)}
+  .nav .brand{display:flex;align-items:center;gap:11px;font-weight:700;letter-spacing:-.3px;font-size:15px}
+  .nav .mk{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--carrot),var(--carrot-l));display:grid;place-items:center;font-size:15px;box-shadow:0 4px 16px rgba(255,122,24,.4)}
+  .nav .brand small{display:block;font-size:9px;letter-spacing:1.8px;color:var(--faint);text-transform:uppercase;font-weight:600;margin-top:1px}
+  .nav .lk{display:flex;align-items:center;gap:26px;font-size:13.5px;color:var(--muted);font-weight:500}
+  .nav .lk a:hover{color:var(--ink)}
+  .nav .cta{padding:9px 17px;border:1px solid rgba(255,122,24,.4);border-radius:8px;color:var(--carrot-l);font-weight:600;font-size:13px;transition:.2s}
+  .nav .cta:hover{background:rgba(255,122,24,.12)}
+  @media(max-width:860px){.nav .lk a:not(.cta){display:none}.nav{padding:14px 20px}}
 
-  body {
-    font-family: 'Space Grotesk', sans-serif;
-    min-height: 100vh;
-    background: var(--dark);
-    color: var(--white);
-    overflow-x: hidden;
-    background-image:
-      radial-gradient(900px circle at 80% -10%, rgba(255,122,24,0.10), transparent 55%),
-      radial-gradient(900px circle at 0% 0%, rgba(46,204,113,0.10), transparent 50%);
-  }
+  /* HERO */
+  .hero{position:relative;min-height:100vh;display:flex;align-items:center;padding:120px 38px 70px;overflow:hidden}
+  .hero-bg{position:absolute;inset:0;z-index:0;background:
+     radial-gradient(70% 90% at 80% 10%, rgba(255,122,24,.16), transparent 55%),
+     radial-gradient(80% 90% at 10% 90%, rgba(34,197,94,.13), transparent 55%),
+     radial-gradient(50% 60% at 50% 0%, rgba(160,107,255,.08), transparent 60%)}
+  .particles{position:absolute;inset:0;z-index:1;overflow:hidden;pointer-events:none}
+  .carrot{position:absolute;bottom:-50px;width:var(--w);height:calc(var(--w)*1.33);opacity:0;animation:rise var(--d) linear infinite;animation-delay:var(--dl)}
+  @keyframes rise{0%{transform:translateY(0) rotate(0);opacity:0}12%{opacity:.55}88%{opacity:.55}100%{transform:translateY(-118vh) rotate(var(--r));opacity:0}}
+  .hero-in{position:relative;z-index:3;max-width:1200px;margin:0 auto;width:100%;display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center}
+  @media(max-width:900px){.hero-in{grid-template-columns:1fr}.hero-emblem{display:none}}
+  .pill{display:inline-flex;align-items:center;gap:8px;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--carrot-l);border:1px solid rgba(255,122,24,.35);border-radius:30px;padding:7px 15px;margin-bottom:24px}
+  .pill .d{width:6px;height:6px;border-radius:50%;background:var(--carrot);box-shadow:0 0 8px var(--carrot);animation:bl 2s infinite}
+  @keyframes bl{0%,100%{opacity:1}50%{opacity:.35}}
+  .hero h1{font-size:clamp(38px,6vw,72px);font-weight:700;letter-spacing:-2.4px;line-height:.96}
+  .hero h1 .g{background:linear-gradient(115deg,var(--carrot-l),var(--carrot));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero .tagline{font-size:clamp(17px,2.4vw,26px);font-weight:600;letter-spacing:-.5px;margin-top:16px;color:var(--green)}
+  .hero p{font-size:16px;color:var(--muted);max-width:480px;margin-top:16px;font-weight:300}
+  .hero-cta{display:flex;gap:13px;flex-wrap:wrap;margin-top:32px}
+  .btn{padding:14px 26px;border-radius:11px;font-weight:600;font-size:15px;transition:.2s;border:1px solid transparent;display:inline-flex;align-items:center;gap:9px}
+  .btn-p{background:linear-gradient(135deg,var(--carrot),var(--carrot-l));color:#1a0c00;box-shadow:0 12px 32px rgba(255,122,24,.3)}
+  .btn-p:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(255,122,24,.45)}
+  .btn-s{border-color:var(--line);color:var(--ink);background:var(--glass)}
+  .btn-s:hover{border-color:var(--green);background:var(--green-soft)}
 
-  /* ── TOP NAV ── */
-  .nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 24px;
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-    font-family: 'Space Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 1px;
-  }
-  .nav-left { color: var(--muted); }
-  .nav-left b { color: var(--white); }
-  .nav-left .crumb { color: var(--carrot-light); }
-  .nav a {
-    color: var(--green-light);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-  .nav a:hover { color: var(--green-bright); }
+  /* hero emblem */
+  .hero-emblem{position:relative;display:grid;place-items:center;height:380px}
+  .emblem-svg{width:330px;height:330px;filter:drop-shadow(0 20px 50px rgba(255,122,24,.25));animation:float 6s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+  .orbit{transform-origin:165px 165px;animation:spin 26s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .epulse{transform-origin:165px 175px;animation:ep 3s ease-out infinite}
+  @keyframes ep{0%{transform:scale(.7);opacity:.5}100%{transform:scale(1.25);opacity:0}}
 
-  /* ── HEADER ── */
-  .header {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 64px 24px 36px;
-    text-align: center;
-  }
-  .badge {
-    display: inline-block;
-    background: rgba(255,122,24,0.12);
-    border: 1px solid rgba(255,122,24,0.4);
-    border-radius: 20px;
-    padding: 6px 18px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--carrot-light);
-    margin-bottom: 24px;
-    font-family: 'Space Mono', monospace;
-  }
-  .header h1 {
-    font-size: clamp(40px, 7vw, 72px);
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: -2px;
-    margin-bottom: 16px;
-  }
-  .header h1 span { color: var(--carrot); }
-  .header p {
-    font-size: 17px;
-    color: rgba(255,255,255,0.7);
-    line-height: 1.6;
-    max-width: 520px;
-    margin: 0 auto;
-    font-weight: 300;
-  }
-  .select-line {
-    margin-top: 28px;
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--green-light);
-  }
+  /* SECTIONS */
+  .section{position:relative;max-width:1200px;margin:0 auto;padding:90px 38px}
+  .reveal{opacity:0;transform:translateY(22px);transition:.8s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  .lab{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--carrot-l);margin-bottom:13px}
+  .ttl{font-size:clamp(26px,3.6vw,42px);font-weight:700;letter-spacing:-1.3px;line-height:1.05}
+  .sub{color:var(--muted);font-size:15px;margin-top:12px;max-width:560px;font-weight:300}
 
-  /* ── TOOL GRID ── */
-  .grid {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 0 24px 80px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 18px;
-  }
+  /* LIVE INTEL */
+  .intel{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;margin-top:42px;background:var(--line);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+  @media(max-width:900px){.intel{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.intel{grid-template-columns:1fr}}
+  .stat{background:var(--bg);padding:30px 26px;position:relative;transition:background .3s}
+  .stat:hover{background:var(--bg2)}
+  .stat .sv{font-size:34px;font-weight:700;font-family:'Space Mono',monospace;letter-spacing:-1.5px;background:linear-gradient(120deg,var(--green),var(--carrot-l));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat .sk{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:8px}
+  .intel-note{font-family:'Space Mono',monospace;font-size:10.5px;color:var(--faint);margin-top:14px;text-align:right}
 
-  .tool {
-    position: relative;
-    display: block;
-    text-decoration: none;
-    color: var(--white);
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 14px;
-    padding: 28px 26px;
-    transition: transform 0.25s, border-color 0.25s, background 0.25s;
-    opacity: 0;
-    transform: translateY(14px);
-    animation: rise 0.5s ease forwards;
-  }
-  .tool:hover {
-    transform: translateY(-4px);
-    background: rgba(255,122,24,0.06);
-    border-color: rgba(255,122,24,0.4);
-  }
-  .tool:nth-child(1) { animation-delay: 0.05s; }
-  .tool:nth-child(2) { animation-delay: 0.10s; }
-  .tool:nth-child(3) { animation-delay: 0.15s; }
-  .tool:nth-child(4) { animation-delay: 0.20s; }
-  .tool:nth-child(5) { animation-delay: 0.25s; }
-  .tool:nth-child(6) { animation-delay: 0.30s; }
+  /* FEATURED ALTERNATING */
+  .feat{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center;margin-top:60px}
+  .feat.rev .feat-vis{order:-1}
+  @media(max-width:860px){.feat{grid-template-columns:1fr;gap:26px}.feat.rev .feat-vis{order:0}}
+  .feat .acc{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:700}
+  .feat h3{font-size:30px;font-weight:700;letter-spacing:-1px;margin:12px 0 12px}
+  .feat p{color:var(--muted);font-size:15px;font-weight:300;margin-bottom:22px}
+  .feat .go{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:14px;padding:11px 20px;border-radius:10px;border:1px solid var(--line);transition:.2s}
+  .feat .go:hover{gap:12px}
+  .feat-vis{position:relative;border-radius:22px;border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(8px);padding:26px;min-height:240px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.4)}
+  .feat-vis::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 80% at 80% 0%, var(--accbg), transparent 60%);pointer-events:none}
+  .vrow{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);position:relative}
+  .vrow:last-child{border-bottom:none}
+  .vrow .rank{font-family:'Space Mono',monospace;font-weight:700;color:var(--acc);width:26px}
+  .vrow .nm{flex:1;font-size:14px;font-weight:600;margin-left:10px}
+  .vrow .cr{font-family:'Space Mono',monospace;font-size:13px;color:var(--green)}
+  .vbig{font-size:40px;font-weight:700;font-family:'Space Mono',monospace;letter-spacing:-2px}
+  .vbar{height:12px;border-radius:7px;background:rgba(255,255,255,.08);overflow:hidden;margin:14px 0 6px}
+  .vbar i{display:block;height:100%;border-radius:7px;background:linear-gradient(90deg,var(--acc),var(--carrot-l));width:0;transition:width 1.2s ease}
+  .vskel{color:var(--faint);font-family:'Space Mono',monospace;font-size:13px;text-align:center;padding:40px 0}
 
-  @keyframes rise {
-    to { opacity: 1; transform: translateY(0); }
-  }
+  /* TOOL GRID (calculators) */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:50px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .tool{position:relative;display:block;border:1px solid var(--line);border-radius:20px;padding:26px;background:var(--glass);backdrop-filter:blur(6px);overflow:hidden;transition:transform .28s cubic-bezier(.2,.7,.2,1),border-color .28s}
+  .tool::after{content:"";position:absolute;inset:0;background:radial-gradient(70% 90% at 50% -10%, var(--accbg), transparent 60%);opacity:0;transition:opacity .3s;pointer-events:none}
+  .tool:hover{transform:translateY(-5px);border-color:var(--acc)}
+  .tool:hover::after{opacity:1}
+  .tool .ti{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--accbg);border:1px solid var(--acc);margin-bottom:16px;position:relative}
+  .tool h4{font-size:19px;font-weight:600;position:relative}
+  .tool p{font-size:13.5px;color:var(--muted);font-weight:300;margin-top:7px;position:relative;min-height:38px}
+  .tool .mini{margin-top:16px;position:relative}
+  .tool .go2{margin-top:16px;font-size:13px;font-weight:600;color:var(--acc);display:flex;align-items:center;gap:7px;transition:gap .2s;position:relative}
+  .tool:hover .go2{gap:12px}
+  .ring{--p:62;width:46px;height:46px;border-radius:50%;background:conic-gradient(var(--acc) calc(var(--p)*1%),rgba(255,255,255,.08) 0);display:grid;place-items:center}
+  .ring::before{content:"8h";width:34px;height:34px;border-radius:50%;background:var(--bg);display:grid;place-items:center;font-size:10px;font-family:'Space Mono';color:var(--muted)}
+  .formula{font-family:'Space Mono',monospace;font-size:12px;color:var(--muted)}
+  .formula b{color:var(--acc)}
+  .rarbar{display:flex;gap:4px;margin-top:4px}
+  .rarbar span{flex:1;height:6px;border-radius:3px}
 
-  .tool-icon { font-size: 30px; margin-bottom: 16px; }
-  .tool-name {
-    font-size: 19px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-  .tool-desc {
-    font-size: 14px;
-    color: rgba(255,255,255,0.55);
-    line-height: 1.6;
-    margin-bottom: 18px;
-  }
-  .tool-foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .tag {
-    font-family: 'Space Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    padding: 4px 10px;
-    border-radius: 6px;
-    background: rgba(46,204,113,0.12);
-    color: var(--green-light);
-    border: 1px solid rgba(46,204,113,0.25);
-  }
-  .tag.calc {
-    background: rgba(255,122,24,0.12);
-    color: var(--carrot-light);
-    border-color: rgba(255,122,24,0.3);
-  }
-  .arrow {
-    color: var(--carrot-light);
-    font-size: 20px;
-    transition: transform 0.2s;
-  }
-  .tool:hover .arrow { transform: translateX(4px); }
-
-  /* ── FOOTER ── */
-  footer {
-    border-top: 1px solid rgba(255,255,255,0.07);
-    padding: 28px 24px;
-    text-align: center;
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    line-height: 1.9;
-    letter-spacing: 1px;
-    color: rgba(255,255,255,0.32);
-  }
-  footer a { color: var(--green-light); text-decoration: none; }
-  footer .warn { color: rgba(255,122,24,0.7); }
+  /* FOOTER */
+  footer{border-top:1px solid var(--line);padding:46px 38px 60px;text-align:center;font-family:'Space Mono',monospace;font-size:11px;color:var(--faint);line-height:2}
+  footer a{color:var(--carrot-l)}
+  footer .warn{color:rgba(255,122,24,.7);margin-bottom:6px}
 </style>
 </head>
 <body>
 
-<div class="nav">
-  <div class="nav-left"><b>MANTIS PRO</b> <span class="crumb">/ Bunny Button</span></div>
-  <a href="/">← Home</a>
-</div>
+<nav class="nav" id="nav">
+  <a class="brand" href="/bunny"><span class="mk">🥕</span><span>BUNNY INTELLIGENCE<small>Mantis Pro</small></span></a>
+  <div class="lk">
+    <a href="#tools">Tools</a>
+    <a href="/bunny/leaderboard">Leaderboard</a>
+    <a href="/">Mantis</a>
+    <a class="cta" href="#tools">Explore Tools →</a>
+  </div>
+</nav>
 
-<div class="header">
-  <div class="badge">🥕 Bunny Button Toolkit</div>
-  <h1>BUNNY <span>TOOLS</span></h1>
-  <p>Free, beginner-friendly tools for the Bunny Button game on Abstract. No setup, no login required for live data — just open and use.</p>
-  <div class="select-line">— Select a tool —</div>
-</div>
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-bg"></div>
+  <div class="particles" id="particles"></div>
+  <div class="hero-in">
+    <div>
+      <span class="pill"><span class="d"></span> Live · Abstract · Bunny Button</span>
+      <h1>REAL-TIME<br><span class="g">BUNNY INTELLIGENCE</span></h1>
+      <div class="tagline">Track. Optimize. Dominate.</div>
+      <p>Advanced analytics and live intelligence tools for Bunny Button players on Abstract. Climb the leaderboard, time your farm, and read the carrot economy.</p>
+      <div class="hero-cta">
+        <a class="btn btn-p" href="#tools">Explore Tools</a>
+        <a class="btn btn-s" href="/bunny/leaderboard">View Leaderboard</a>
+      </div>
+    </div>
+    <div class="hero-emblem">
+      <svg class="emblem-svg" viewBox="0 0 330 330">
+        <defs>
+          <radialGradient id="cg" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="#ff9d4d"/><stop offset="70%" stop-color="#ff7a18"/><stop offset="100%" stop-color="#c75a00"/></radialGradient>
+          <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#34d36b"/><stop offset="100%" stop-color="#0d8f4f"/></linearGradient>
+        </defs>
+        <circle class="epulse" cx="165" cy="175" r="92" fill="none" stroke="var(--carrot)" stroke-width="2"/>
+        <g class="orbit">
+          <circle cx="165" cy="165" r="138" fill="none" stroke="rgba(255,122,24,.18)" stroke-width="1" stroke-dasharray="3 9"/>
+          <g transform="translate(165,27)"><path d="M0 22 C-6 12 -8 4 -5 -3 C-3 -7 3 -7 5 -3 C8 4 6 12 0 22Z" fill="url(#cg)"/><path d="M0 -3 L0 -12 M0 -8 L-5 -13 M0 -8 L5 -13" stroke="#34d36b" stroke-width="2" stroke-linecap="round"/></g>
+        </g>
+        <!-- bunny emblem (original) -->
+        <ellipse cx="138" cy="92" rx="15" ry="46" fill="url(#lg)" transform="rotate(-12 138 92)"/>
+        <ellipse cx="192" cy="92" rx="15" ry="46" fill="url(#lg)" transform="rotate(12 192 92)"/>
+        <ellipse cx="138" cy="96" rx="7" ry="32" fill="rgba(255,122,24,.5)" transform="rotate(-12 138 96)"/>
+        <ellipse cx="192" cy="96" rx="7" ry="32" fill="rgba(255,122,24,.5)" transform="rotate(12 192 96)"/>
+        <circle cx="165" cy="185" r="74" fill="url(#lg)"/>
+        <circle cx="165" cy="185" r="74" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+        <circle cx="143" cy="172" r="7" fill="#06140b"/><circle cx="187" cy="172" r="7" fill="#06140b"/>
+        <circle cx="145" cy="170" r="2.4" fill="#fff"/><circle cx="189" cy="170" r="2.4" fill="#fff"/>
+        <path d="M158 196 Q165 203 172 196" stroke="#06140b" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <circle cx="165" cy="190" r="4" fill="#ff7a18"/>
+      </svg>
+    </div>
+  </div>
+</header>
 
-<div class="grid">
+<!-- LIVE INTEL -->
+<section class="section reveal" id="intel">
+  <div class="lab">Live Game Intelligence</div>
+  <h2 class="ttl">The carrot economy, in real time.</h2>
+  <p class="sub">Pulled live from Bunny Button's public API the moment this page loads.</p>
+  <div class="intel">
+    <div class="stat"><div class="sv" id="s-players">—</div><div class="sk">Players Tracked</div></div>
+    <div class="stat"><div class="sv" id="s-carrots">—</div><div class="sk">Carrots Analyzed</div></div>
+    <div class="stat"><div class="sv" id="s-parties">—</div><div class="sk">Active Parties</div></div>
+    <div class="stat"><div class="sv" id="s-eth">—</div><div class="sk">ETH Raised</div></div>
+    <div class="stat"><div class="sv" id="s-top">—</div><div class="sk">Top Earner</div></div>
+  </div>
+  <div class="intel-note" id="intel-note">connecting to live data…</div>
+</section>
 
-  <a href="/bunny/leaderboard" class="tool">
-    <div class="tool-icon">🏆</div>
-    <div class="tool-name">Leaderboard</div>
-    <div class="tool-desc">See the top carrot earners and their breed, class and steal power.</div>
-    <div class="tool-foot"><span class="tag">Live Data</span><span class="arrow">→</span></div>
-  </a>
+<!-- FEATURED TOOLS (alternating, real data) -->
+<section class="section reveal" id="tools" style="padding-bottom:30px">
+  <div class="lab">Featured Tools</div>
+  <h2 class="ttl">Six modules. One edge.</h2>
+  <p class="sub">Live intelligence and battle-tested calculators — each built for one job, done exceptionally.</p>
 
-  <a href="/bunny/presale" class="tool">
-    <div class="tool-icon">🎟️</div>
-    <div class="tool-name">Presale Tracker</div>
-    <div class="tool-desc">Track ETH raised, CARROT sold and the countdown to presale close.</div>
-    <div class="tool-foot"><span class="tag">Live Data</span><span class="arrow">→</span></div>
-  </a>
+  <!-- Leaderboard -->
+  <div class="feat" style="--acc:var(--gold);--accbg:rgba(245,196,81,.1)">
+    <div>
+      <div class="acc" style="color:var(--gold)">01 — Live Data</div>
+      <h3>Leaderboard</h3>
+      <p>The top carrot earners, ranked live — with breed, class, and steal power. Find who's climbing and how they're built.</p>
+      <a class="go" href="/bunny/leaderboard" style="color:var(--gold)">Open Leaderboard →</a>
+    </div>
+    <div class="feat-vis"><div id="prev-lb"><div class="vskel">Loading live rankings…</div></div></div>
+  </div>
 
-  <a href="/bunny/farm" class="tool">
-    <div class="tool-icon">🌱</div>
-    <div class="tool-name">Farm & Energy Assistant</div>
-    <div class="tool-desc">Never lose yield — see your 8-hour farm cap and energy refill timer.</div>
-    <div class="tool-foot"><span class="tag calc">Tool</span><span class="arrow">→</span></div>
-  </a>
+  <!-- Presale -->
+  <div class="feat rev" style="--acc:var(--carrot);--accbg:rgba(255,122,24,.1)">
+    <div>
+      <div class="acc" style="color:var(--carrot-l)">02 — Live Data</div>
+      <h3>Presale Tracker</h3>
+      <p>ETH raised, CARROT sold, and a live countdown to close. Know exactly where the presale stands at a glance.</p>
+      <a class="go" href="/bunny/presale" style="color:var(--carrot-l)">Open Presale →</a>
+    </div>
+    <div class="feat-vis"><div id="prev-ps"><div class="vskel">Loading presale…</div></div></div>
+  </div>
 
-  <a href="/bunny/build" class="tool">
-    <div class="tool-icon">⚙️</div>
-    <div class="tool-name">Loadout Builder</div>
-    <div class="tool-desc">Mix breed, class and gear to see your real steal, regen and max energy.</div>
-    <div class="tool-foot"><span class="tag calc">Calculator</span><span class="arrow">→</span></div>
-  </a>
+  <!-- Party -->
+  <div class="feat" style="--acc:var(--purple);--accbg:rgba(160,107,255,.1)">
+    <div>
+      <div class="acc" style="color:var(--purple)">03 — Live Data</div>
+      <h3>Party Finder</h3>
+      <p>Browse open parties, see how full each is, and grab the +bonus before they fill. Sort by fullest, most open, or best bonus.</p>
+      <a class="go" href="/bunny/party" style="color:var(--purple)">Open Party Finder →</a>
+    </div>
+    <div class="feat-vis"><div id="prev-pt"><div class="vskel">Loading parties…</div></div></div>
+  </div>
+</section>
 
-  <a href="/bunny/value" class="tool">
-    <div class="tool-icon">💰</div>
-    <div class="tool-name">Carrot Value</div>
-    <div class="tool-desc">Convert carrots to CARROT and USD at the live ETH price.</div>
-    <div class="tool-foot"><span class="tag calc">Calculator</span><span class="arrow">→</span></div>
-  </a>
-
-  <a href="/bunny/party" class="tool">
-    <div class="tool-icon">👥</div>
-    <div class="tool-name">Party Finder</div>
-    <div class="tool-desc">Browse open parties and see the bonus each fill level gives.</div>
-    <div class="tool-foot"><span class="tag">Live Data</span><span class="arrow">→</span></div>
-  </a>
-
-</div>
+<!-- CALCULATORS GRID -->
+<section class="section reveal" style="padding-top:30px">
+  <div class="lab">Calculators</div>
+  <h2 class="ttl">Tune every decision.</h2>
+  <div class="grid">
+    <a class="tool" href="/bunny/farm" style="--acc:var(--green);--accbg:rgba(34,197,94,.12)">
+      <div class="ti">🌱</div>
+      <h4>Farm &amp; Energy</h4>
+      <p>Never lose yield — countdowns to your 8-hour cap and full energy.</p>
+      <div class="mini"><div class="ring" style="--p:62"></div></div>
+      <div class="go2">Open tool →</div>
+    </a>
+    <a class="tool" href="/bunny/build" style="--acc:var(--cyan);--accbg:rgba(34,211,238,.12)">
+      <div class="ti">⚙️</div>
+      <h4>Loadout Builder</h4>
+      <p>Mix breed, class &amp; gear to see real steal, regen and max energy.</p>
+      <div class="mini formula"><b>breed</b> × <b>class</b> × <b>gear</b>
+        <div class="rarbar"><span style="background:var(--c-common)"></span><span style="background:var(--c-rare)"></span><span style="background:var(--c-epic)"></span><span style="background:var(--c-leg)"></span><span style="background:var(--c-anc)"></span></div>
+      </div>
+      <div class="go2">Open tool →</div>
+    </a>
+    <a class="tool" href="/bunny/value" style="--acc:var(--carrot);--accbg:rgba(255,122,24,.12)">
+      <div class="ti">💰</div>
+      <h4>Carrot Value</h4>
+      <p>Convert CARROT to ETH and USD at the live presale rate.</p>
+      <div class="mini formula"><b>CARROT</b> → <b>ETH</b> → <b>USD</b></div>
+      <div class="go2">Open tool →</div>
+    </a>
+  </div>
+</section>
 
 <footer>
   <div class="warn">⚠ We will never DM you first or ask for your seed phrase.</div>
-  Unofficial community toolkit · not affiliated with Bunny Button<br>
-  Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Mantis Pro · Agent #857
+  Unofficial community toolkit · not affiliated with Bunny Button · live data from the official public API<br>
+  Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Mantis Pro
 </footer>
+
+<script>
+  // nav
+  const nav=document.getElementById("nav");addEventListener("scroll",()=>nav.classList.toggle("s",scrollY>20));
+  // reveal
+  const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add("in");}),{threshold:.1});
+  document.querySelectorAll(".reveal").forEach(s=>obs.observe(s));
+
+  // carrot particles
+  (function(){
+    const p=document.getElementById("particles"),svg='<svg viewBox="0 0 24 32" width="100%" height="100%"><path d="M12 31 C7 24 4 18 6 12 C7.5 8 16.5 8 18 12 C20 18 17 24 12 31 Z" fill="#ff7a18"/><path d="M12 11 L12 4 M12 7 L8 3 M12 7 L16 3" stroke="#22c55e" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>';
+    for(let i=0;i<16;i++){const c=document.createElement("div");c.className="carrot";const w=14+Math.random()*22;c.style.setProperty("--w",w+"px");c.style.left=Math.random()*100+"%";c.style.setProperty("--d",(9+Math.random()*9)+"s");c.style.setProperty("--dl",(-Math.random()*16)+"s");c.style.setProperty("--r",(Math.random()*360-180)+"deg");c.innerHTML=svg;p.appendChild(c);}
+  })();
+
+  // ── live data ──
+  const PROXY="/api/bunny-proxy?endpoint=";
+  async function px(ep){const r=await fetch(PROXY+encodeURIComponent(ep));if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}
+  function pick(o,k,d){if(!o)return d;for(const x of k)if(o[x]!=null&&o[x]!=="")return o[x];return d;}
+  const num=x=>{const n=Number(x);return isNaN(n)?null:n;};
+  function abbr(n){n=Number(n)||0;if(n>=1e9)return (n/1e9).toFixed(2)+"B";if(n>=1e6)return (n/1e6).toFixed(2)+"M";if(n>=1e3)return (n/1e3).toFixed(1)+"K";return Math.round(n).toLocaleString();}
+  const shortW=a=>a?a.slice(0,5)+"…"+a.slice(-3):"—";
+  function countUp(el,to,fmt){if(to==null){el.textContent="—";return;}const dur=1200,st=performance.now();function f(t){const k=Math.min(1,(t-st)/dur),e=1-Math.pow(1-k,3);el.textContent=fmt(to*e);if(k<1)requestAnimationFrame(f);}requestAnimationFrame(f);}
+
+  async function loadLeaderboard(){
+    try{
+      const d=await px("/leaderboard?limit=100");
+      const rows=d.leaderboard||d||[];
+      const count=rows.length;
+      const sum=rows.reduce((a,r)=>a+(num(pick(r,["totalCarrotsEarned","carrots","totalCarrots"],0))||0),0);
+      const top=rows[0];
+      countUp(document.getElementById("s-players"),count,v=>abbr(v));
+      countUp(document.getElementById("s-carrots"),sum,v=>abbr(v));
+      if(top)countUp(document.getElementById("s-top"),num(pick(top,["totalCarrotsEarned","carrots"],0)),v=>abbr(v));
+      // preview top 3
+      const t3=rows.slice(0,3).map((r,i)=>{const nm=r.xHandle?("@"+r.xHandle):shortW(r.walletAddress);const cr=abbr(num(pick(r,["totalCarrotsEarned","carrots"],0)));return `<div class="vrow"><span class="rank">${i+1}</span><span class="nm">${nm}</span><span class="cr">${cr} 🥕</span></div>`;}).join("");
+      document.getElementById("prev-lb").innerHTML=t3||'<div class="vskel">No entries yet.</div>';
+      return true;
+    }catch(e){document.getElementById("prev-lb").innerHTML='<div class="vskel">Live rankings unavailable.</div>';return false;}
+  }
+  async function loadPresale(){
+    try{
+      const p=await px("/presale/status");
+      const raised=num(pick(p,["raised","totalRaised","ethRaised","raisedEth"],null));
+      const cap=num(pick(p,["hardCap","cap","target","goal"],100));
+      countUp(document.getElementById("s-eth"),raised,v=>(v).toFixed(2)+" Ξ");
+      const pct=raised!=null&&cap?Math.min(100,raised/cap*100):null;
+      document.getElementById("prev-ps").innerHTML=
+        `<div style="font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:1px;font-family:'Space Mono'">ETH Raised</div>
+         <div class="vbig" style="color:var(--carrot-l)">${raised!=null?raised.toFixed(2):"—"} <span style="font-size:20px">Ξ</span></div>
+         <div class="vbar"><i id="ps-bar" style="--acc:var(--carrot)"></i></div>
+         <div style="font-size:12px;color:var(--muted);font-family:'Space Mono'">${pct!=null?pct.toFixed(1)+"% of "+cap+" Ξ cap":"live"}</div>`;
+      if(pct!=null)setTimeout(()=>{const b=document.getElementById("ps-bar");if(b)b.style.width=pct+"%";},150);
+      return true;
+    }catch(e){document.getElementById("prev-ps").innerHTML='<div class="vskel">Presale data unavailable.</div>';return false;}
+  }
+  async function loadParty(){
+    try{
+      const d=await px("/party/list");
+      const parties=d.parties||d||[];
+      const count=parties.length;
+      countUp(document.getElementById("s-parties"),count,v=>abbr(v));
+      const sample=parties.slice(0,3).map(p=>{const nm=pick(p,["name","partyName","title"],"Party");const m=pick(p,["memberCount","members","size"],null);const cnt=Array.isArray(m)?m.length:num(m);return `<div class="vrow"><span class="nm" style="margin-left:0">${nm}</span><span class="cr" style="color:var(--purple)">${cnt!=null?cnt:"?"} members</span></div>`;}).join("");
+      document.getElementById("prev-pt").innerHTML=sample||'<div class="vskel">No active parties.</div>';
+      return true;
+    }catch(e){document.getElementById("prev-pt").innerHTML='<div class="vskel">Party data unavailable.</div>';return false;}
+  }
+
+  (async function(){
+    const r=await Promise.allSettled([loadLeaderboard(),loadPresale(),loadParty()]);
+    const ok=r.filter(x=>x.status==="fulfilled"&&x.value).length;
+    document.getElementById("intel-note").textContent= ok? "live · Bunny Button public API · "+new Date().toLocaleTimeString() : "live data unavailable — tools still work";
+  })();
+</script>
 
 </body>
 </html>
