@@ -75,6 +75,15 @@ def bunny_leaderboard():
     from flask import Response
     return Response(html, mimetype="text/html")
 
+@app.route("/bunny/presale")
+def bunny_presale():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "bunny_presale.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
 register_bunny_routes(app)
 
 @app.route("/moody/woke")
