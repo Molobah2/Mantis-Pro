@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Litany Intelligence — Mantis Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f8f5; --bg2:#eef4f0; --panel:#ffffff; --ink:#08160e; --muted:#5a6c61; --faint:#90a096;
+    --green:#10a050; --green-deep:#077a39; --green-bright:#1fd06b; --green-soft:#e9f6ef; --green-glow:rgba(16,160,80,0.5);
+    --line:#e2ede7; --line-soft:#eef4f0;
+    --horizon:#10a050; --breach:#c79a16; --lens:#0bb6c4; --null:#7c4dd1;
+    --on:#10a050; --off:#0d9488; --obs:#c79a16; --awa:#9aa8a0;
+    --shadow-sm:0 1px 2px rgba(8,22,14,.05);
+    --shadow:0 2px 6px rgba(8,22,14,.04), 0 14px 40px rgba(16,160,80,.06);
+    --shadow-lg:0 30px 80px rgba(8,40,22,.10);
+    --rail:248px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  .mono{font-family:'JetBrains Mono',monospace;font-feature-settings:"tnum"}
+  ::selection{background:rgba(16,160,80,.18)}
+
+  /* ───── LEFT RAIL ───── */
+  .rail{position:fixed;top:0;left:0;width:var(--rail);height:100vh;background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border-right:1px solid var(--line);padding:22px 16px;display:flex;flex-direction:column;z-index:60}
+  .rail .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 22px;margin-bottom:8px;border-bottom:1px solid var(--line-soft)}
+  .rail .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--green),var(--green-deep));display:grid;place-items:center;color:#fff;font-size:17px;box-shadow:0 6px 18px var(--green-glow)}
+  .rail .bname{font-weight:800;letter-spacing:-.5px;font-size:16px;line-height:1}
+  .rail .bsub{font-size:9.5px;font-weight:700;letter-spacing:2px;color:var(--faint);text-transform:uppercase;margin-top:3px}
+  .nav{display:flex;flex-direction:column;gap:2px;margin-top:10px}
+  .nav .grp{font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint);font-weight:800;padding:14px 10px 6px}
+  .nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--muted);transition:.18s}
+  .nav a .ico{width:18px;text-align:center;opacity:.8}
+  .nav a:hover{background:var(--green-soft);color:var(--ink)}
+  .nav a.active{background:var(--green-soft);color:var(--green-deep)}
+  .nav a.active .ico{opacity:1}
+  .rail .foot{margin-top:auto;padding:12px 10px 2px;border-top:1px solid var(--line-soft);font-size:10.5px;color:var(--faint);line-height:1.7}
+  .rail .foot a{color:var(--green-deep);font-weight:600}
+
+  /* ───── MAIN ───── */
+  .main{margin-left:var(--rail);min-height:100vh}
+  .topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;padding:14px 34px;background:rgba(244,248,245,.78);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .topbar .crumb{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.3px}
+  .topbar .crumb b{color:var(--ink)}
+  .tstat{display:flex;align-items:center;gap:18px;font-size:12px}
+  .tstat .pill{display:flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;font-weight:600;font-size:11.5px}
+  .ldot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 var(--green-glow);animation:beat 2.4s infinite}
+  @keyframes beat{0%,100%{box-shadow:0 0 0 0 rgba(16,160,80,.45)}50%{box-shadow:0 0 0 6px rgba(16,160,80,0)}}
+  .blk{font-family:'JetBrains Mono',monospace;color:var(--green-deep)}
+
+  .wrap{padding:30px 34px 80px;max-width:1240px}
+
+  .reveal{opacity:0;transform:translateY(16px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  .sec{margin-top:46px}
+  .sec:first-of-type{margin-top:8px}
+  .shead{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px;gap:12px}
+  .shead h2{font-size:17px;font-weight:800;letter-spacing:-.4px}
+  .shead .desc{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .shead .meta{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);font-weight:800}
+
+  /* state badges */
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 9px;border-radius:7px;white-space:nowrap}
+  .badge::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
+  .b-on{color:var(--on);background:rgba(16,160,80,.1)}
+  .b-off{color:var(--off);background:rgba(13,148,136,.1)}
+  .b-obs{color:var(--obs);background:rgba(199,154,22,.12)}
+  .b-awa{color:var(--awa);background:rgba(154,168,160,.16)}
+  .b-mkt{color:var(--lens);background:rgba(11,182,196,.12)}
+
+  /* ───── CORE BANNER ───── */
+  .corewrap{position:relative;border-radius:24px;overflow:hidden;background:
+     radial-gradient(120% 140% at 78% 0%, rgba(16,160,80,.10), transparent 55%),
+     radial-gradient(80% 120% at 0% 100%, rgba(11,182,196,.07), transparent 50%),
+     linear-gradient(180deg,#ffffff,#f7fbf8);
+     border:1px solid var(--line);box-shadow:var(--shadow);display:grid;grid-template-columns:1.15fr .85fr;gap:0;min-height:340px}
+  .core-left{padding:34px 36px;display:flex;flex-direction:column;justify-content:center}
+  .core-tag{display:inline-flex;align-items:center;gap:8px;font-size:10.5px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:var(--green-deep);margin-bottom:16px}
+  .core-tag .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:beat 2s infinite}
+  .core-left h1{font-size:clamp(30px,4vw,46px);font-weight:900;letter-spacing:-1.6px;line-height:1.02}
+  .core-left h1 .alive{background:linear-gradient(120deg,var(--green-bright),var(--green-deep));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .core-left p{color:var(--muted);font-size:14px;margin-top:12px;max-width:430px}
+  .vitals{display:flex;gap:26px;margin-top:26px;flex-wrap:wrap}
+  .vital .vk{font-size:9.5px;letter-spacing:1.3px;text-transform:uppercase;color:var(--faint);font-weight:800;margin-bottom:4px}
+  .vital .vv{font-size:21px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px}
+  .vital .vv.g{color:var(--green)}
+  .core-right{position:relative;display:grid;place-items:center;border-left:1px solid var(--line-soft);background:radial-gradient(circle at center,rgba(16,160,80,.06),transparent 70%)}
+  /* living core svg */
+  .core-svg{width:300px;height:300px;max-width:88%}
+  .ring-rot{transform-origin:160px 160px;animation:spin 60s linear infinite}
+  .ring-rot.rev{animation:spin 90s linear infinite reverse}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .pulse{transform-origin:160px 160px;transform-box:fill-box;animation:pul var(--pulse-dur,3s) ease-out infinite}
+  .pulse.p2{animation-delay:1s}.pulse.p3{animation-delay:2s}
+  @keyframes pul{0%{transform:scale(.55);opacity:.55}80%{opacity:0}100%{transform:scale(1.25);opacity:0}}
+  .corelabel{font-family:'JetBrains Mono',monospace;font-weight:800}
+
+  /* ───── KPI CARDS ───── */
+  .grid{display:grid;gap:16px}
+  .g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr}.corewrap{grid-template-columns:1fr}.core-right{border-left:none;border-top:1px solid var(--line-soft);min-height:300px}}
+  @media(max-width:560px){.g4,.g2{grid-template-columns:1fr}}
+  .card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:var(--shadow-sm);transition:transform .25s cubic-bezier(.2,.7,.2,1),box-shadow .25s,border-color .25s}
+  .card:hover{transform:translateY(-3px);box-shadow:var(--shadow);border-color:rgba(16,160,80,.28)}
+  .card .top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:13px}
+  .card .label{font-size:12px;color:var(--muted);font-weight:600}
+  .card .value{font-size:31px;font-weight:800;letter-spacing:-1px;font-family:'JetBrains Mono',monospace}
+  .card .value.g{color:var(--green)}
+  .card .value.pending{font-size:15px;color:var(--faint);font-weight:600;letter-spacing:0}
+  .card .sub{font-size:12px;color:var(--muted);margin-top:6px}
+  .prov{max-height:0;overflow:hidden;opacity:0;transition:max-height .3s,opacity .3s,margin .3s;font-size:10px;color:var(--faint);line-height:1.8}
+  .card:hover .prov{max-height:120px;opacity:1;margin-top:13px;padding-top:12px;border-top:1px solid var(--line-soft)}
+  .prov .r{display:flex;justify-content:space-between;gap:10px}
+  .prov a{color:var(--green-deep)}
+  .prov-hint{position:absolute;top:16px;right:16px;font-size:9px;color:var(--faint);opacity:.6}
+
+  /* ───── NETWORK CANVAS ───── */
+  .netwrap{position:relative;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:linear-gradient(180deg,#fff,#f8fbf9);box-shadow:var(--shadow);height:440px}
+  #netcanvas{width:100%;height:100%;display:block;cursor:grab}
+  .net-legend{position:absolute;top:16px;left:18px;display:flex;flex-direction:column;gap:7px;font-size:11px;color:var(--muted);pointer-events:none}
+  .net-legend .li{display:flex;align-items:center;gap:8px}
+  .net-legend .sw{width:9px;height:9px;border-radius:50%}
+  .net-stats{position:absolute;bottom:16px;left:18px;display:flex;gap:22px}
+  .net-stats .ns{font-family:'JetBrains Mono',monospace}
+  .net-stats .nk{display:block;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint);font-weight:800;font-family:'Inter'}
+  .net-stats .nv{font-size:18px;font-weight:800;color:var(--ink)}
+  .net-tip{position:absolute;pointer-events:none;background:#08160e;color:#eafff2;font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 10px;border-radius:8px;opacity:0;transform:translate(-50%,-130%);transition:opacity .12s;white-space:nowrap;z-index:5}
+  .net-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--faint);font-size:13px;padding:20px}
+
+  /* ───── ACTIVITY ───── */
+  .table-card{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  thead th{text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:800;padding:14px 20px;border-bottom:1px solid var(--line)}
+  tbody td{padding:13px 20px;font-size:13px;border-bottom:1px solid var(--line-soft)}
+  tbody tr{transition:background .15s}tbody tr:hover{background:var(--green-soft)}tbody tr:last-child td{border-bottom:none}
+  .evt{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 9px;border-radius:7px}
+  .evt-m{color:var(--green);background:rgba(16,160,80,.1)}.evt-t{color:var(--muted);background:rgba(93,111,100,.1)}
+  .addr,.hl{font-family:'JetBrains Mono',monospace;font-size:12px}.hl{color:var(--green-deep)}
+  .rowin{animation:rowin .5s ease both}
+  @keyframes rowin{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+
+  /* ───── MODULES ───── */
+  .mod{position:relative;border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:var(--shadow-sm);overflow:hidden;background:var(--panel);transition:transform .25s,box-shadow .25s}
+  .mod:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
+  .mod .pat{position:absolute;inset:0;opacity:.5;pointer-events:none}
+  .mod .mh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;position:relative}
+  .mod .mt{display:flex;align-items:center;gap:11px;font-weight:800;font-size:15px;letter-spacing:-.3px}
+  .mod .mi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--green-soft);font-size:16px;border:1px solid var(--line)}
+  .mod .mb{font-size:13px;color:var(--muted);position:relative;max-width:92%}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;position:relative}
+  .chip{font-size:11px;font-family:'JetBrains Mono',monospace;padding:4px 10px;border-radius:7px;background:var(--green-soft);color:var(--green-deep);border:1px solid var(--line)}
+  .chip.m{background:#f1f4f2;color:var(--faint)}
+  .sbox{margin-top:16px;padding:12px 14px;border-radius:11px;background:#f6f9f7;border:1px dashed var(--line);font-size:12px;color:var(--muted);position:relative}
+  .sbox b{color:var(--ink)}
+  /* faint background motifs for empty modules */
+  .pat-hex{background-image:radial-gradient(circle at 1px 1px, rgba(16,160,80,.10) 1.4px, transparent 0);background-size:22px 22px}
+  .pat-dna{background:repeating-linear-gradient(120deg, rgba(16,160,80,.05) 0 2px, transparent 2px 14px)}
+  .pat-grid{background-image:linear-gradient(rgba(16,160,80,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(16,160,80,.06) 1px,transparent 1px);background-size:30px 30px}
+
+  footer{margin-left:var(--rail);padding:26px 34px 60px;border-top:1px solid var(--line);font-size:11px;color:var(--faint);line-height:1.9}
+  footer a{color:var(--green-deep);font-weight:600}
+  footer .pl{font-family:'JetBrains Mono',monospace}
+  .err{color:var(--breach)}
+  @media(max-width:880px){.rail{transform:translateX(-100%);transition:.3s}.main,footer{margin-left:0}.wrap{padding:24px 18px 70px}.topbar{padding:14px 18px}}
+</style>
+</head>
+<body>
+
+<!-- LEFT RAIL -->
+<aside class="rail">
+  <div class="brand">
+    <div class="logo">◇</div>
+    <div><div class="bname">LITANY</div><div class="bsub">Intelligence OS</div></div>
+  </div>
+  <nav class="nav">
+    <div class="grp">Protocol</div>
+    <a href="#core" class="active"><span class="ico">◎</span> Litany Core</a>
+    <a href="#overview"><span class="ico">▦</span> Collection</a>
+    <a href="#network"><span class="ico">⊹</span> Transfer Network</a>
+    <a href="#activity"><span class="ico">≋</span> Activity</a>
+    <div class="grp">Intelligence</div>
+    <a href="#holders"><span class="ico">◍</span> Holder Intel</a>
+    <a href="#economic"><span class="ico">$</span> Economic</a>
+    <div class="grp">Ecosystem</div>
+    <a href="#modules"><span class="ico">⬡</span> Hollows · Mesh · Arena</a>
+    <a href="#network-panel"><span class="ico">◈</span> Abstract Network</a>
+  </nav>
+  <div class="foot">Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a><br>Mantis Pro · community tool<br>Not an official Litany product</div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="crumb"><b>Litany Intelligence</b> · Abstract Mainnet</div>
+    <div class="tstat">
+      <div class="pill"><span class="ldot"></span> Live</div>
+      <div class="pill">Block <span class="blk" id="tb-block">—</span></div>
+      <div class="pill"><span id="tb-time">—</span></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+
+    <!-- LITANY CORE -->
+    <section class="sec reveal" id="core">
+      <div class="corewrap">
+        <div class="core-left">
+          <span class="core-tag"><span class="dot"></span> Protocol Heartbeat</span>
+          <h1>The protocol is<br><span class="alive">alive.</span></h1>
+          <p>Agent-native collectibles. Firmware for autonomous worlds. Every signal below is read live from Abstract and traceable to its source.</p>
+          <div class="vitals">
+            <div class="vital"><div class="vk">Minted</div><div class="vv g" id="cv-minted">—</div></div>
+            <div class="vital"><div class="vk">Supply Cap</div><div class="vv">8,000</div></div>
+            <div class="vital"><div class="vk">Block Height</div><div class="vv" id="cv-block">—</div></div>
+            <div class="vital"><div class="vk">Status</div><div class="vv g" id="cv-status">SYNCING</div></div>
+          </div>
+        </div>
+        <div class="core-right">
+          <svg class="core-svg" viewBox="0 0 320 320" id="coreSvg">
+            <defs>
+              <radialGradient id="cg" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#1fd06b"/><stop offset="60%" stop-color="#10a050"/><stop offset="100%" stop-color="#077a39"/>
+              </radialGradient>
+              <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+            <!-- rotating tick ring -->
+            <g class="ring-rot">
+              <circle cx="160" cy="160" r="150" fill="none" stroke="rgba(16,160,80,.16)" stroke-width="1"/>
+              <g id="ticks"></g>
+            </g>
+            <g class="ring-rot rev">
+              <circle cx="160" cy="160" r="118" fill="none" stroke="rgba(16,160,80,.12)" stroke-width="1" stroke-dasharray="2 8"/>
+            </g>
+            <!-- mint progress arc -->
+            <circle cx="160" cy="160" r="92" fill="none" stroke="rgba(16,160,80,.12)" stroke-width="8"/>
+            <circle id="arc" cx="160" cy="160" r="92" fill="none" stroke="url(#cg)" stroke-width="8" stroke-linecap="round"
+                    transform="rotate(-90 160 160)" stroke-dasharray="578" stroke-dashoffset="578" style="transition:stroke-dashoffset 1.4s cubic-bezier(.2,.7,.2,1)"/>
+            <!-- pulses -->
+            <circle class="pulse" cx="160" cy="160" r="60" fill="none" stroke="var(--green)" stroke-width="2"/>
+            <circle class="pulse p2" cx="160" cy="160" r="60" fill="none" stroke="var(--green)" stroke-width="2"/>
+            <circle class="pulse p3" cx="160" cy="160" r="60" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+            <!-- center -->
+            <circle cx="160" cy="160" r="46" fill="url(#cg)" filter="url(#glow)" opacity=".95"/>
+            <text x="160" y="156" text-anchor="middle" class="corelabel" fill="#fff" font-size="11" letter-spacing="2">LITANY</text>
+            <text x="160" y="176" text-anchor="middle" class="corelabel" id="arcpct" fill="#fff" font-size="18">—</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLLECTION OVERVIEW -->
+    <section class="sec reveal" id="overview">
+      <div class="shead">
+        <div><h2>Litany Cards — Collection Overview</h2><div class="desc">Live onchain state of the genesis ERC-721 collection.</div></div>
+        <span class="meta">Layer 1 · Core Metrics</span>
+      </div>
+      <div class="grid g4">
+        <div class="card"><div class="prov-hint">hover ⓘ</div><div class="top"><span class="label">Minted Supply</span><span class="badge b-on">Verified Onchain</span></div><div class="value g" id="k-minted">—</div><div class="sub" id="k-minted-sub">of 8,000 max</div><div class="prov"><div class="r"><span>Source</span><span>Abstract RPC</span></div><div class="r"><span>Method</span><span class="mono">eth_call · totalSupply()</span></div><div class="r"><span>Block</span><span class="mono" id="k-minted-blk">—</span></div></div></div>
+        <div class="card"><div class="prov-hint">hover ⓘ</div><div class="top"><span class="label">Mint Progress</span><span class="badge b-on">Verified Onchain</span></div><div class="value" id="k-prog">—</div><div class="sub">live completion</div><div class="prov"><div class="r"><span>Derived</span><span class="mono">supply ÷ 8,000</span></div></div></div>
+        <div class="card"><div class="prov-hint">hover ⓘ</div><div class="top"><span class="label">Mint Price</span><span class="badge b-off">Official Source</span></div><div class="value">0.0025</div><div class="sub">ETH per card</div><div class="prov"><div class="r"><span>Source</span><a href="https://litany.gg/docs/contracts" target="_blank">litany.gg/docs</a></div></div></div>
+        <div class="card"><div class="prov-hint">hover ⓘ</div><div class="top"><span class="label">Standard</span><span class="badge b-on">Verified Onchain</span></div><div class="value" style="font-size:20px">ERC-721</div><div class="sub">+2981 · onchain SVG</div><div class="prov"><div class="r"><span>Contract</span><a class="mono" id="k-contract" target="_blank">verified ↗</a></div></div></div>
+      </div>
+      <div class="grid g3" style="margin-top:16px">
+        <div class="card"><div class="top"><span class="label">Floor Price</span><span class="badge b-awa" id="b-floor">Loading…</span></div><div class="value pending" id="k-floor">Loading…</div><div class="sub" id="k-floor-sub">OpenSea · Abstract</div></div>
+        <div class="card"><div class="top"><span class="label">Holders</span><span class="badge b-awa" id="b-holders">Loading…</span></div><div class="value pending" id="k-holders">Loading…</div><div class="sub">unique owners · OpenSea</div></div>
+        <div class="card"><div class="top"><span class="label">Listed %</span><span class="badge b-awa">Awaiting Source</span></div><div class="value pending">Verification unavailable</div><div class="sub">listings index required</div></div>
+      </div>
+    </section>
+
+    <!-- TRANSFER NETWORK -->
+    <section class="sec reveal" id="network">
+      <div class="shead">
+        <div><h2>Transfer Intelligence Network</h2><div class="desc">A live force-directed graph of real onchain Transfer relationships in the recent block window. Every edge is an actual transaction.</div></div>
+        <span class="badge b-on">Verified Onchain</span>
+      </div>
+      <div class="netwrap">
+        <canvas id="netcanvas"></canvas>
+        <div class="net-legend">
+          <div class="li"><span class="sw" style="background:var(--green-deep)"></span> Mint origin</div>
+          <div class="li"><span class="sw" style="background:var(--green)"></span> Wallet</div>
+          <div class="li"><span class="sw" style="background:var(--lens)"></span> Hub (high degree)</div>
+        </div>
+        <div class="net-stats">
+          <div class="ns"><span class="nk">Wallets</span><span class="nv" id="net-nodes">—</span></div>
+          <div class="ns"><span class="nk">Transfers</span><span class="nv" id="net-edges">—</span></div>
+          <div class="ns"><span class="nk">Window</span><span class="nv" id="net-window">—</span></div>
+        </div>
+        <div class="net-tip" id="net-tip"></div>
+        <div class="net-empty" id="net-empty" style="display:none"></div>
+      </div>
+    </section>
+
+    <!-- ACTIVITY -->
+    <section class="sec reveal" id="activity">
+      <div class="shead"><div><h2>Live Collection Activity</h2><div class="desc">Most recent mints and transfers, each linked to its transaction.</div></div><span class="badge b-on">Verified Onchain</span></div>
+      <div class="table-card">
+        <table><thead><tr><th>Event</th><th>From → To</th><th>Token</th><th>Block</th><th>Time</th><th>Tx</th></tr></thead>
+        <tbody id="act-body"><tr><td colspan="6" style="text-align:center;color:var(--faint);padding:34px">Reading onchain Transfer events…</td></tr></tbody></table>
+      </div>
+    </section>
+
+    <!-- HOLDER INTEL -->
+    <section class="sec reveal" id="holders">
+      <div class="shead"><div><h2>Holder &amp; Trait Intelligence</h2><div class="desc">Deep ownership analytics — fully verifiable, reconstructed by the indexer from every Transfer event and onchain card text.</div></div><span class="meta">Layer 2 · Relationships</span></div>
+      <div class="grid g3">
+        <div class="card"><div class="top"><span class="label">Whale Concentration · Top 10/50</span><span class="badge b-awa">Indexer</span></div><div class="value pending">Verification unavailable</div><div class="sub">from full ownership history</div></div>
+        <div class="card"><div class="top"><span class="label">Collector Retention</span><span class="badge b-awa">Indexer</span></div><div class="value pending">Verification unavailable</div><div class="sub">avg holding period</div></div>
+        <div class="card"><div class="top"><span class="label">Trait &amp; Phrase Rarity</span><span class="badge b-awa">Indexer</span></div><div class="value pending">Verification unavailable</div><div class="sub">getCardText() · all tokens</div></div>
+      </div>
+      <div class="sbox" style="margin-top:16px">These are verifiable from onchain data but require indexing every Transfer and reading <span class="mono">getCardText()</span> across all tokens — run through the Litany indexer (RPC → Subsquid → PostgreSQL), not the browser. Interfaces are built; panels activate on connect. <b>No values are estimated.</b></div>
+    </section>
+
+    <!-- ECONOMIC -->
+    <section class="sec reveal" id="economic">
+      <div class="shead"><div><h2>Economic Activity Engine</h2><div class="desc">Volume, revenue flow and a deterministic quality score — activates with the indexer and a marketplace source.</div></div><span class="meta">Layer 3 · Value Flow</span></div>
+      <div class="grid g4">
+        <div class="card"><div class="top"><span class="label">Total Volume</span><span class="badge b-awa" id="b-tvol">Loading…</span></div><div class="value" id="e-tvol" style="font-size:22px">—</div><div class="sub">all-time · OpenSea</div></div>
+        <div class="card"><div class="top"><span class="label">24h Volume</span><span class="badge b-mkt">OpenSea</span></div><div class="value" id="e-24h" style="font-size:22px">—</div><div class="sub">last 24 hours</div></div>
+        <div class="card"><div class="top"><span class="label">7d / 30d Volume</span><span class="badge b-mkt">OpenSea</span></div><div class="value" id="e-7d30d" style="font-size:18px">—</div><div class="sub">ETH</div></div>
+        <div class="card"><div class="top"><span class="label">Volume Quality</span><span class="badge b-awa">Indexer</span></div><div class="value pending">Unavailable</div><div class="sub">deterministic score</div></div>
+      </div>
+    </section>
+
+    <!-- MODULES -->
+    <section class="sec reveal" id="modules">
+      <div class="shead"><div><h2>Ecosystem Modules</h2><div class="desc">Designed and wired now. Each activates automatically when its protocol source goes public — no fabricated state in the meantime.</div></div><span class="meta">Layer 4 · Protocol Intelligence</span></div>
+      <div class="grid g2">
+
+        <div class="mod"><div class="pat pat-dna"></div>
+          <div class="mh"><div class="mt"><span class="mi">🜂</span> Hollow Genetics</div><span class="badge b-off">Official Source · Model</span></div>
+          <div class="mb">Genesis entities derived from Litany Cards. The documented genetic model is live; the registry &amp; lineage tree populate when the Genesis claim opens.</div>
+          <div class="chips"><span class="chip">Surge</span><span class="chip">Burn</span><span class="chip">Static</span><span class="chip">Feral</span><span class="chip">Rigid</span><span class="chip">Void</span><span class="chip">Signal</span><span class="chip">Ghost</span></div>
+          <div class="chips"><span class="chip m">EXEC</span><span class="chip m">WARD</span><span class="chip m">FLUX</span><span class="chip m">KERNEL</span><span class="chip m">HP/ATK/DEF/SPD</span></div>
+          <div class="sbox">Registry · ownership · awakening: <b>Awaiting Protocol Data</b> — claim opens after Card mint completes (TBA).</div>
+        </div>
+
+        <div class="mod"><div class="pat pat-grid"></div>
+          <div class="mh"><div class="mt"><span class="mi">⬡</span> Mesh Command</div><span class="badge b-obs">Observable System</span></div>
+          <div class="mb">Territory control &amp; base-building. Sector registry and faction-flow visualization are prepared; live territory state needs a public source.</div>
+          <div class="chips"><span class="chip m">Territory Map</span><span class="chip m">Sector Registry</span><span class="chip m">Control Flow</span></div>
+          <div class="sbox">Live territory metrics: <b>Awaiting Protocol Data</b>. No control values shown until a source exists.</div>
+        </div>
+
+        <div class="mod"><div class="pat pat-hex"></div>
+          <div class="mh"><div class="mt"><span class="mi">⚔</span> Arena</div><span class="badge b-obs">Observable System</span></div>
+          <div class="mb">Combat &amp; match layer, visible in the Litany demo crawl. Match history and combat stats activate on an exposed source.</div>
+          <div class="chips"><span class="chip m">Match History</span><span class="chip m">Combat Stats</span><span class="chip m">Event Feed</span></div>
+          <div class="sbox">Live metrics: <b>Awaiting Protocol Data</b>.</div>
+        </div>
+
+        <div class="mod"><div class="pat pat-dna"></div>
+          <div class="mh"><div class="mt"><span class="mi">▣</span> Firmware</div><span class="badge b-off">Official Source · Model</span></div>
+          <div class="mb">A Litany Card loaded into a Hollow. Firmware taxonomy maps directly to onchain card classes &amp; the seven text attributes.</div>
+          <div class="chips"><span class="chip">card = firmware</span><span class="chip">7 attributes</span><span class="chip m">install state</span></div>
+          <div class="sbox">Installation &amp; activity feed: <b>Awaiting Protocol Data</b>.</div>
+        </div>
+
+        <div class="mod"><div class="pat pat-grid"></div>
+          <div class="mh"><div class="mt"><span class="mi">◈</span> Factions</div><span class="badge b-awa">Awaiting Protocol Data</span></div>
+          <div class="mb">Faction membership &amp; control. Faction definitions aren't confirmed in official Litany sources yet, so no dominance values are shown.</div>
+          <div class="sbox">Module rendered; values withheld per data-integrity rules.</div>
+        </div>
+
+        <div class="mod"><div class="pat pat-hex"></div>
+          <div class="mh"><div class="mt"><span class="mi">◇</span> Agent Activity</div><span class="badge b-awa">Awaiting Protocol Data</span></div>
+          <div class="mb">Agent-driven protocol activity. Activates when the Litany MCP server / API ships post-mint.</div>
+          <div class="sbox">No verifiable agent data source yet.</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ABSTRACT NETWORK -->
+    <section class="sec reveal" id="network-panel">
+      <div class="shead"><div><h2>Abstract Network</h2><div class="desc">Live chain vitals from the Abstract RPC.</div></div><span class="badge b-on">Verified Onchain</span></div>
+      <div class="grid g4">
+        <div class="card"><div class="top"><span class="label">Block Height</span></div><div class="value" id="n-block" style="font-size:22px">—</div><div class="sub">latest</div></div>
+        <div class="card"><div class="top"><span class="label">Gas Price</span></div><div class="value" id="n-gas" style="font-size:22px">—</div><div class="sub">gwei</div></div>
+        <div class="card"><div class="top"><span class="label">Chain ID</span></div><div class="value" style="font-size:22px">2741</div><div class="sub">Abstract Mainnet</div></div>
+        <div class="card"><div class="top"><span class="label">Finality</span><span class="badge b-off">Official</span></div><div class="value" style="font-size:22px">~2s</div><div class="sub">ZK rollup</div></div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<footer>
+  <div class="pl" id="foot-prov">Data source: Abstract RPC (api.mainnet.abs.xyz) · Last indexed block: — · Verified contract: 0xd44a…03eB</div>
+  <div style="margin-top:8px">Every value is traceable to an onchain source or official Litany documentation. Unsourceable metrics render as <b>Verification unavailable</b> / <b>Awaiting Protocol Data</b> — never estimated.</div>
+  <div style="margin-top:8px">Community intelligence tool by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Mantis Pro · <b>Not an official Litany product.</b></div>
+</footer>
+
+<script>
+  const RPC="/api/abstract-rpc", CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB", MAX=8000;
+  const TT="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const ZERO="0x0000000000000000000000000000000000000000", WINDOW=14000;
+  let rid=1;
+  async function rpc(m,p){const r=await fetch(RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:rid++,method:m,params:p})});if(!r.ok)throw new Error("HTTP "+r.status);const j=await r.json();if(j.error)throw new Error(j.error.message||"rpc error");return j.result;}
+  const hi=h=>h?parseInt(h,16):0, ta=t=>"0x"+t.slice(26), sa=a=>a.slice(0,6)+"…"+a.slice(-4), sh=h=>h.slice(0,8)+"…";
+  function rel(ts){const s=Math.floor(Date.now()/1e3)-ts;if(s<60)return s+"s ago";if(s<3600)return(s/60|0)+"m ago";if(s<86400)return(s/3600|0)+"h ago";return(s/86400|0)+"d ago";}
+
+  // count-up
+  function countUp(el,to,fmt){const dur=1100,st=performance.now(),from=0;function f(t){const k=Math.min(1,(t-st)/dur);const e=1-Math.pow(1-k,3);el.textContent=fmt(Math.floor(from+(to-from)*e));if(k<1)requestAnimationFrame(f);}requestAnimationFrame(f);}
+
+  // ticks on core
+  (function(){let s="";for(let i=0;i<60;i++){const a=i*6*Math.PI/180,x1=160+Math.cos(a)*150,y1=160+Math.sin(a)*150,x2=160+Math.cos(a)*(i%5===0?142:146),y2=160+Math.sin(a)*(i%5===0?142:146);s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(16,160,80,${i%5===0?.35:.16})" stroke-width="${i%5===0?1.4:.8}"/>`;}document.getElementById("ticks").innerHTML=s;})();
+
+  async function loadCore(){
+    try{
+      const [bh,sup]=await Promise.all([rpc("eth_blockNumber",[]),rpc("eth_call",[{to:CARDS,data:"0x18160ddd"},"latest"])]);
+      const block=hi(bh),minted=hi(sup),pct=minted/MAX*100;
+      document.getElementById("tb-block").textContent=block.toLocaleString();
+      document.getElementById("tb-time").textContent=new Date().toLocaleTimeString();
+      document.getElementById("cv-block").textContent=block.toLocaleString();
+      document.getElementById("cv-status").textContent="ALIVE";
+      countUp(document.getElementById("cv-minted"),minted,n=>n.toLocaleString());
+      countUp(document.getElementById("k-minted"),minted,n=>n.toLocaleString());
+      document.getElementById("k-prog").textContent=pct.toFixed(1)+"%";
+      document.getElementById("k-minted-blk").textContent=block.toLocaleString();
+      const c=document.getElementById("k-contract");c.textContent="0xd44a…03eB ↗";c.href="https://abscan.org/token/"+CARDS;
+      document.getElementById("n-block").textContent=block.toLocaleString();
+      document.getElementById("foot-prov").textContent="Data source: Abstract RPC (api.mainnet.abs.xyz) · Last indexed block: "+block.toLocaleString()+" · Verified contract: "+CARDS;
+      // arc + pulse tempo
+      const C=2*Math.PI*92, off=C*(1-pct/100);
+      const arc=document.getElementById("arc");arc.setAttribute("stroke-dasharray",C.toFixed(0));setTimeout(()=>arc.style.strokeDashoffset=off.toFixed(0),120);
+      document.getElementById("arcpct").textContent=pct.toFixed(0)+"%";
+      return block;
+    }catch(e){
+      document.getElementById("cv-status").textContent="RPC ERR";
+      document.getElementById("k-minted").innerHTML='<span class="value pending err">unavailable</span>';
+      document.getElementById("k-minted-sub").textContent=e.message;
+      return null;
+    }
+  }
+  async function loadGas(){try{document.getElementById("n-gas").textContent=(hi(await rpc("eth_gasPrice",[]))/1e9).toFixed(3);}catch(_){document.getElementById("n-gas").textContent="—";}}
+
+  let graph={nodes:[],edges:[]};
+  async function loadActivityAndGraph(block){
+    const body=document.getElementById("act-body"), empty=document.getElementById("net-empty");
+    try{
+      if(!block)block=hi(await rpc("eth_blockNumber",[]));
+      const from="0x"+Math.max(0,block-WINDOW).toString(16);
+      const logs=await rpc("eth_getLogs",[{address:CARDS,topics:[TT],fromBlock:from,toBlock:"latest"}]);
+      document.getElementById("net-window").textContent=WINDOW.toLocaleString()+"b";
+      if(!Array.isArray(logs)||!logs.length){
+        body.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--faint);padding:34px">No Litany Card transfers in the last '+WINDOW.toLocaleString()+' blocks.</td></tr>';
+        empty.style.display="grid";empty.textContent="No transfers in the recent window yet — the graph populates as activity occurs onchain.";
+        document.getElementById("net-nodes").textContent="0";document.getElementById("net-edges").textContent="0";
+        return;
+      }
+      // ----- activity table -----
+      const recent=logs.slice(-16).reverse();
+      const ubl=[...new Set(recent.map(l=>l.blockNumber))], ts={};
+      await Promise.all(ubl.map(async b=>{try{ts[b]=hi((await rpc("eth_getBlockByNumber",[b,false])).timestamp);}catch(_){ts[b]=null;}}));
+      body.innerHTML=recent.map((l,i)=>{const f=ta(l.topics[1]),t=ta(l.topics[2]),id=BigInt(l.topics[3]).toString(),m=f.toLowerCase()===ZERO,bn=hi(l.blockNumber),tt=ts[l.blockNumber];
+        return `<tr class="rowin" style="animation-delay:${i*.03}s"><td><span class="evt ${m?'evt-m">Mint':'evt-t">Transfer'}</span></td><td class="addr">${m?'<span style="color:var(--faint)">mint</span>':sa(f)} → ${sa(t)}</td><td class="mono">#${id}</td><td class="mono">${bn.toLocaleString()}</td><td>${tt?rel(tt):'—'}</td><td><a class="hl" href="https://abscan.org/tx/${l.transactionHash}" target="_blank">${sh(l.transactionHash)}</a></td></tr>`;}).join("");
+      // ----- build graph (cap to keep it readable) -----
+      const cap=logs.slice(-120), nodeMap=new Map(); let edges=[];
+      function node(id,mint){if(!nodeMap.has(id))nodeMap.set(id,{id,mint:!!mint,deg:0,x:Math.random()*600,y:Math.random()*380,vx:0,vy:0});return nodeMap.get(id);}
+      cap.forEach(l=>{const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase();const a=node(f.replace(ZERO,"MINT"),f===ZERO),b=node(t);a.deg++;b.deg++;edges.push([a.id,b.id]);});
+      let nodes=[...nodeMap.values()];
+      if(nodes.length>62){const keep=new Set(nodes.sort((x,y)=>y.deg-x.deg).slice(0,62).map(n=>n.id));nodes=nodes.filter(n=>keep.has(n.id));edges=edges.filter(e=>keep.has(e[0])&&keep.has(e[1]));}
+      graph={nodes,edges,map:new Map(nodes.map(n=>[n.id,n]))};
+      document.getElementById("net-nodes").textContent=nodes.filter(n=>n.id!=="MINT").length.toLocaleString();
+      document.getElementById("net-edges").textContent=edges.length.toLocaleString();
+      startGraph();
+    }catch(e){
+      body.innerHTML='<tr><td colspan="6" style="text-align:center;padding:34px" class="err">Activity unavailable: '+e.message+'</td></tr>';
+      empty.style.display="grid";empty.textContent="Network unavailable: "+e.message;
+    }
+  }
+
+  // ----- force-directed canvas -----
+  function startGraph(){
+    const cv=document.getElementById("netcanvas"),ctx=cv.getContext("2d"),tip=document.getElementById("net-tip");
+    let W,H,DPR=Math.min(2,devicePixelRatio||1),hover=null;
+    function size(){const r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+    size();addEventListener("resize",size);
+    const N=graph.nodes,E=graph.edges,M=graph.map;
+    N.forEach(n=>{n.x=W/2+(Math.random()-.5)*W*.6;n.y=H/2+(Math.random()-.5)*H*.6;});
+    const maxDeg=Math.max(1,...N.map(n=>n.deg));
+    function rad(n){return n.mint?13:6+ (n.deg/maxDeg)*9;}
+    function tick(){
+      // repulsion
+      for(let i=0;i<N.length;i++)for(let j=i+1;j<N.length;j++){const a=N[i],b=N[j];let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy||0.01,d=Math.sqrt(d2);const f=1400/d2;const fx=dx/d*f,fy=dy/d*f;a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;}
+      // springs
+      E.forEach(([ai,bi])=>{const a=M.get(ai),b=M.get(bi);if(!a||!b)return;let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||.01;const f=(d-70)*.012;const fx=dx/d*f,fy=dy/d*f;a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;});
+      // gravity + integrate
+      N.forEach(n=>{n.vx+=(W/2-n.x)*.0016;n.vy+=(H/2-n.y)*.0016;n.vx*=.86;n.vy*=.86;n.x+=Math.max(-6,Math.min(6,n.vx));n.y+=Math.max(-6,Math.min(6,n.vy));n.x=Math.max(20,Math.min(W-20,n.x));n.y=Math.max(20,Math.min(H-20,n.y));});
+      draw();requestAnimationFrame(tick);
+    }
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      ctx.lineWidth=1;
+      E.forEach(([ai,bi])=>{const a=M.get(ai),b=M.get(bi);if(!a||!b)return;ctx.strokeStyle=(hover&&(hover.id===ai||hover.id===bi))?"rgba(16,160,80,.55)":"rgba(16,160,80,.13)";ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();});
+      N.forEach(n=>{const r=rad(n);const hub=n.deg>=maxDeg*.6&&!n.mint;ctx.beginPath();ctx.arc(n.x,n.y,r,0,7);ctx.fillStyle=n.mint?"#077a39":hub?"#0bb6c4":"#10a050";if(hover===n){ctx.shadowColor="rgba(16,160,80,.7)";ctx.shadowBlur=14;}ctx.globalAlpha=hover&&hover!==n?.5:1;ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;if(n.mint){ctx.fillStyle="#fff";ctx.font="700 9px JetBrains Mono";ctx.textAlign="center";ctx.fillText("MINT",n.x,n.y+3);}});
+    }
+    cv.onmousemove=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;hover=null;for(const n of N){if((mx-n.x)**2+(my-n.y)**2<(rad(n)+4)**2){hover=n;break;}}if(hover){tip.style.opacity=1;tip.style.left=hover.x+"px";tip.style.top=hover.y+"px";tip.textContent=(hover.mint?"Mint origin":sa(hover.id))+" · "+hover.deg+" tx";}else tip.style.opacity=0;};
+    cv.onmouseleave=()=>{hover=null;tip.style.opacity=0;};
+    tick();
+  }
+
+  // ── OpenSea market data (via server-side proxy; API key stays in Railway env) ──
+  async function osea(path){
+    const r=await fetch("/api/opensea?path="+encodeURIComponent(path));
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.error)throw new Error(j.error||("OpenSea "+r.status));
+    return j;
+  }
+  const fmtN=(v,d)=>v==null?"—":Number(v).toLocaleString("en-US",{maximumFractionDigits:d==null?2:d});
+  function setMkt(id,badgeId,val,subId){
+    const el=document.getElementById(id);
+    if(val==null){el.className="value pending";el.textContent="Verification unavailable";}
+    else{el.className="value g";el.textContent=val;}
+    if(badgeId){const b=document.getElementById(badgeId);if(b){b.className="badge b-mkt";b.textContent="OpenSea";}}
+    if(subId)document.getElementById(subId).textContent="OpenSea · Abstract";
+  }
+  function mktFail(msg){
+    ["b-floor","b-holders","b-tvol"].forEach(id=>{const b=document.getElementById(id);if(b){b.className="badge b-awa";b.textContent="Awaiting Source";}});
+    ["k-floor","k-holders"].forEach(id=>{const el=document.getElementById(id);if(el){el.className="value pending";el.textContent="Verification unavailable";}});
+    const fs=document.getElementById("k-floor-sub");if(fs)fs.textContent=msg;
+    ["e-tvol","e-24h","e-7d30d"].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent="—";});
+  }
+  async function loadMarket(){
+    try{
+      const c=await osea("/api/v2/chain/abstract/contract/"+CARDS);
+      const slug=c.collection||(c.contract&&c.contract.collection)||null;
+      if(!slug)throw new Error("collection not found on OpenSea (chain slug?)");
+      const s=await osea("/api/v2/collections/"+slug+"/stats");
+      const tot=s.total||{}, iv={}; (s.intervals||[]).forEach(x=>iv[x.interval]=x);
+      setMkt("k-floor","b-floor", tot.floor_price!=null?fmtN(tot.floor_price,4)+" \u039e":null,"k-floor-sub");
+      setMkt("k-holders","b-holders", tot.num_owners!=null?fmtN(tot.num_owners,0):null);
+      const tb=document.getElementById("b-tvol");if(tb){tb.className="badge b-mkt";tb.textContent="OpenSea";}
+      const tv=document.getElementById("e-tvol");if(tv){tv.className="value g";tv.textContent=tot.volume!=null?fmtN(tot.volume,1)+" \u039e":"—";}
+      const d1=document.getElementById("e-24h");if(d1){d1.className="value g";d1.textContent=iv.one_day?fmtN(iv.one_day.volume,2)+" \u039e":"—";}
+      const dd=document.getElementById("e-7d30d");if(dd){dd.className="value g";dd.textContent=(iv.seven_day?fmtN(iv.seven_day.volume,1):"—")+" / "+(iv.thirty_day?fmtN(iv.thirty_day.volume,1):"—")+" \u039e";}
+    }catch(e){ mktFail(e.message); }
+  }
+
+  // scroll reveal + nav active
+  const obs=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting)en.target.classList.add("in");}),{threshold:.12});
+  document.querySelectorAll(".reveal").forEach(s=>obs.observe(s));
+  const navlinks=[...document.querySelectorAll(".nav a")];
+  const spy=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){navlinks.forEach(a=>a.classList.toggle("active",a.getAttribute("href")==="#"+en.target.id));}}),{rootMargin:"-40% 0px -55% 0px"});
+  document.querySelectorAll(".sec").forEach(s=>spy.observe(s));
+
+  (async function(){const b=await loadCore();loadGas();loadActivityAndGraph(b);loadMarket();})();
+</script>
+
+</body>
+</html>

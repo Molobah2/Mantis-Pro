@@ -120,6 +120,43 @@ def bunny_party():
     from flask import Response
     return Response(html, mimetype="text/html")
 
+@app.route("/litany")
+def litany_dashboard():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "litany.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+@app.route("/api/abstract-rpc", methods=["POST"])
+def abstract_rpc():
+    import requests
+    from flask import request as _rpc_req, Response, jsonify
+    try:
+        payload = _rpc_req.get_json(force=True)
+        r = requests.post("https://api.mainnet.abs.xyz", json=payload, timeout=20)
+        return Response(r.text, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"error": {"message": str(e)}}), 502
+
+@app.route("/api/opensea")
+def opensea_proxy():
+    import os, requests
+    from flask import request as _os_req, Response, jsonify
+    key = os.environ.get("OPENSEA_API_KEY")
+    if not key:
+        return jsonify({"error": "OPENSEA_API_KEY not set in environment"}), 503
+    path = _os_req.args.get("path", "")
+    if not path.startswith("/api/v2/"):
+        return jsonify({"error": "invalid path"}), 400
+    try:
+        r = requests.get("https://api.opensea.io" + path,
+                         headers={"X-API-KEY": key, "accept": "application/json"}, timeout=20)
+        return Response(r.text, status=r.status_code, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
 register_bunny_routes(app)
 
 @app.route("/moody/woke")
