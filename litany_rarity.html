@@ -9,7 +9,12 @@
   :root{
     --bg:#f4f8f5;--panel:#fff;--ink:#08160e;--muted:#5a6c61;--faint:#90a096;
     --green:#10a050;--green-deep:#077a39;--green-soft:#e9f6ef;--line:#e2ede7;--line-soft:#eef4f0;
-    --gold:#c79a16;--awa:#9aa8a0;
+    --gold:#c79a16;
+    --leg:#8b5cf6;--leg-soft:rgba(139,92,246,.12);
+    --epic:#3b82f6;--epic-soft:rgba(59,130,246,.12);
+    --rare:#10b981;--rare-soft:rgba(16,185,129,.12);
+    --unc:#10a050;--unc-soft:rgba(16,160,80,.1);
+    --common:#9aa8a0;--common-soft:rgba(154,168,160,.14);
     --shadow-sm:0 1px 2px rgba(8,22,14,.05);--shadow:0 2px 6px rgba(8,22,14,.04),0 14px 40px rgba(16,160,80,.06);
   }
   *{box-sizing:border-box;margin:0;padding:0}
@@ -21,69 +26,92 @@
   .brand small{display:block;font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase}
   .topbar a.home{color:var(--muted);font-weight:600;font-size:13px}
 
-  .wrap{max-width:1140px;margin:0 auto;padding:36px 28px 80px}
+  .wrap{max-width:1160px;margin:0 auto;padding:34px 28px 80px}
   .head h1{font-size:clamp(26px,4vw,40px);font-weight:900;letter-spacing:-1.4px}
   .head h1 b{color:var(--green)}
-  .head p{color:var(--muted);font-size:15px;margin-top:8px;max-width:620px}
+  .head p{color:var(--muted);font-size:15px;margin-top:8px;max-width:640px}
 
-  .statbar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:26px;background:var(--line);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+  .statbar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:24px;background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden}
   @media(max-width:760px){.statbar{grid-template-columns:repeat(2,1fr)}}
-  .stat{background:var(--panel);padding:22px}
-  .stat .v{font-size:28px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;color:var(--green)}
+  .stat{background:var(--panel);padding:20px}
+  .stat .v{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;color:var(--green)}
   .stat .k{font-size:10px;letter-spacing:1.3px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:6px}
+
+  /* CARD INTELLIGENCE */
+  .ci{margin-top:24px;border:1px solid var(--line);border-radius:20px;background:var(--panel);box-shadow:var(--shadow);overflow:hidden}
+  .ci-head{padding:18px 22px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .ci-head h2{font-size:15px;font-weight:800}
+  .ci-search{display:flex;gap:9px;flex:1;max-width:340px;min-width:200px}
+  .ci-search input{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none}
+  .ci-search input:focus{border-color:var(--green)}
+  .ci-search button{border:none;background:var(--green);color:#fff;border-radius:10px;padding:0 18px;font-weight:700;cursor:pointer;font-family:inherit}
+  .ci-body{display:grid;grid-template-columns:.85fr 1.15fr;gap:0}
+  @media(max-width:820px){.ci-body{grid-template-columns:1fr}}
+  .ci-left{padding:26px;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;gap:16px}
+  @media(max-width:820px){.ci-left{border-right:none;border-bottom:1px solid var(--line-soft)}}
+  .ci-right{padding:26px}
+  .ci-empty{padding:60px 24px;text-align:center;color:var(--faint);font-family:'JetBrains Mono',monospace;font-size:13px;grid-column:1/-1}
+
+  /* styled text card (litany cards are onchain text) */
+  .litcard{border:1px solid var(--tier,var(--line));border-radius:16px;padding:22px;background:linear-gradient(160deg,#fff,#f6faf8);position:relative;box-shadow:0 10px 30px var(--tier-soft,rgba(16,160,80,.06))}
+  .litcard .lc-id{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--faint)}
+  .litcard .lc-name{font-size:22px;font-weight:800;letter-spacing:-.6px;margin:2px 0 16px}
+  .litcard .lc-line{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px}
+  .litcard .lc-line:last-child{border-bottom:none}
+  .litcard .lc-k{color:var(--muted);font-weight:600}
+  .litcard .lc-v{font-family:'JetBrains Mono',monospace;text-align:right}
+  .tierchip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:5px 11px;border-radius:8px;color:var(--tier);background:var(--tier-soft)}
+  .tierchip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+
+  .ci-score{display:flex;align-items:baseline;gap:14px;margin-bottom:18px}
+  .ci-score .big{font-size:52px;font-weight:900;letter-spacing:-3px;font-family:'JetBrains Mono',monospace;color:var(--tier,var(--green));line-height:1}
+  .ci-score .meta .r1{font-size:14px;font-weight:700}
+  .ci-score .meta .r2{font-size:12px;color:var(--muted)}
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+  .kpi{border:1px solid var(--line);border-radius:12px;padding:13px}
+  .kpi .kv{font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace}
+  .kpi .kk{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:4px}
+
+  .scar{display:flex;flex-direction:column;gap:9px}
+  .scar .row{display:flex;align-items:center;gap:11px;font-size:12.5px}
+  .scar .row .k{width:84px;color:var(--muted);font-weight:600;font-size:11px}
+  .scar .row .v{flex:1;font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .scar .row .track{width:78px;height:7px;background:var(--line-soft);border-radius:4px;overflow:hidden}
+  .scar .row .track i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--tier,var(--green)),#23e07a)}
+  .scar .row .pc{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);width:54px;text-align:right}
+
+  .radar-wrap{display:flex;align-items:center;gap:18px;margin-top:8px;flex-wrap:wrap}
+  .radar-wrap .leg{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 
   .grid{display:grid;gap:20px;margin-top:24px}.cols{grid-template-columns:1.15fr .85fr}
   @media(max-width:900px){.cols{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-sm);overflow:hidden}
   .card .ch{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line-soft)}
-  .card .ch h2{font-size:14px;font-weight:800;letter-spacing:.2px}
+  .card .ch h2{font-size:14px;font-weight:800}
   .badge{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 9px;border-radius:7px;color:var(--green);background:rgba(16,160,80,.1)}
   .badge::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
-
   table{width:100%;border-collapse:collapse}
   tbody td,thead th{padding:11px 22px;font-size:13px;text-align:left}
   thead th{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:800;border-bottom:1px solid var(--line)}
-  tbody td{border-bottom:1px solid var(--line-soft)}
-  tbody tr:last-child td{border-bottom:none}tbody tr:hover{background:var(--green-soft)}
-  .rank{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--gold)}
+  tbody td{border-bottom:1px solid var(--line-soft)}tbody tr:last-child td{border-bottom:none}tbody tr:hover{background:var(--green-soft);cursor:pointer}
+  .rank{font-family:'JetBrains Mono',monospace;font-weight:700}
   .score{font-family:'JetBrains Mono',monospace;color:var(--green-deep);font-weight:600}
-  .chips{display:flex;gap:5px;flex-wrap:wrap}
-  .chip{font-size:10.5px;font-family:'JetBrains Mono',monospace;padding:2px 7px;border-radius:5px;background:var(--green-soft);color:var(--green-deep);border:1px solid var(--line)}
-
-  .pad{padding:20px 22px}
-  select,input{width:100%;background:#fff;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink);outline:none}
-  select:focus,input:focus{border-color:var(--green)}
+  .chips{display:flex;gap:5px;flex-wrap:wrap}.chip{font-size:10.5px;font-family:'JetBrains Mono',monospace;padding:2px 7px;border-radius:5px;background:var(--green-soft);color:var(--green-deep);border:1px solid var(--line)}
+  .pad{padding:18px 22px}
+  select{width:100%;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none}
   label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:7px}
-
-  .dist{display:flex;flex-direction:column;gap:8px;margin-top:14px;max-height:340px;overflow:auto}
-  .drow{display:flex;align-items:center;gap:10px;font-size:12.5px}
-  .drow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .drow .track{width:90px;height:7px;background:var(--line-soft);border-radius:4px;overflow:hidden}
-  .drow .track i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#e6c558);border-radius:4px}
-  .drow .pc{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);width:62px;text-align:right}
-
-  .lookout{margin-top:16px}
-  .lk-card{border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:14px;background:linear-gradient(135deg,#fff,#f7fbf8)}
-  .lk-top{display:flex;align-items:baseline;justify-content:space-between}
-  .lk-top .id{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:18px}
-  .lk-top .rk{text-align:right}
-  .lk-top .rk .b{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:800;color:var(--gold);letter-spacing:-1px}
-  .lk-top .rk .s{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:1px;font-weight:700}
-  .lk-traits{margin-top:14px;display:flex;flex-direction:column;gap:8px}
-  .lk-tr{display:flex;align-items:center;gap:10px;font-size:12.5px}
-  .lk-tr .tt{width:90px;color:var(--muted);font-weight:600;font-size:11px}
-  .lk-tr .tv{flex:1;font-family:'JetBrains Mono',monospace}
-  .lk-tr .tp{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green-deep);width:64px;text-align:right}
+  .dist{display:flex;flex-direction:column;gap:8px;margin-top:14px;max-height:320px;overflow:auto}
+  .drow{display:flex;align-items:center;gap:10px;font-size:12.5px}.drow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .drow .track{width:84px;height:7px;background:var(--line-soft);border-radius:4px;overflow:hidden}.drow .track i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#e6c558);border-radius:4px}
+  .drow .pc{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);width:64px;text-align:right}
 
   .empty{text-align:center;padding:70px 24px;color:var(--muted)}
-  .empty .ic{font-size:34px;margin-bottom:14px}
-  .empty h3{font-size:18px;font-weight:800;color:var(--ink)}
+  .empty .ic{font-size:34px;margin-bottom:14px}.empty h3{font-size:18px;font-weight:800;color:var(--ink)}
   .empty p{font-size:13.5px;margin-top:8px;max-width:520px;margin-inline:auto}
   .empty code{font-family:'JetBrains Mono',monospace;background:var(--green-soft);padding:2px 7px;border-radius:5px;color:var(--green-deep);font-size:12px}
   .spinner{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--green);border-radius:50%;margin:0 auto 16px;animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-
-  footer{max-width:1140px;margin:30px auto 0;padding:24px 28px 50px;border-top:1px solid var(--line);font-size:11px;color:var(--faint);line-height:1.9}
+  footer{max-width:1160px;margin:30px auto 0;padding:24px 28px 50px;border-top:1px solid var(--line);font-size:11px;color:var(--faint);line-height:1.9}
   footer a{color:var(--green-deep);font-weight:600}
 </style>
 </head>
@@ -97,14 +125,14 @@
 <div class="wrap">
   <div class="head">
     <h1>Card <b>Rarity</b> Engine</h1>
-    <p>The source of truth for Litany Card rarity — computed from onchain phrase frequency across the full collection. Rarity is emergent: scores are the sum of inverse trait frequencies, exactly like Loot.</p>
+    <p>The source of truth for Litany Card rarity — computed from onchain phrase frequency across the full collection. Rarity is emergent: scores are the sum of inverse trait frequencies, the same method as Loot.</p>
   </div>
   <div id="body"><div class="empty"><div class="spinner"></div>Loading rarity index…</div></div>
 </div>
 
 <footer>
   <div class="mono" id="prov">Source: onchain tokenURI · LitanyCards 0xd44a…03eB · indexed by build_rarity_index.py</div>
-  <div style="margin-top:8px">Every score is reproducible from onchain metadata. Methodology: rarity score = Σ (1 / frequency) across a card's traits. Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Not an official Litany product.</div>
+  <div style="margin-top:8px">Methodology: rarity score = Σ (1 / value frequency) across a card's traits. Tier = global rank percentile. Every number is reproducible from onchain metadata. Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Not an official Litany product.</div>
 </footer>
 
 <script>
@@ -113,80 +141,119 @@
 
   function emptyNotBuilt(){
     body.innerHTML='<div class="empty"><div class="ic">◇</div><h3>Rarity index not built yet</h3>'+
-      '<p>Run the indexer once to generate the data, then commit <code>rarity_index.json</code> next to <code>agent.py</code> and redeploy.</p>'+
+      '<p>Run the indexer once, then commit <code>rarity_index.json</code> next to <code>agent.py</code> and redeploy.</p>'+
       '<p style="margin-top:14px"><code>pip install requests</code><br><code>python build_rarity_index.py</code></p></div>';
   }
+  const pctTxt=n=>(n*100).toFixed(n<0.01?3:2)+"%";
 
-  function pct(n){return (n*100).toFixed(n<0.01?3:2)+"%";}
+  // tiers by global rank percentile
+  function tier(rank,total){
+    const p=rank/total;
+    if(p<=0.01)return{name:"Legendary",c:"var(--leg)",s:"var(--leg-soft)"};
+    if(p<=0.05)return{name:"Epic",c:"var(--epic)",s:"var(--epic-soft)"};
+    if(p<=0.15)return{name:"Rare",c:"var(--rare)",s:"var(--rare-soft)"};
+    if(p<=0.40)return{name:"Uncommon",c:"var(--unc)",s:"var(--unc-soft)"};
+    return{name:"Common",c:"var(--common)",s:"var(--common-soft)"};
+  }
 
   function render(){
     const total=DATA.totalCards, traits=DATA.traits, cards=DATA.cards;
     const gen=new Date(DATA.generatedAt*1000).toLocaleString();
     let h="";
-    // stats
     h+='<div class="statbar">'+
        '<div class="stat"><div class="v">'+total.toLocaleString()+'</div><div class="k">Cards Indexed</div></div>'+
        '<div class="stat"><div class="v">'+Object.keys(traits).length+'</div><div class="k">Trait Types</div></div>'+
        '<div class="stat"><div class="v">'+Object.values(traits).reduce((a,t)=>a+Object.keys(t).length,0)+'</div><div class="k">Unique Values</div></div>'+
-       '<div class="stat"><div class="v" style="font-size:14px;letter-spacing:0">'+gen+'</div><div class="k">Last Indexed</div></div>'+
+       '<div class="stat"><div class="v" style="font-size:13px;letter-spacing:0">'+gen+'</div><div class="k">Last Indexed</div></div>'+
        '</div>';
 
-    h+='<div class="grid cols">';
-    // leaderboard
-    h+='<div class="card"><div class="ch"><h2>Rarity Leaderboard — rarest cards</h2><span class="badge">Verified Onchain</span></div>'+
-       '<table><thead><tr><th>Rank</th><th>Card</th><th>Top traits</th><th>Score</th></tr></thead><tbody>';
-    cards.slice(0,50).forEach(c=>{
-      const top=Object.entries(c.attrs).map(([k,v])=>({k,v,f:(traits[k]&&traits[k][String(v)])||total}))
-        .sort((a,b)=>a.f-b.f).slice(0,2).map(t=>'<span class="chip">'+t.v+'</span>').join("");
-      h+='<tr><td class="rank">#'+c.rank+'</td><td class="mono">#'+c.tokenId+'</td><td><div class="chips">'+top+'</div></td><td class="score">'+c.score.toFixed(2)+'</td></tr>';
-    });
-    h+='</tbody></table></div>';
+    // Card Intelligence
+    h+='<div class="ci"><div class="ci-head"><h2>◆ Card Intelligence</h2>'+
+       '<div class="ci-search"><input id="ciInput" placeholder="Enter card # (e.g. 512)" inputmode="numeric"><button id="ciGo">Analyze</button></div></div>'+
+       '<div class="ci-body" id="ciBody"><div class="ci-empty">Enter a card number to generate its intelligence report.</div></div></div>';
 
-    // right column: trait explorer + lookup
-    h+='<div style="display:flex;flex-direction:column;gap:20px">';
-    // trait explorer
-    h+='<div class="card"><div class="ch"><h2>Trait &amp; Phrase Rarity</h2></div><div class="pad">'+
-       '<label>Trait type</label><select id="traitSel"></select><div class="dist" id="dist"></div></div></div>';
-    // card lookup
-    h+='<div class="card"><div class="ch"><h2>Card Lookup</h2></div><div class="pad">'+
-       '<label>Token ID</label><input id="lkInput" placeholder="e.g. 512" inputmode="numeric"><div class="lookout" id="lookout"></div></div></div>';
-    h+='</div></div>';
+    // Leaderboard + explorer
+    h+='<div class="grid cols">';
+    h+='<div class="card"><div class="ch"><h2>Rarity Leaderboard — rarest cards</h2><span class="badge">Verified Onchain</span></div>'+
+       '<table><thead><tr><th>Rank</th><th>Card</th><th>Tier</th><th>Score</th></tr></thead><tbody id="lbBody"></tbody></table></div>';
+    h+='<div class="card"><div class="ch"><h2>Trait &amp; Phrase Rarity</h2></div><div class="pad"><label>Trait type</label><select id="traitSel"></select><div class="dist" id="dist"></div></div></div>';
+    h+='</div>';
 
     body.innerHTML=h;
     document.getElementById("prov").textContent="Source: onchain tokenURI · LitanyCards 0xd44a…03eB · "+total.toLocaleString()+" cards · indexed "+gen;
 
-    // populate trait explorer
+    // leaderboard rows
+    const lb=document.getElementById("lbBody");
+    lb.innerHTML=cards.slice(0,50).map(c=>{
+      const tr=tier(c.rank,total);
+      const top=Object.entries(c.attrs).map(([k,v])=>({v,f:(traits[k]&&traits[k][String(v)])||total})).sort((a,b)=>a.f-b.f).slice(0,2).map(t=>'<span class="chip">'+t.v+'</span>').join("");
+      return '<tr data-id="'+c.tokenId+'"><td class="rank" style="color:'+tr.c+'">#'+c.rank+'</td><td class="mono">#'+c.tokenId+'</td><td><span class="tierchip" style="--tier:'+tr.c+';--tier-soft:'+tr.s+'">'+tr.name+'</span></td><td class="score">'+c.score.toFixed(2)+'</td></tr>';
+    }).join("");
+    lb.querySelectorAll("tr").forEach(r=>r.addEventListener("click",()=>{document.getElementById("ciInput").value=r.dataset.id;analyzeCard(r.dataset.id);window.scrollTo({top:0,behavior:"smooth"});}));
+
+    // trait explorer
     const sel=document.getElementById("traitSel");
     Object.keys(traits).forEach(t=>{const o=document.createElement("option");o.value=t;o.textContent=t;sel.appendChild(o);});
-    sel.addEventListener("change",()=>drawDist(sel.value));
-    drawDist(sel.value);
+    sel.addEventListener("change",()=>drawDist(sel.value));drawDist(sel.value);
 
-    // lookup
-    document.getElementById("lkInput").addEventListener("input",e=>lookup(e.target.value.trim()));
+    document.getElementById("ciGo").addEventListener("click",()=>analyzeCard(document.getElementById("ciInput").value.trim()));
+    document.getElementById("ciInput").addEventListener("keydown",e=>{if(e.key==="Enter")analyzeCard(e.target.value.trim());});
   }
 
   function drawDist(tt){
     const traits=DATA.traits, total=DATA.totalCards, dist=document.getElementById("dist");
-    const entries=Object.entries(traits[tt]).sort((a,b)=>a[1]-b[1]); // rarest first
+    const entries=Object.entries(traits[tt]).sort((a,b)=>a[1]-b[1]);
     const max=Math.max(...entries.map(e=>e[1]));
-    dist.innerHTML=entries.map(([v,c])=>'<div class="drow"><span class="nm" title="'+v+'">'+v+'</span><span class="track"><i style="width:'+(c/max*100)+'%"></i></span><span class="pc">'+c+' · '+pct(c/total)+'</span></div>').join("");
+    dist.innerHTML=entries.map(([v,c])=>'<div class="drow"><span class="nm" title="'+v+'">'+v+'</span><span class="track"><i style="width:'+(c/max*100)+'%"></i></span><span class="pc">'+c+' · '+pctTxt(c/total)+'</span></div>').join("");
   }
 
-  function lookup(id){
-    const out=document.getElementById("lookout");
-    if(!id){out.innerHTML="";return;}
+  function radarSVG(axes){ // axes: [{label, val(0..1)}], color
+    const N=axes.length, cx=120, cy=120, R=88;
+    const pt=(i,r)=>{const a=-Math.PI/2+i*2*Math.PI/N;return[cx+Math.cos(a)*r, cy+Math.sin(a)*r];};
+    let g="";
+    [0.25,0.5,0.75,1].forEach(rr=>{let p=axes.map((_,i)=>pt(i,R*rr).join(",")).join(" ");g+='<polygon points="'+p+'" fill="none" stroke="var(--line)" stroke-width="1"/>';});
+    axes.forEach((_,i)=>{const[x,y]=pt(i,R);g+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x+'" y2="'+y+'" stroke="var(--line)" stroke-width="1"/>';});
+    const poly=axes.map((a,i)=>pt(i,R*Math.max(.04,a.val)).join(",")).join(" ");
+    g+='<polygon points="'+poly+'" fill="var(--tier,#10a050)" fill-opacity=".22" stroke="var(--tier,#10a050)" stroke-width="2"/>';
+    axes.forEach((a,i)=>{const[x,y]=pt(i,R*Math.max(.04,a.val));g+='<circle cx="'+x+'" cy="'+y+'" r="3" fill="var(--tier,#10a050)"/>';
+      const[lx,ly]=pt(i,R+16);g+='<text x="'+lx+'" y="'+ly+'" font-size="9" font-family="JetBrains Mono,monospace" fill="#5a6c61" text-anchor="middle" dominant-baseline="middle">'+a.label+'</text>';});
+    return '<svg viewBox="0 0 240 240" width="240" height="240">'+g+'</svg>';
+  }
+
+  function analyzeCard(id){
+    const cont=document.getElementById("ciBody");
+    if(!id){cont.innerHTML='<div class="ci-empty">Enter a card number to generate its intelligence report.</div>';return;}
     const c=byId.get(String(parseInt(id,10)));
-    if(!c){out.innerHTML='<div style="color:var(--faint);font-size:13px;font-family:JetBrains Mono;padding:10px 0">No indexed card #'+id+'.</div>';return;}
-    const total=DATA.totalCards, traits=DATA.traits;
-    const topPct=((c.rank/total)*100);
-    let tr=Object.entries(c.attrs).map(([k,v])=>{
-      const f=(traits[k]&&traits[k][String(v)])||total;
-      return '<div class="lk-tr"><span class="tt">'+k+'</span><span class="tv">'+v+'</span><span class="tp">'+pct(f/total)+'</span></div>';
-    }).join("");
-    out.innerHTML='<div class="lk-card"><div class="lk-top"><div><div class="id">#'+c.tokenId+'</div><div style="color:var(--muted);font-size:12px;margin-top:2px">'+(c.name||"")+'</div></div>'+
-      '<div class="rk"><div class="b">#'+c.rank+'</div><div class="s">top '+topPct.toFixed(1)+'%</div></div></div>'+
-      '<div class="lk-traits">'+tr+'</div>'+
-      '<div style="margin-top:12px;font-family:JetBrains Mono;font-size:11px;color:var(--faint)">rarity score '+c.score.toFixed(3)+' · rank '+c.rank+' of '+total.toLocaleString()+'</div></div>';
+    if(!c){cont.innerHTML='<div class="ci-empty">No indexed card #'+id+'.</div>';return;}
+    const total=DATA.totalCards, traits=DATA.traits, tr=tier(c.rank,total), topPct=(c.rank/total)*100;
+    // power score 0-100 from rank percentile (documented: 100*(1 - rank/total))
+    const power=Math.round(100*(1-(c.rank-1)/total));
+    // scarcity rows + radar (exclude very-unique Name from radar clutter only if present)
+    const attrEntries=Object.entries(c.attrs);
+    const scarRows=attrEntries.map(([k,v])=>{const f=(traits[k]&&traits[k][String(v)])||total;const rare=1-f/total;
+      return '<div class="row"><span class="k">'+k+'</span><span class="v" title="'+v+'">'+v+'</span><span class="track"><i style="width:'+(rare*100).toFixed(0)+'%"></i></span><span class="pc">'+pctTxt(f/total)+'</span></div>';}).join("");
+    const radarAxes=attrEntries.filter(([k])=>!/name/i.test(k)).map(([k,v])=>{const f=(traits[k]&&traits[k][String(v)])||total;return{label:k.slice(0,4),val:1-f/total};});
+
+    cont.innerHTML=
+      '<div class="ci-left">'+
+        '<span class="tierchip" style="--tier:'+tr.c+';--tier-soft:'+tr.s+'">'+tr.name+' · top '+topPct.toFixed(1)+'%</span>'+
+        '<div class="litcard" style="--tier:'+tr.c+';--tier-soft:'+tr.s+'">'+
+          '<div class="lc-id">LITANY CARD</div><div class="lc-name">#'+c.tokenId+(c.name?' · '+c.name:'')+'</div>'+
+          attrEntries.map(([k,v])=>'<div class="lc-line"><span class="lc-k">'+k+'</span><span class="lc-v">'+v+'</span></div>').join("")+
+        '</div>'+
+        '<a class="mono" style="font-size:11px;color:var(--green-deep)" href="https://abscan.org/token/0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB?a='+c.tokenId+'" target="_blank">verify onchain ↗</a>'+
+      '</div>'+
+      '<div class="ci-right" style="--tier:'+tr.c+'">'+
+        '<div class="ci-score"><div class="big">'+power+'</div><div class="meta"><div class="r1">Power Score / 100</div><div class="r2">global rank #'+c.rank+' of '+total.toLocaleString()+'</div></div></div>'+
+        '<div class="kpis">'+
+          '<div class="kpi"><div class="kv" style="color:'+tr.c+'">#'+c.rank+'</div><div class="kk">Rarity Rank</div></div>'+
+          '<div class="kpi"><div class="kv">'+topPct.toFixed(1)+'%</div><div class="kk">Top Percentile</div></div>'+
+          '<div class="kpi"><div class="kv">'+c.score.toFixed(2)+'</div><div class="kk">Rarity Score</div></div>'+
+        '</div>'+
+        '<label style="margin-bottom:10px">Trait Scarcity</label><div class="scar">'+scarRows+'</div>'+
+        '<label style="margin:18px 0 4px">Rarity DNA</label>'+
+        '<div class="radar-wrap">'+radarSVG(radarAxes)+'<div class="leg">Distance from center =<br>how rare each attribute is.<br>Larger shape = rarer card.</div></div>'+
+      '</div>';
   }
 
   (async function(){
