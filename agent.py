@@ -138,6 +138,25 @@ def litany_scanner():
     from flask import Response
     return Response(html, mimetype="text/html")
 
+@app.route("/litany/rarity")
+def litany_rarity():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "litany_rarity.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+@app.route("/rarity_index.json")
+def rarity_index_json():
+    import os
+    from flask import Response, jsonify
+    path = os.path.join(os.path.dirname(__file__), "rarity_index.json")
+    if not os.path.exists(path):
+        return jsonify({"error": "not built"}), 404
+    with open(path, "r", encoding="utf-8") as f:
+        return Response(f.read(), mimetype="application/json")
+
 @app.route("/api/abstract-rpc", methods=["POST"])
 def abstract_rpc():
     import requests
