@@ -165,6 +165,23 @@
   footer a{color:var(--green-deep);font-weight:600}
   footer .pl{font-family:'JetBrains Mono',monospace}
   .err{color:var(--breach)}
+  /* CMC-style market band */
+  .mkt-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:1000px){.mkt-cards{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.mkt-cards{grid-template-columns:1fr}}
+  .mc{position:relative;border:1px solid var(--line);border-radius:16px;padding:18px 18px 18px 22px;background:var(--panel);box-shadow:var(--shadow-sm);overflow:hidden}
+  .mc .accent{position:absolute;left:0;top:0;bottom:0;width:4px}
+  .mc .mck{font-size:11px;color:var(--muted);font-weight:600}
+  .mc .mcv{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;margin-top:6px}
+  .mc .mcd{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:5px}
+  .up{color:#10b981}.down{color:#e5484d}.flat{color:var(--faint)}
+  .gauge-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .tiergrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+  @media(max-width:700px){.tiergrid{grid-template-columns:repeat(2,1fr)}}
+  .tiletile{border-radius:12px;padding:14px;color:#fff;min-height:80px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 6px 16px rgba(0,0,0,.06)}
+  .tiletile .tn{font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;opacity:.95}
+  .tiletile .tc{font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1}
+  .tiletile .tp{font-size:10px;opacity:.88;font-family:'JetBrains Mono',monospace}
   @media(max-width:880px){.rail{transform:translateX(-100%);transition:.3s}.main,footer{margin-left:0}.wrap{padding:24px 18px 70px}.topbar{padding:14px 18px}}
 </style>
 </head>
@@ -179,6 +196,7 @@
   <nav class="nav">
     <div class="grp">Protocol</div>
     <a href="#core" class="active"><span class="ico">◎</span> Litany Core</a>
+    <a href="#market"><span class="ico">▤</span> Market Overview</a>
     <a href="#overview"><span class="ico">▦</span> Collection</a>
     <a href="#network"><span class="ico">⊹</span> Transfer Network</a>
     <a href="#activity"><span class="ico">≋</span> Activity</a>
@@ -249,6 +267,30 @@
             <text x="160" y="156" text-anchor="middle" class="corelabel" fill="#fff" font-size="11" letter-spacing="2">LITANY</text>
             <text x="160" y="176" text-anchor="middle" class="corelabel" id="arcpct" fill="#fff" font-size="18">—</text>
           </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- MARKET OVERVIEW (CoinMarketCap-style, real data) -->
+    <section class="sec reveal" id="market">
+      <div class="shead"><div><h2>Litany Market Overview</h2><div class="desc">Live market state. Colored deltas are real OpenSea interval changes — not estimates.</div></div><span class="badge b-mkt">OpenSea + Onchain</span></div>
+      <div class="mkt-cards">
+        <div class="mc"><span class="accent" style="background:#10b981"></span><div class="mck">Floor Price</div><div class="mcv" id="m-floor">—</div><div class="mcd flat" id="m-floor-d">OpenSea · Abstract</div></div>
+        <div class="mc"><span class="accent" style="background:#3b82f6"></span><div class="mck">Holders</div><div class="mcv" id="m-holders">—</div><div class="mcd flat">unique owners</div></div>
+        <div class="mc"><span class="accent" style="background:#c79a16"></span><div class="mck">24h Volume</div><div class="mcv" id="m-v24">—</div><div class="mcd flat" id="m-v24-d">—</div></div>
+        <div class="mc"><span class="accent" style="background:#8b5cf6"></span><div class="mck">7d Volume</div><div class="mcv" id="m-v7">—</div><div class="mcd flat" id="m-v7-d">—</div></div>
+      </div>
+      <div class="grid g2" style="margin-top:16px">
+        <div class="card">
+          <div class="top"><span class="label">Mint Progress</span><span class="badge b-on">Verified Onchain</span></div>
+          <div class="gauge-wrap" style="margin-top:10px">
+            <svg viewBox="0 0 200 116" width="200" height="116" id="gauge"></svg>
+            <div><div style="font-size:42px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-2px;color:var(--green)" id="g-pct">—</div><div style="font-size:12px;color:var(--muted)" id="g-sub">of 8,000 minted</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="top"><span class="label">Rarity Tier Distribution</span><span class="badge b-on" id="tier-badge">Rarity Index</span></div>
+          <div class="tiergrid" id="tiergrid" style="margin-top:12px"><div style="grid-column:1/-1;color:var(--faint);font-size:12px;font-family:'JetBrains Mono',monospace">Loading rarity index…</div></div>
         </div>
       </div>
     </section>
@@ -549,7 +591,52 @@
   const spy=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){navlinks.forEach(a=>a.classList.toggle("active",a.getAttribute("href")==="#"+en.target.id));}}),{rootMargin:"-40% 0px -55% 0px"});
   document.querySelectorAll(".sec").forEach(s=>spy.observe(s));
 
-  (async function(){const b=await loadCore();loadGas();loadActivityAndGraph(b);loadMarket();})();
+  // ── CMC-style market band ──
+  function drawGauge(pct){
+    const len=251.3, off=len*(1-Math.min(100,pct)/100);
+    document.getElementById("gauge").innerHTML=
+      '<defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#1fd06b"/><stop offset="100%" stop-color="#077a39"/></linearGradient></defs>'+
+      '<path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="var(--line-soft)" stroke-width="14" stroke-linecap="round"/>'+
+      '<path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="url(#gg)" stroke-width="14" stroke-linecap="round" stroke-dasharray="'+len+'" stroke-dashoffset="'+off+'"/>';
+  }
+  function setVol(vid,did,intv){
+    const v=document.getElementById(vid),d=document.getElementById(did);
+    if(!intv){v.textContent="—";d.textContent="—";return;}
+    v.textContent=(intv.volume!=null?fmtN(intv.volume,2):"—")+" \u039e";
+    const vc=intv.volume_change;
+    if(vc==null){d.className="mcd flat";d.textContent="vs prior period";return;}
+    const p=vc*100;
+    d.className="mcd "+(p>0.05?"up":p<-0.05?"down":"flat");
+    d.textContent=(p>=0?"\u25B2 +":"\u25BC ")+p.toFixed(1)+"% vs prior";
+  }
+  function renderTiers(cards,total){
+    const t={Legendary:0,Epic:0,Rare:0,Uncommon:0,Common:0};
+    cards.forEach(c=>{const p=c.rank/total;if(p<=0.01)t.Legendary++;else if(p<=0.05)t.Epic++;else if(p<=0.15)t.Rare++;else if(p<=0.40)t.Uncommon++;else t.Common++;});
+    const order=[["Legendary","#8b5cf6"],["Epic","#3b82f6"],["Rare","#10b981"],["Uncommon","#10a050"],["Common","#9aa8a0"]];
+    document.getElementById("tiergrid").innerHTML=order.map(([n,c])=>{const cnt=t[n]||0,pc=total?cnt/total*100:0;return '<div class="tiletile" style="background:'+c+'"><div class="tn">'+n+'</div><div><div class="tc">'+cnt.toLocaleString()+'</div><div class="tp">'+pc.toFixed(1)+'%</div></div></div>';}).join("");
+  }
+  async function loadMarketBand(){
+    try{const sup=hi(await rpc("eth_call",[{to:CARDS,data:"0x18160ddd"},"latest"]));const pct=sup/MAX*100;drawGauge(pct);document.getElementById("g-pct").textContent=pct.toFixed(1)+"%";document.getElementById("g-sub").textContent=sup.toLocaleString()+" of 8,000 minted";}catch(e){}
+    try{
+      const c=await osea("/api/v2/chain/abstract/contract/"+CARDS);
+      const slug=c.collection||(c.contract&&c.contract.collection);
+      if(slug){
+        const s=await osea("/api/v2/collections/"+slug+"/stats");
+        const tot=s.total||{}, iv={}; (s.intervals||[]).forEach(x=>iv[x.interval]=x);
+        if(tot.floor_price!=null)document.getElementById("m-floor").textContent=fmtN(tot.floor_price,4)+" \u039e";
+        if(tot.num_owners!=null)document.getElementById("m-holders").textContent=fmtN(tot.num_owners,0);
+        setVol("m-v24","m-v24-d",iv.one_day);
+        setVol("m-v7","m-v7-d",iv.seven_day);
+      }
+    }catch(e){}
+    try{
+      const r=await fetch("/rarity_index.json",{cache:"no-store"});
+      if(r.ok){const d=await r.json();if(d&&d.cards)renderTiers(d.cards,d.totalCards);}
+      else document.getElementById("tiergrid").innerHTML='<div style="grid-column:1/-1;color:var(--faint);font-size:12px;font-family:\'JetBrains Mono\',monospace">Rarity index not built — run build_rarity_index.py</div>';
+    }catch(e){document.getElementById("tiergrid").innerHTML='<div style="grid-column:1/-1;color:var(--faint);font-size:12px;font-family:\'JetBrains Mono\',monospace">Rarity index unavailable</div>';}
+  }
+
+  (async function(){const b=await loadCore();loadGas();loadActivityAndGraph(b);loadMarket();loadMarketBand();})();
 </script>
 
 </body>
