@@ -11,10 +11,6 @@ from flask import Flask, jsonify
 
 load_dotenv()
 
-# ── BUNNY BUTTON ────────────────────────────
-from bunny_routes import register_bunny_routes
-from bunny_agent import bunny_session
-
 # ── MOODY MADNESS ───────────────────────────
 from moody_agent import moody_check, record_woke, get_status, send_woke_confirmation
 
@@ -56,69 +52,6 @@ def mcp():
 @app.route("/metadata")
 def metadata():
     return jsonify(AGENT_METADATA)
-
-@app.route("/bunny")
-def bunny_hub():
-    import os
-    path = os.path.join(os.path.dirname(__file__), "bunny.html")
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-    from flask import Response
-    return Response(html, mimetype="text/html")
-
-@app.route("/bunny/leaderboard")
-def bunny_leaderboard():
-    import os
-    path = os.path.join(os.path.dirname(__file__), "bunny_leaderboard.html")
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-    from flask import Response
-    return Response(html, mimetype="text/html")
-
-@app.route("/bunny/presale")
-def bunny_presale():
-    import os
-    path = os.path.join(os.path.dirname(__file__), "bunny_presale.html")
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-    from flask import Response
-    return Response(html, mimetype="text/html")
-
-@app.route("/bunny/farm")
-def bunny_farm():
-    import os
-    path = os.path.join(os.path.dirname(__file__), "bunny_farm.html")
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-    from flask import Response
-    return Response(html, mimetype="text/html")
-
-@app.route("/bunny/build")
-def bunny_build():
-    import os
-    path = os.path.join(os.path.dirname(__file__), "bunny_build.html")
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-    from flask import Response
-    return Response(html, mimetype="text/html")
-
-@app.route("/bunny/value")
-def bunny_value():
-    import os
-    path = os.path.join(os.path.dirname(__file__), "bunny_value.html")
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-    from flask import Response
-    return Response(html, mimetype="text/html")
-
-@app.route("/bunny/party")
-def bunny_party():
-    import os
-    path = os.path.join(os.path.dirname(__file__), "bunny_party.html")
-    with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
-    from flask import Response
-    return Response(html, mimetype="text/html")
 
 @app.route("/litany")
 def litany_dashboard():
@@ -185,8 +118,6 @@ def opensea_proxy():
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
-register_bunny_routes(app)
-
 @app.route("/moody/woke")
 def moody_woke():
     woke_time = record_woke()
@@ -200,113 +131,6 @@ def moody_woke():
 @app.route("/moody/status")
 def moody_status():
     return jsonify(get_status())
-
-@app.route("/bunny/done")
-def bunny_done():
-    from bunny_agent import _mark_done, _daily_state
-    from flask import request
-    task = request.args.get("task", "").strip()
-    valid_tasks = [
-        "press_button", "energy_potion", "claim_farm", "streak",
-        "steal_upgrade", "regen_upgrade", "buy_farm", "breed_upgrade",
-        "connect_x", "connect_discord", "refer_friends", "join_party",
-        "stake_carrots", "creator_content"
-    ]
-    if not task:
-        return jsonify({"error": "Pass ?task=task_name", "valid_tasks": valid_tasks}), 400
-    if task not in valid_tasks:
-        return jsonify({"error": f"Unknown task: {task}", "valid_tasks": valid_tasks}), 400
-    _mark_done(task)
-    return jsonify({"status": "done", "task": task, "message": f"Task '{task}' marked complete. Mantis won't remind you about it today."})
-
-@app.route("/bunny/tasks")
-def bunny_tasks():
-    from bunny_agent import _daily_state
-    return jsonify({
-        "date": _daily_state.get("date", "?"),
-        "tasks_done": list(_daily_state.get("tasks_done", set())),
-    })
-
-# ── SUBSCRIBER STORAGE ──────────────────────────────────────────────────
-import json as _json
-
-SUBSCRIBERS_FILE = os.path.join(os.path.dirname(__file__), "bunny_subscribers.json")
-
-def load_subscribers():
-    try:
-        with open(SUBSCRIBERS_FILE, "r") as f:
-            return _json.load(f)
-    except:
-        return {}
-
-def save_subscribers(subs):
-    try:
-        with open(SUBSCRIBERS_FILE, "w") as f:
-            _json.dump(subs, f, indent=2)
-    except Exception as e:
-        print(f"Failed to save subscribers: {e}")
-
-@app.route("/bunny/register", methods=["POST"])
-def bunny_register():
-    from flask import request as freq
-    data = freq.get_json(silent=True) or {}
-    wallet = data.get("wallet", "").strip().lower()
-    email = data.get("email", "").strip().lower()
-
-    if not wallet or len(wallet) < 10:
-        return jsonify({"error": "Invalid wallet address"}), 400
-    if not email or "@" not in email:
-        return jsonify({"error": "Invalid email address"}), 400
-
-    subs = load_subscribers()
-    subs[wallet] = {"email": email, "wallet": wallet, "registered_at": str(__import__("datetime").datetime.utcnow())}
-    save_subscribers(subs)
-    print(f"[Mantis] New subscriber: {email} ({wallet[:10]}...)")
-    return jsonify({"status": "registered", "message": f"Alerts will be sent to {email}"})
-
-@app.route("/bunny/subscribers")
-def bunny_subscribers():
-    subs = load_subscribers()
-    return jsonify({"count": len(subs), "subscribers": [{"wallet": w[:10]+"...", "email": v["email"]} for w,v in subs.items()]})
-
-@app.route("/bunny/dashboard")
-def bunny_dashboard():
-    import os
-    dashboard_path = os.path.join(os.path.dirname(__file__), "bunny_dashboard.html")
-    with open(dashboard_path, "r", encoding="utf-8") as f:
-        html = f.read()
-    from flask import Response
-    return Response(html, mimetype="text/html")
-
-@app.route("/api/bunny-proxy")
-def bunny_proxy():
-    from flask import request as freq
-    import requests as req2
-    from urllib.parse import unquote, parse_qs
-    # Get raw query string to preserve endpoint params like ?limit=100
-    raw_qs = freq.query_string.decode("utf-8")
-    # Extract everything after "endpoint="
-    ep_prefix = "endpoint="
-    if ep_prefix in raw_qs:
-        endpoint = unquote(raw_qs[raw_qs.index(ep_prefix) + len(ep_prefix):])
-    else:
-        endpoint = "/leaderboard"
-    print(f"  [Proxy] endpoint: {repr(endpoint)}")
-    allowed = ["/leaderboard", "/eth-price", "/presale/status", "/party/list", "/reference/assets"]
-    if not any(endpoint.startswith(a) for a in allowed):
-        return jsonify({"error": f"endpoint not allowed: {endpoint}"}), 403
-    try:
-        resp = req2.get(
-            f"https://www.bunnybutton.xyz/api{endpoint}",
-            headers={"Accept": "application/json"},
-            timeout=8
-        )
-        from flask import Response
-        r = Response(resp.content, status=resp.status_code, content_type="application/json")
-        r.headers['Access-Control-Allow-Origin'] = '*'
-        return r
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 # ── CONFIG ──────────────────────────────────
 ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY")
@@ -640,22 +464,21 @@ def run_litany():
         print("Sleeping 30 minutes before next Litany session...")
         time.sleep(30 * 60)
 
-def run_bunny():
+def run_moody():
     time.sleep(5)
     while True:
         try:
-            bunny_session()
             moody_check()
         except Exception as e:
-            print(f"Bunny loop error: {e}")
-        print("Sleeping 60 minutes before next Bunny session...")
+            print(f"Moody loop error: {e}")
+        print("Sleeping 60 minutes before next Moody check...")
         time.sleep(60 * 60)
 
 litany_thread = threading.Thread(target=run_litany, daemon=True)
 litany_thread.start()
 
-bunny_thread = threading.Thread(target=run_bunny, daemon=True)
-bunny_thread.start()
+moody_thread = threading.Thread(target=run_moody, daemon=True)
+moody_thread.start()
 
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":
