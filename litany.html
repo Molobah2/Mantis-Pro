@@ -3,281 +3,308 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Litany Intelligence Terminal — Mantis Pro</title>
+<title>Litany Intelligence — Mantis Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#070b0a;--bg2:#0b1110;--panel:rgba(255,255,255,.025);--panel2:rgba(255,255,255,.045);
-    --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);
-    --ink:#eaf2ec;--muted:rgba(234,242,236,.6);--faint:rgba(234,242,236,.36);
-    --green:#10a050;--green-b:#23e07a;--green-soft:rgba(35,224,122,.1);
-    --cyan:#22d3ee;--gold:#f5c451;--purple:#a06bff;--red:#e5484d;
-    --leg:#a06bff;--epic:#3b82f6;--rare:#10b981;--unc:#10a050;--common:#8a958d;
-    --glow:rgba(35,224,122,.4);
+    --bg:#f6faf7;--bg2:#eef4f0;--panel:#ffffff;--ink:#0b1a12;--muted:#5d6f64;--faint:#8a9a90;
+    --green:#12a150;--green-deep:#0a7a3c;--green-bright:#1fd06b;--green-soft:#eaf6ef;
+    --line:#e4eee8;--line-soft:#eef4f0;
+    --on:#12a150;--off:#0d9488;--obs:#c79a16;--awa:#9aa8a0;--mkt:#0bb6c4;
+    --leg:#8b5cf6;--epic:#3b82f6;--rare:#10b981;--unc:#12a150;--common:#9aa8a0;
+    --up:#10b981;--down:#e5484d;
+    --shadow-sm:0 1px 2px rgba(11,26,18,.04);--shadow:0 2px 6px rgba(11,26,18,.04),0 14px 40px rgba(16,160,80,.06);
+    --rail:248px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
-  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;
-    background-image:radial-gradient(80% 50% at 50% -10%,rgba(16,160,80,.08),transparent 60%)}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;overflow-x:hidden;background-image:radial-gradient(1200px circle at 85% -5%,rgba(16,160,80,.07),transparent 50%)}
   a{color:inherit;text-decoration:none}.mono{font-family:'JetBrains Mono',monospace;font-feature-settings:"tnum"}
-  ::selection{background:rgba(35,224,122,.22)}
-  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
+  ::selection{background:rgba(16,160,80,.18)}
 
-  /* COMMAND BAR */
-  .cmd{position:sticky;top:0;z-index:80;display:flex;align-items:center;gap:18px;padding:11px 22px;background:rgba(7,11,10,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
-  .cmd .logo{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.4px;font-size:14px;white-space:nowrap}
-  .cmd .logo .m{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--green-b),var(--green));display:grid;place-items:center;color:#04140a;font-size:14px;box-shadow:0 3px 14px var(--glow)}
-  .cmd .logo small{display:block;font-size:8.5px;letter-spacing:1.6px;color:var(--faint);text-transform:uppercase;font-weight:700;margin-top:1px}
-  .search{flex:1;max-width:440px;position:relative}
-  .search input{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 13px 9px 32px;color:var(--ink);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none}
+  .rail{position:fixed;top:0;left:0;width:var(--rail);height:100vh;background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border-right:1px solid var(--line);padding:22px 16px;display:flex;flex-direction:column;z-index:60}
+  .rail .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 22px;margin-bottom:8px;border-bottom:1px solid var(--line-soft)}
+  .rail .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--green),var(--green-deep));display:grid;place-items:center;color:#fff;font-size:17px;box-shadow:0 6px 18px rgba(16,160,80,.5)}
+  .rail .bname{font-weight:800;letter-spacing:-.5px;font-size:16px;line-height:1}
+  .rail .bsub{font-size:9.5px;font-weight:700;letter-spacing:2px;color:var(--faint);text-transform:uppercase;margin-top:3px}
+  .nav{display:flex;flex-direction:column;gap:2px;margin-top:10px;overflow-y:auto}
+  .nav .grp{font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--faint);font-weight:800;padding:14px 10px 6px}
+  .nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--muted);transition:.18s}
+  .nav a .ico{width:18px;text-align:center;opacity:.8}
+  .nav a:hover{background:var(--green-soft);color:var(--ink)}
+  .nav a.active{background:var(--green-soft);color:var(--green-deep)}
+  .rail .foot{margin-top:auto;padding:12px 10px 2px;border-top:1px solid var(--line-soft);font-size:10.5px;color:var(--faint);line-height:1.7}
+  .rail .foot a{color:var(--green-deep);font-weight:600}
+
+  .main{margin-left:var(--rail);min-height:100vh}
+  .topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 34px;background:rgba(246,250,247,.8);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .topbar .crumb{font-size:12px;color:var(--muted);font-weight:600}.topbar .crumb b{color:var(--ink)}
+  .search{flex:1;max-width:360px;position:relative}
+  .search input{width:100%;background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 12px 8px 30px;font-family:'JetBrains Mono',monospace;font-size:12.5px;outline:none}
   .search input:focus{border-color:var(--green)}
-  .search .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:13px}
-  .cmd .links{display:flex;align-items:center;gap:16px;font-size:12.5px;color:var(--muted);font-weight:600}
-  .cmd .links a:hover{color:var(--ink)}
-  .pillrow{display:flex;align-items:center;gap:10px}
-  .pill{display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--muted);padding:5px 9px;border:1px solid var(--line);border-radius:8px;white-space:nowrap}
-  .dot{width:6px;height:6px;border-radius:50%;background:var(--green-b);box-shadow:0 0 0 0 var(--glow);animation:beat 2.4s infinite}
-  @keyframes beat{0%,100%{box-shadow:0 0 0 0 rgba(35,224,122,.45)}50%{box-shadow:0 0 0 5px rgba(35,224,122,0)}}
-  @media(max-width:1080px){.cmd .links a:not(.key){display:none}}
-  @media(max-width:760px){.search{max-width:none}.pill.hideS{display:none}}
+  .search .i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:12px}
+  .tstat{display:flex;align-items:center;gap:12px;font-size:12px}
+  .pill{display:flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;font-weight:600;font-size:11.5px}
+  .ldot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(16,160,80,.45);animation:beat 2.4s infinite}
+  @keyframes beat{0%,100%{box-shadow:0 0 0 0 rgba(16,160,80,.45)}50%{box-shadow:0 0 0 6px rgba(16,160,80,0)}}
+  .blk{font-family:'JetBrains Mono',monospace;color:var(--green-deep)}
+  @media(max-width:760px){.search{display:none}}
 
-  /* STATUS STRIP */
-  .strip{display:flex;align-items:stretch;gap:0;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.02),transparent);overflow-x:auto}
-  .sm{flex:1;min-width:130px;padding:12px 18px;border-right:1px solid var(--line);position:relative}
-  .sm:last-child{border-right:none}
-  .sm .k{font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;color:var(--faint);font-weight:700}
-  .sm .v{font-size:19px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-.6px;margin-top:5px}
-  .sm .v.pending{font-size:11px;color:var(--faint);font-weight:600;letter-spacing:0}
-  .sm .d{font-size:10.5px;font-family:'JetBrains Mono',monospace;font-weight:700;margin-top:2px}
-  .up{color:var(--green-b)}.down{color:var(--red)}.flat{color:var(--faint)}
+  .wrap{padding:30px 34px 80px;max-width:1240px}
+  .reveal{opacity:0;transform:translateY(16px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}.reveal.in{opacity:1;transform:none}
+  .sec{margin-top:42px}.sec:first-of-type{margin-top:6px}
+  .shead{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px;gap:12px}
+  .shead h2{font-size:16px;font-weight:800;letter-spacing:-.4px}.shead .desc{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .shead .meta{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);font-weight:800}
 
-  /* LAYOUT */
-  .grid{display:grid;grid-template-columns:1fr 332px;gap:14px;padding:14px 22px 60px;align-items:start}
-  @media(max-width:1080px){.grid{grid-template-columns:1fr}}
-  .col{display:flex;flex-direction:column;gap:14px;min-width:0}
-  .feed-col{position:sticky;top:64px}
-  @media(max-width:1080px){.feed-col{position:static}}
-
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;backdrop-filter:blur(6px)}
-  .ph{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
-  .ph h3{font-size:12.5px;font-weight:700;letter-spacing:.2px;display:flex;align-items:center;gap:8px}
-  .ph .ic{color:var(--green-b)}
-  .badge{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:6px}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 9px;border-radius:7px;white-space:nowrap}
   .badge::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
-  .b-on{color:var(--green-b);background:rgba(35,224,122,.1)}
-  .b-mkt{color:var(--cyan);background:rgba(34,211,238,.12)}
-  .b-awa{color:var(--faint);background:rgba(255,255,255,.05)}
-  .b-obs{color:var(--gold);background:rgba(245,196,81,.12)}
-  .pb{padding:16px}
+  .b-on{color:var(--on);background:rgba(16,160,80,.1)}.b-off{color:var(--off);background:rgba(13,148,136,.1)}
+  .b-obs{color:var(--obs);background:rgba(199,154,22,.12)}.b-awa{color:var(--awa);background:rgba(154,168,160,.16)}.b-mkt{color:var(--mkt);background:rgba(11,182,196,.12)}
 
-  /* protocol row: core + vitals */
-  .protorow{display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:center}
-  @media(max-width:620px){.protorow{grid-template-columns:1fr}}
-  .core-svg{width:180px;height:180px;margin:0 auto;display:block}
+  /* CORE */
+  .corewrap{position:relative;border-radius:24px;overflow:hidden;background:radial-gradient(120% 140% at 78% 0%,rgba(16,160,80,.1),transparent 55%),linear-gradient(180deg,#fff,#f7fbf8);border:1px solid var(--line);box-shadow:var(--shadow);display:grid;grid-template-columns:1.15fr .85fr;min-height:300px}
+  @media(max-width:900px){.corewrap{grid-template-columns:1fr}.core-right{border-left:none!important;border-top:1px solid var(--line-soft);min-height:280px}}
+  .core-left{padding:32px 34px;display:flex;flex-direction:column;justify-content:center}
+  .core-tag{display:inline-flex;align-items:center;gap:8px;font-size:10.5px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:var(--green-deep);margin-bottom:14px}
+  .core-tag .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:beat 2s infinite}
+  .core-left h1{font-size:clamp(28px,4vw,42px);font-weight:900;letter-spacing:-1.6px;line-height:1.02}
+  .core-left h1 .alive{background:linear-gradient(120deg,var(--green-bright),var(--green-deep));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .core-left p{color:var(--muted);font-size:14px;margin-top:12px;max-width:420px}
+  .vitals{display:flex;gap:24px;margin-top:24px;flex-wrap:wrap}
+  .vital .vk{font-size:9.5px;letter-spacing:1.3px;text-transform:uppercase;color:var(--faint);font-weight:800;margin-bottom:4px}
+  .vital .vv{font-size:21px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px}.vital .vv.g{color:var(--green)}
+  .core-right{position:relative;display:grid;place-items:center;border-left:1px solid var(--line-soft);background:radial-gradient(circle at center,rgba(16,160,80,.06),transparent 70%)}
+  .core-svg{width:280px;height:280px;max-width:86%}
   .ring-rot{transform-origin:160px 160px;animation:spin 60s linear infinite}.ring-rot.rev{animation:spin 90s linear infinite reverse}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .pulse{transform-origin:center;animation:pul 3s ease-out infinite}.pulse.p2{animation-delay:1s}.pulse.p3{animation-delay:2s}
+  .pulse{transform-origin:160px 160px;animation:pul 3s ease-out infinite}.pulse.p2{animation-delay:1s}
   @keyframes pul{0%{transform:scale(.55);opacity:.5}80%{opacity:0}100%{transform:scale(1.25);opacity:0}}
-  .vitals{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-  .vit{border:1px solid var(--line);border-radius:11px;padding:13px}
-  .vit .vk{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700}
-  .vit .vv{font-size:21px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-.6px;margin-top:4px}
-  .vit .vv.g{color:var(--green-b)}
 
-  /* market cards */
-  .mcards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-  @media(max-width:680px){.mcards{grid-template-columns:repeat(2,1fr)}}
-  .mc{position:relative;border:1px solid var(--line);border-radius:11px;padding:13px 13px 13px 16px;overflow:hidden;background:var(--panel)}
-  .mc .ac{position:absolute;left:0;top:0;bottom:0;width:3px}
-  .mc .mk{font-size:10px;color:var(--muted);font-weight:600}
-  .mc .mv{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-.6px;margin-top:5px}
-  .mc .md{font-size:10.5px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:3px}
+  .grid{display:grid;gap:16px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:1000px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g2{grid-template-columns:1fr}}
+  @media(max-width:560px){.g4{grid-template-columns:1fr}}
+  .card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-sm);transition:transform .25s,box-shadow .25s,border-color .25s}
+  .card:hover{transform:translateY(-3px);box-shadow:var(--shadow);border-color:rgba(16,160,80,.28)}
+  .card .top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px}
+  .card .label{font-size:12px;color:var(--muted);font-weight:600}
+  .card .value{font-size:28px;font-weight:800;letter-spacing:-1px;font-family:'JetBrains Mono',monospace}.card .value.g{color:var(--green)}
+  .card .value.pending{font-size:14px;color:var(--faint);font-weight:600;letter-spacing:0}
+  .card .sub{font-size:12px;color:var(--muted);margin-top:6px}
 
-  .splitrow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  @media(max-width:760px){.splitrow{grid-template-columns:1fr}}
-  .gauge-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .tiergrid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
-  @media(max-width:520px){.tiergrid{grid-template-columns:repeat(3,1fr)}}
-  .tile{border-radius:10px;padding:11px;color:#07110b;min-height:70px;display:flex;flex-direction:column;justify-content:space-between}
-  .tile .tn{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
-  .tile .tc{font-size:19px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1}
-  .tile .tp{font-size:9.5px;font-family:'JetBrains Mono',monospace;opacity:.8}
+  /* market band */
+  .mkt-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:1000px){.mkt-cards{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.mkt-cards{grid-template-columns:1fr}}
+  .mc{position:relative;border:1px solid var(--line);border-radius:16px;padding:18px 18px 18px 22px;background:var(--panel);box-shadow:var(--shadow-sm);overflow:hidden}
+  .mc .ac{position:absolute;left:0;top:0;bottom:0;width:4px}.mc .mck{font-size:11px;color:var(--muted);font-weight:600}
+  .mc .mcv{font-size:24px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;margin-top:6px}
+  .mc .mcd{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:5px}
+  .up{color:var(--up)}.down{color:var(--down)}.flat{color:var(--faint)}
+  .gauge-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .tiergrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}@media(max-width:700px){.tiergrid{grid-template-columns:repeat(3,1fr)}}
+  .tile{border-radius:12px;padding:14px;color:#fff;min-height:80px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 6px 16px rgba(0,0,0,.06)}
+  .tile .tn{font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;opacity:.95}
+  .tile .tc{font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1}.tile .tp{font-size:10px;opacity:.88;font-family:'JetBrains Mono',monospace}
 
-  /* network canvas */
-  .netwrap{position:relative;height:340px}
+  /* network */
+  .netwrap{position:relative;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:linear-gradient(180deg,#fff,#f8fbf9);box-shadow:var(--shadow);height:420px}
   #netcanvas{width:100%;height:100%;display:block;cursor:grab}
-  .net-stats{position:absolute;bottom:12px;left:14px;display:flex;gap:18px}
-  .net-stats .nk{display:block;font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700}
-  .net-stats .nv{font-size:15px;font-weight:800;font-family:'JetBrains Mono',monospace}
-  .net-tip{position:absolute;pointer-events:none;background:#000;border:1px solid var(--line2);color:var(--green-b);font-family:'JetBrains Mono',monospace;font-size:11px;padding:5px 9px;border-radius:7px;opacity:0;transform:translate(-50%,-130%);transition:opacity .12s;z-index:5;white-space:nowrap}
-  .net-empty{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--faint);font-size:12px;font-family:'JetBrains Mono',monospace;padding:20px}
+  .net-stats{position:absolute;bottom:16px;left:18px;display:flex;gap:22px}
+  .net-stats .nk{display:block;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint);font-weight:800}
+  .net-stats .nv{font-size:18px;font-weight:800;color:var(--ink);font-family:'JetBrains Mono',monospace}
+  .net-tip{position:absolute;pointer-events:none;background:#08160e;color:#eafff2;font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 10px;border-radius:8px;opacity:0;transform:translate(-50%,-130%);transition:opacity .12s;z-index:5;white-space:nowrap}
+  .net-empty{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--faint);font-size:13px;padding:20px}
 
-  /* modules */
-  .modgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  @media(max-width:760px){.modgrid{grid-template-columns:1fr}}
-  .mod{border:1px solid var(--line);border-radius:11px;padding:14px;background:var(--panel)}
-  .mod .mt{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:700;font-size:12.5px;margin-bottom:7px}
-  .mod .mt .mi{font-size:14px}
-  .mod .mb{font-size:11.5px;color:var(--muted);line-height:1.5}
-  .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:9px}
-  .chip{font-size:9.5px;font-family:'JetBrains Mono',monospace;padding:2px 6px;border-radius:5px;background:var(--green-soft);color:var(--green-b);border:1px solid var(--line)}
-  .chip.m{background:rgba(255,255,255,.04);color:var(--faint)}
+  .table-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  thead th{text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:800;padding:13px 20px;border-bottom:1px solid var(--line)}
+  tbody td{padding:12px 20px;font-size:13px;border-bottom:1px solid var(--line-soft)}tbody tr:last-child td{border-bottom:none}tbody tr:hover{background:var(--green-soft)}
+  .evt{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 9px;border-radius:7px}
+  .evt-m{color:var(--green);background:rgba(16,160,80,.1)}.evt-t{color:var(--muted);background:rgba(93,111,100,.1)}
+  .addr,.hl{font-family:'JetBrains Mono',monospace;font-size:12px}.hl{color:var(--green-deep)}
+  .rowin{animation:rowin .5s ease both}@keyframes rowin{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
 
-  /* abstract net */
-  .netcards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-  @media(max-width:680px){.netcards{grid-template-columns:repeat(2,1fr)}}
-  .ncell{border:1px solid var(--line);border-radius:11px;padding:13px}
-  .ncell .k{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700}
-  .ncell .v{font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;margin-top:4px}
+  .mod{position:relative;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-sm);overflow:hidden;background:var(--panel)}
+  .mod .mh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+  .mod .mt{display:flex;align-items:center;gap:10px;font-weight:800;font-size:14px}
+  .mod .mi{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--green-soft);font-size:15px;border:1px solid var(--line)}
+  .mod .mb{font-size:12.5px;color:var(--muted)}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+  .chip{font-size:10.5px;font-family:'JetBrains Mono',monospace;padding:3px 8px;border-radius:6px;background:var(--green-soft);color:var(--green-deep);border:1px solid var(--line)}.chip.m{background:#f1f4f2;color:var(--faint)}
+  .sbox{margin-top:14px;padding:11px 13px;border-radius:10px;background:#f6f9f7;border:1px dashed var(--line);font-size:12px;color:var(--muted)}.sbox b{color:var(--ink)}
 
-  /* INTELLIGENCE FEED */
-  .feed{max-height:calc(100vh - 92px);overflow-y:auto}
-  .frow{display:flex;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);font-size:12px;animation:rowin .5s ease both}
-  @keyframes rowin{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
-  .frow:last-child{border-bottom:none}
-  .frow .tag{width:3px;border-radius:3px;flex-shrink:0}
-  .frow .body{flex:1;min-width:0}
-  .frow .t1{font-weight:600;display:flex;align-items:center;gap:6px}
-  .frow .ev{font-size:8.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:2px 6px;border-radius:5px}
-  .ev-mint{color:var(--green-b);background:rgba(35,224,122,.12)}
-  .ev-xfer{color:var(--cyan);background:rgba(34,211,238,.12)}
-  .frow .t2{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .frow .meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--faint);display:flex;gap:8px;margin-top:3px}
-  .frow a{color:var(--green-b)}
-  .feedstate{padding:30px;text-align:center;color:var(--faint);font-family:'JetBrains Mono',monospace;font-size:12px}
-  .spinner{width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--green-b);border-radius:50%;margin:0 auto 12px;animation:spin .8s linear infinite}
-
-  .foot{padding:18px 22px 50px;border-top:1px solid var(--line);font-size:10.5px;color:var(--faint);font-family:'JetBrains Mono',monospace;line-height:1.8}
-  .foot a{color:var(--green-b)}
+  footer{margin-left:var(--rail);padding:24px 34px 60px;border-top:1px solid var(--line);font-size:11px;color:var(--faint);line-height:1.9}
+  footer a{color:var(--green-deep);font-weight:600}.footer .pl{font-family:'JetBrains Mono',monospace}
+  .err{color:#c0392b}
+  @media(max-width:880px){.rail{transform:translateX(-100%)}.main,footer{margin-left:0}.wrap{padding:24px 18px 70px}.topbar{padding:12px 18px}}
 </style>
 </head>
 <body>
 
-<!-- COMMAND BAR -->
-<div class="cmd">
-  <a class="logo" href="/"><span class="m">◇</span><span>LITANY<small>Intelligence Terminal</small></span></a>
-  <div class="search"><span class="ic">⌕</span><input id="opsearch" placeholder="Search wallet / operator address…" autocomplete="off" spellcheck="false"></div>
-  <div class="links">
-    <a class="key" href="/litany/rarity">Rarity</a>
-    <a class="key" href="/litany/scanner">Scanner</a>
+<aside class="rail">
+  <div class="brand"><div class="logo">◇</div><div><div class="bname">LITANY</div><div class="bsub">Intelligence</div></div></div>
+  <nav class="nav">
+    <div class="grp">Protocol</div>
+    <a href="#core" class="active"><span class="ico">◎</span> Litany Core</a>
+    <a href="#market"><span class="ico">▤</span> Market Overview</a>
+    <a href="#overview"><span class="ico">▦</span> Collection</a>
+    <a href="#network"><span class="ico">⊹</span> Transfer Network</a>
+    <a href="#activity"><span class="ico">≋</span> Activity</a>
+    <div class="grp">Intelligence</div>
+    <a href="/litany/rarity"><span class="ico">◆</span> Rarity Engine</a>
+    <a href="/litany/scanner"><span class="ico">⌕</span> Wallet Scanner</a>
+    <a href="#holders"><span class="ico">◍</span> Holder Intel</a>
+    <a href="#economic"><span class="ico">$</span> Economic</a>
+    <div class="grp">Ecosystem</div>
+    <a href="#modules"><span class="ico">⬡</span> Hollows · Mesh · Arena</a>
+    <a href="#network-panel"><span class="ico">◈</span> Abstract Network</a>
+  </nav>
+  <div class="foot">Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a><br>Mantis Pro · community tool<br>Not an official Litany product</div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="crumb"><b>Litany Intelligence</b> · Abstract Mainnet</div>
+    <div class="search"><span class="i">⌕</span><input id="opsearch" placeholder="Search wallet address…" autocomplete="off" spellcheck="false"></div>
+    <div class="tstat">
+      <div class="pill"><span class="ldot"></span> Live</div>
+      <div class="pill">Block <span class="blk" id="tb-block">—</span></div>
+    </div>
   </div>
-  <div class="pillrow">
-    <div class="pill hideS"><span class="dot"></span> Abstract · 2741</div>
-    <div class="pill"><span class="dot"></span> Block <span id="tb-block">—</span></div>
-  </div>
-</div>
 
-<!-- PROTOCOL STATUS STRIP -->
-<div class="strip">
-  <div class="sm"><div class="k">Total Cards</div><div class="v g" id="ss-cards" style="color:var(--green-b)">—</div><div class="d flat">of 8,000</div></div>
-  <div class="sm"><div class="k">Holders</div><div class="v" id="ss-holders">—</div><div class="d flat">OpenSea</div></div>
-  <div class="sm"><div class="k">24h Volume</div><div class="v" id="ss-vol">—</div><div class="d flat" id="ss-vold">—</div></div>
-  <div class="sm"><div class="k">Floor</div><div class="v" id="ss-floor">—</div><div class="d flat">OpenSea</div></div>
-  <div class="sm"><div class="k">Mint Progress</div><div class="v" id="ss-mint">—</div><div class="d flat">onchain</div></div>
-  <div class="sm"><div class="k">Genesis Hollows</div><div class="v">5,000</div><div class="d flat">awaken via card</div></div>
-  <div class="sm"><div class="k">Active Operators</div><div class="v pending">Awaiting</div><div class="d flat">indexer</div></div>
-  <div class="sm"><div class="k">Sync Block</div><div class="v" id="ss-block" style="font-size:14px">—</div><div class="d flat">live</div></div>
-</div>
+  <div class="wrap">
 
-<div class="grid">
-  <!-- MAIN COLUMN -->
-  <div class="col">
-
-    <!-- PROTOCOL / CORE + MARKET -->
-    <div class="panel">
-      <div class="ph"><h3><span class="ic">◎</span> Protocol Heartbeat</h3><span class="badge b-on">Verified Onchain</span></div>
-      <div class="pb">
-        <div class="protorow">
-          <svg class="core-svg" viewBox="0 0 320 320">
-            <defs><radialGradient id="cg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#23e07a"/><stop offset="60%" stop-color="#10a050"/><stop offset="100%" stop-color="#077a39"/></radialGradient>
-            <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-            <g class="ring-rot"><circle cx="160" cy="160" r="150" fill="none" stroke="rgba(35,224,122,.16)" stroke-width="1"/><g id="ticks"></g></g>
-            <g class="ring-rot rev"><circle cx="160" cy="160" r="118" fill="none" stroke="rgba(35,224,122,.1)" stroke-width="1" stroke-dasharray="2 8"/></g>
-            <circle cx="160" cy="160" r="92" fill="none" stroke="rgba(35,224,122,.1)" stroke-width="8"/>
-            <circle id="arc" cx="160" cy="160" r="92" fill="none" stroke="url(#cg)" stroke-width="8" stroke-linecap="round" transform="rotate(-90 160 160)" stroke-dasharray="578" stroke-dashoffset="578"/>
-            <circle class="pulse" cx="160" cy="160" r="60" fill="none" stroke="var(--green)" stroke-width="2" style="transform-origin:160px 160px"/>
-            <circle class="pulse p2" cx="160" cy="160" r="60" fill="none" stroke="var(--green)" stroke-width="2" style="transform-origin:160px 160px"/>
-            <circle cx="160" cy="160" r="46" fill="url(#cg)" filter="url(#glow)" opacity=".95"/>
-            <text x="160" y="155" text-anchor="middle" fill="#04140a" font-size="10" font-weight="800" font-family="JetBrains Mono">LITANY</text>
-            <text x="160" y="176" text-anchor="middle" id="arcpct" fill="#04140a" font-size="17" font-weight="800" font-family="JetBrains Mono">—</text>
-          </svg>
+    <!-- CORE -->
+    <section class="sec reveal" id="core">
+      <div class="corewrap">
+        <div class="core-left">
+          <span class="core-tag"><span class="dot"></span> Protocol Heartbeat</span>
+          <h1>The protocol is<br><span class="alive">alive.</span></h1>
+          <p>Agent-native collectibles. Firmware for autonomous worlds. Every signal below is read live from Abstract and traceable to its source.</p>
           <div class="vitals">
-            <div class="vit"><div class="vk">Minted</div><div class="vv g" id="cv-minted">—</div></div>
-            <div class="vit"><div class="vk">Supply Cap</div><div class="vv">8,000</div></div>
-            <div class="vit"><div class="vk">Mint Price</div><div class="vv">0.0025<span style="font-size:11px;color:var(--muted)"> Ξ</span></div></div>
-            <div class="vit"><div class="vk">Status</div><div class="vv g" id="cv-status">SYNC</div></div>
+            <div class="vital"><div class="vk">Minted</div><div class="vv g" id="cv-minted">—</div></div>
+            <div class="vital"><div class="vk">Supply Cap</div><div class="vv">8,000</div></div>
+            <div class="vital"><div class="vk">Block Height</div><div class="vv" id="cv-block">—</div></div>
+            <div class="vital"><div class="vk">Status</div><div class="vv g" id="cv-status">SYNCING</div></div>
           </div>
         </div>
-
-        <div class="mcards" style="margin-top:14px">
-          <div class="mc"><span class="ac" style="background:#10b981"></span><div class="mk">Floor</div><div class="mv" id="m-floor">—</div><div class="md flat">OpenSea</div></div>
-          <div class="mc"><span class="ac" style="background:#3b82f6"></span><div class="mk">Holders</div><div class="mv" id="m-holders">—</div><div class="md flat">owners</div></div>
-          <div class="mc"><span class="ac" style="background:#f5c451"></span><div class="mk">24h Vol</div><div class="mv" id="m-v24">—</div><div class="md flat" id="m-v24-d">—</div></div>
-          <div class="mc"><span class="ac" style="background:#a06bff"></span><div class="mk">7d Vol</div><div class="mv" id="m-v7">—</div><div class="md flat" id="m-v7-d">—</div></div>
-        </div>
-
-        <div class="splitrow" style="margin-top:14px">
-          <div>
-            <div class="vk" style="font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:8px">Mint Progress</div>
-            <div class="gauge-wrap"><svg viewBox="0 0 200 116" width="170" height="100" id="gauge"></svg><div><div style="font-size:34px;font-weight:800;font-family:'JetBrains Mono';letter-spacing:-2px;color:var(--green-b)" id="g-pct">—</div><div style="font-size:11px;color:var(--muted)" id="g-sub">of 8,000</div></div></div>
-          </div>
-          <div>
-            <div class="vk" style="font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between">Rarity Tiers <span class="badge b-on" id="tier-badge" style="font-size:8px">Index</span></div>
-            <div class="tiergrid" id="tiergrid"><div style="grid-column:1/-1;color:var(--faint);font-size:11px;font-family:'JetBrains Mono'">loading rarity index…</div></div>
-          </div>
+        <div class="core-right">
+          <svg class="core-svg" viewBox="0 0 320 320">
+            <defs><radialGradient id="cg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#1fd06b"/><stop offset="60%" stop-color="#10a050"/><stop offset="100%" stop-color="#077a39"/></radialGradient>
+            <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+            <g class="ring-rot"><circle cx="160" cy="160" r="150" fill="none" stroke="rgba(16,160,80,.16)" stroke-width="1"/><g id="ticks"></g></g>
+            <g class="ring-rot rev"><circle cx="160" cy="160" r="118" fill="none" stroke="rgba(16,160,80,.12)" stroke-width="1" stroke-dasharray="2 8"/></g>
+            <circle cx="160" cy="160" r="92" fill="none" stroke="rgba(16,160,80,.12)" stroke-width="8"/>
+            <circle id="arc" cx="160" cy="160" r="92" fill="none" stroke="url(#cg)" stroke-width="8" stroke-linecap="round" transform="rotate(-90 160 160)" stroke-dasharray="578" stroke-dashoffset="578" style="transition:stroke-dashoffset 1.4s cubic-bezier(.2,.7,.2,1)"/>
+            <circle class="pulse" cx="160" cy="160" r="60" fill="none" stroke="var(--green)" stroke-width="2"/>
+            <circle class="pulse p2" cx="160" cy="160" r="60" fill="none" stroke="var(--green)" stroke-width="2"/>
+            <circle cx="160" cy="160" r="46" fill="url(#cg)" filter="url(#glow)" opacity=".95"/>
+            <text x="160" y="156" text-anchor="middle" fill="#fff" font-size="11" font-weight="800" font-family="JetBrains Mono" letter-spacing="2">LITANY</text>
+            <text x="160" y="176" text-anchor="middle" id="arcpct" fill="#fff" font-size="18" font-weight="800" font-family="JetBrains Mono">—</text>
+          </svg>
         </div>
       </div>
-    </div>
+    </section>
+
+    <!-- MARKET OVERVIEW -->
+    <section class="sec reveal" id="market">
+      <div class="shead"><div><h2>Litany Market Overview</h2><div class="desc">Live market state. Colored deltas are real OpenSea interval changes — not estimates.</div></div><span class="badge b-mkt">OpenSea + Onchain</span></div>
+      <div class="mkt-cards">
+        <div class="mc"><span class="ac" style="background:#10b981"></span><div class="mck">Floor Price</div><div class="mcv" id="m-floor">—</div><div class="mcd flat">OpenSea · Abstract</div></div>
+        <div class="mc"><span class="ac" style="background:#3b82f6"></span><div class="mck">Holders</div><div class="mcv" id="m-holders">—</div><div class="mcd flat">unique owners</div></div>
+        <div class="mc"><span class="ac" style="background:#c79a16"></span><div class="mck">24h Volume</div><div class="mcv" id="m-v24">—</div><div class="mcd flat" id="m-v24-d">—</div></div>
+        <div class="mc"><span class="ac" style="background:#8b5cf6"></span><div class="mck">7d Volume</div><div class="mcv" id="m-v7">—</div><div class="mcd flat" id="m-v7-d">—</div></div>
+      </div>
+      <div class="grid g2" style="margin-top:16px">
+        <div class="card">
+          <div class="top"><span class="label">Mint Progress</span><span class="badge b-on">Verified Onchain</span></div>
+          <div class="gauge-wrap" style="margin-top:10px"><svg viewBox="0 0 200 116" width="190" height="110" id="gauge"></svg><div><div style="font-size:40px;font-weight:800;font-family:'JetBrains Mono';letter-spacing:-2px;color:var(--green)" id="g-pct">—</div><div style="font-size:12px;color:var(--muted)" id="g-sub">of 8,000 minted</div></div></div>
+        </div>
+        <div class="card">
+          <div class="top"><span class="label">Rarity Tier Distribution</span><span class="badge b-on" id="tier-badge">Rarity Index</span></div>
+          <div class="tiergrid" id="tiergrid" style="margin-top:12px"><div style="grid-column:1/-1;color:var(--faint);font-size:12px;font-family:'JetBrains Mono'">Loading rarity index…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLLECTION OVERVIEW -->
+    <section class="sec reveal" id="overview">
+      <div class="shead"><div><h2>Litany Cards — Collection Overview</h2><div class="desc">Live onchain state of the genesis ERC-721 collection.</div></div><span class="meta">Layer 1 · Core Metrics</span></div>
+      <div class="grid g4">
+        <div class="card"><div class="top"><span class="label">Minted Supply</span><span class="badge b-on">Verified Onchain</span></div><div class="value g" id="k-minted">—</div><div class="sub" id="k-minted-sub">of 8,000 max</div></div>
+        <div class="card"><div class="top"><span class="label">Mint Progress</span><span class="badge b-on">Verified Onchain</span></div><div class="value" id="k-prog">—</div><div class="sub">live completion</div></div>
+        <div class="card"><div class="top"><span class="label">Mint Price</span><span class="badge b-off">Official Source</span></div><div class="value">0.0025</div><div class="sub">ETH per card</div></div>
+        <div class="card"><div class="top"><span class="label">Standard</span><span class="badge b-on">Verified Onchain</span></div><div class="value" style="font-size:20px">ERC-721</div><div class="sub">+2981 · onchain SVG</div></div>
+      </div>
+    </section>
 
     <!-- TRANSFER NETWORK -->
-    <div class="panel">
-      <div class="ph"><h3><span class="ic">⊹</span> Transfer Intelligence Network</h3><span class="badge b-on">Verified Onchain</span></div>
+    <section class="sec reveal" id="network">
+      <div class="shead"><div><h2>Transfer Intelligence Network</h2><div class="desc">A live force-directed graph of real onchain Transfer relationships in the recent block window.</div></div><span class="badge b-on">Verified Onchain</span></div>
       <div class="netwrap">
         <canvas id="netcanvas"></canvas>
         <div class="net-stats"><div><span class="nk">Wallets</span><span class="nv" id="net-nodes">—</span></div><div><span class="nk">Transfers</span><span class="nv" id="net-edges">—</span></div><div><span class="nk">Window</span><span class="nv" id="net-window">—</span></div></div>
-        <div class="net-tip" id="net-tip"></div>
-        <div class="net-empty" id="net-empty"></div>
+        <div class="net-tip" id="net-tip"></div><div class="net-empty" id="net-empty"></div>
       </div>
-    </div>
+    </section>
+
+    <!-- ACTIVITY -->
+    <section class="sec reveal" id="activity">
+      <div class="shead"><div><h2>Live Collection Activity</h2><div class="desc">Most recent mints and transfers, each linked to its transaction.</div></div><span class="badge b-on">Verified Onchain</span></div>
+      <div class="table-card"><table><thead><tr><th>Event</th><th>From → To</th><th>Token</th><th>Block</th><th>Time</th><th>Tx</th></tr></thead>
+      <tbody id="act-body"><tr><td colspan="6" style="text-align:center;color:var(--faint);padding:34px">Reading onchain Transfer events…</td></tr></tbody></table></div>
+    </section>
+
+    <!-- HOLDER INTEL -->
+    <section class="sec reveal" id="holders">
+      <div class="shead"><div><h2>Holder &amp; Trait Intelligence</h2><div class="desc">Deep ownership analytics — reconstructed by the indexer from every Transfer event.</div></div><span class="meta">Layer 2 · Relationships</span></div>
+      <div class="grid g3">
+        <div class="card"><div class="top"><span class="label">Whale Concentration</span><span class="badge b-awa">Indexer</span></div><div class="value pending">Verification unavailable</div><div class="sub">full ownership history</div></div>
+        <div class="card"><div class="top"><span class="label">Collector Retention</span><span class="badge b-awa">Indexer</span></div><div class="value pending">Verification unavailable</div><div class="sub">avg holding period</div></div>
+        <div class="card"><div class="top"><span class="label">Trait &amp; Phrase Rarity</span><span class="badge b-on">Live</span></div><div class="value" style="font-size:15px"><a href="/litany/rarity" style="color:var(--green-deep);font-weight:700">Open Rarity Engine →</a></div><div class="sub">full index built</div></div>
+      </div>
+    </section>
+
+    <!-- ECONOMIC -->
+    <section class="sec reveal" id="economic">
+      <div class="shead"><div><h2>Economic Activity Engine</h2><div class="desc">Volume from OpenSea; deeper revenue activates with the indexer.</div></div><span class="meta">Layer 3 · Value Flow</span></div>
+      <div class="grid g4">
+        <div class="card"><div class="top"><span class="label">Total Volume</span><span class="badge b-mkt" id="b-tvol">OpenSea</span></div><div class="value" id="e-tvol" style="font-size:22px">—</div><div class="sub">all-time</div></div>
+        <div class="card"><div class="top"><span class="label">24h Volume</span><span class="badge b-mkt">OpenSea</span></div><div class="value" id="e-24h" style="font-size:22px">—</div><div class="sub">last 24h</div></div>
+        <div class="card"><div class="top"><span class="label">7d / 30d Volume</span><span class="badge b-mkt">OpenSea</span></div><div class="value" id="e-7d30d" style="font-size:18px">—</div><div class="sub">ETH</div></div>
+        <div class="card"><div class="top"><span class="label">Volume Quality</span><span class="badge b-awa">Indexer</span></div><div class="value pending">Unavailable</div><div class="sub">deterministic score</div></div>
+      </div>
+    </section>
 
     <!-- MODULES -->
-    <div class="panel">
-      <div class="ph"><h3><span class="ic">⬡</span> Ecosystem Modules</h3><span class="badge b-obs">Live + Awaiting</span></div>
-      <div class="pb"><div class="modgrid">
-        <div class="mod"><div class="mt"><span><span class="mi">🜂</span> Hollows</span><span class="badge b-obs">Live</span></div><div class="mb">5,000 Genesis, awakened by Litany Cards. Dual-type entities, synthesis-ready.</div><div class="chips"><span class="chip">8 types</span><span class="chip m">registry: API needed</span></div></div>
-        <div class="mod"><div class="mt"><span><span class="mi">⬡</span> Mesh</span><span class="badge b-obs">Live</span></div><div class="mb">Territory control & factions. Cells, anchors, clusters, biomes.</div><div class="chips"><span class="chip m">territory endpoint needed</span></div></div>
-        <div class="mod"><div class="mt"><span><span class="mi">⚔</span> Arena</span><span class="badge b-awa">Awaiting</span></div><div class="mb">Onchain battle engine. Match data activates on an exposed source.</div><div class="chips"><span class="chip m">contract + events</span></div></div>
-        <div class="mod"><div class="mt"><span><span class="mi">▣</span> Firmware</span><span class="badge b-on">Model</span></div><div class="mb">A Card loaded into a Hollow. Maps to onchain card classes & traits.</div><div class="chips"><span class="chip">card = firmware</span></div></div>
-        <div class="mod"><div class="mt"><span><span class="mi">◈</span> Factions</span><span class="badge b-awa">Awaiting</span></div><div class="mb">Membership & control. No dominance values until a source is confirmed.</div></div>
-        <div class="mod"><div class="mt"><span><span class="mi">◇</span> Agents</span><span class="badge b-awa">Awaiting</span></div><div class="mb">Agent activity. Activates when the Litany MCP/API ships.</div></div>
-      </div></div>
-    </div>
+    <section class="sec reveal" id="modules">
+      <div class="shead"><div><h2>Ecosystem Modules</h2><div class="desc">Each activates automatically when its protocol source goes public — no fabricated state.</div></div><span class="meta">Layer 4 · Protocol Intelligence</span></div>
+      <div class="grid g2">
+        <div class="mod"><div class="mh"><div class="mt"><span class="mi">🜂</span> Hollow Genetics</div><span class="badge b-obs">Live</span></div><div class="mb">5,000 Genesis entities, awakened by Litany Cards. Dual-type, synthesis-ready.</div><div class="chips"><span class="chip">8 types</span><span class="chip m">EXEC</span><span class="chip m">WARD</span></div><div class="sbox">Registry · lineage: <b>Awaiting Protocol Data</b> — needs the Hollows contract / vault API.</div></div>
+        <div class="mod"><div class="mh"><div class="mt"><span class="mi">⬡</span> Mesh Command</div><span class="badge b-obs">Live</span></div><div class="mb">Territory control & factions — cells, anchors, clusters, biomes.</div><div class="chips"><span class="chip m">territory endpoint needed</span></div><div class="sbox">Live metrics: <b>Awaiting Protocol Data</b>.</div></div>
+        <div class="mod"><div class="mh"><div class="mt"><span class="mi">⚔</span> Arena</div><span class="badge b-awa">Awaiting</span></div><div class="mb">Onchain battle engine. Match data activates on an exposed source.</div><div class="sbox">Needs Arena contract + battle events.</div></div>
+        <div class="mod"><div class="mh"><div class="mt"><span class="mi">▣</span> Firmware</div><span class="badge b-on">Model</span></div><div class="mb">A Card loaded into a Hollow. Maps to onchain card classes & traits.</div><div class="chips"><span class="chip">card = firmware</span></div></div>
+      </div>
+    </section>
 
     <!-- ABSTRACT NETWORK -->
-    <div class="panel">
-      <div class="ph"><h3><span class="ic">◈</span> Abstract Network</h3><span class="badge b-on">Verified Onchain</span></div>
-      <div class="pb"><div class="netcards">
-        <div class="ncell"><div class="k">Block Height</div><div class="v" id="n-block">—</div></div>
-        <div class="ncell"><div class="k">Gas Price</div><div class="v" id="n-gas">—</div></div>
-        <div class="ncell"><div class="k">Chain ID</div><div class="v">2741</div></div>
-        <div class="ncell"><div class="k">Finality</div><div class="v">~2s</div></div>
-      </div></div>
-    </div>
-
-    <div class="foot">
-      <div id="foot-prov">Data: Abstract RPC (api.mainnet.abs.xyz) · LitanyCards 0xd44a…03eB · OpenSea · rarity index</div>
-      <div style="margin-top:6px">Every value traceable to onchain data, OpenSea, or the rarity index. Unsourceable metrics show <b>Awaiting</b> — never estimated. Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Not an official Litany product.</div>
-    </div>
-  </div>
-
-  <!-- INTELLIGENCE FEED -->
-  <div class="feed-col">
-    <div class="panel">
-      <div class="ph"><h3><span class="ic" style="color:var(--cyan)">≋</span> Intelligence Feed</h3><span class="badge b-on">Live</span></div>
-      <div class="feed" id="feed"><div class="feedstate"><div class="spinner"></div>Reading onchain events…</div></div>
-    </div>
+    <section class="sec reveal" id="network-panel">
+      <div class="shead"><div><h2>Abstract Network</h2><div class="desc">Live chain vitals from the Abstract RPC.</div></div><span class="badge b-on">Verified Onchain</span></div>
+      <div class="grid g4">
+        <div class="card"><div class="top"><span class="label">Block Height</span></div><div class="value" id="n-block" style="font-size:22px">—</div><div class="sub">latest</div></div>
+        <div class="card"><div class="top"><span class="label">Gas Price</span></div><div class="value" id="n-gas" style="font-size:22px">—</div><div class="sub">gwei</div></div>
+        <div class="card"><div class="top"><span class="label">Chain ID</span></div><div class="value" style="font-size:22px">2741</div><div class="sub">Abstract Mainnet</div></div>
+        <div class="card"><div class="top"><span class="label">Finality</span><span class="badge b-off">Official</span></div><div class="value" style="font-size:22px">~2s</div><div class="sub">ZK rollup</div></div>
+      </div>
+    </section>
   </div>
 </div>
+
+<footer>
+  <div class="pl" id="foot-prov">Data source: Abstract RPC (api.mainnet.abs.xyz) · LitanyCards 0xd44a…03eB · OpenSea</div>
+  <div style="margin-top:8px">Every value traceable to onchain data, OpenSea, or the rarity index. Unsourceable metrics show <b>Verification unavailable</b> / <b>Awaiting Protocol Data</b> — never estimated.</div>
+  <div style="margin-top:8px">Community tool by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Not an official Litany product.</div>
+</footer>
 
 <script>
   const RPC="/api/abstract-rpc", CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB", MAX=8000;
@@ -285,102 +312,99 @@
   let rid=1;
   async function rpc(m,p){const r=await fetch(RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:rid++,method:m,params:p})});if(!r.ok)throw new Error("HTTP "+r.status);const j=await r.json();if(j.error)throw new Error(j.error.message||"rpc");return j.result;}
   async function osea(path){const r=await fetch("/api/opensea?path="+encodeURIComponent(path));const j=await r.json().catch(()=>({}));if(!r.ok||j.error)throw new Error(j.error||("OpenSea "+r.status));return j;}
-  const hi=h=>h?parseInt(h,16):0, ta=t=>"0x"+t.slice(26), sa=a=>a.slice(0,6)+"…"+a.slice(-4), sh=h=>h.slice(0,10)+"…";
+  const hi=h=>h?parseInt(h,16):0, ta=t=>"0x"+t.slice(26), sa=a=>a.slice(0,6)+"…"+a.slice(-4), sh=h=>h.slice(0,8)+"…";
   const fmtN=(v,d)=>v==null?"—":Number(v).toLocaleString("en-US",{maximumFractionDigits:d==null?2:d});
-  function set(id,txt){const e=document.getElementById(id);if(e)e.textContent=txt;}
-  function rel(ts){const s=Math.floor(Date.now()/1e3)-ts;if(s<60)return s+"s";if(s<3600)return(s/60|0)+"m";if(s<86400)return(s/3600|0)+"h";return(s/86400|0)+"d";}
+  function set(id,t){const e=document.getElementById(id);if(e)e.textContent=t;}
+  function rel(ts){const s=Math.floor(Date.now()/1e3)-ts;if(s<60)return s+"s ago";if(s<3600)return(s/60|0)+"m ago";if(s<86400)return(s/3600|0)+"h ago";return(s/86400|0)+"d ago";}
+  document.getElementById("opsearch").addEventListener("keydown",e=>{if(e.key==="Enter"){const v=e.target.value.trim();location.href=/^0x[a-fA-F0-9]{40}$/.test(v)?"/litany/scanner#"+v:"/litany/scanner";}});
 
-  // command-bar search → scanner
-  document.getElementById("opsearch").addEventListener("keydown",e=>{if(e.key==="Enter"){const v=e.target.value.trim();if(/^0x[a-fA-F0-9]{40}$/.test(v))location.href="/litany/scanner#"+v;else location.href="/litany/scanner";}});
-
-  // core ticks
-  (function(){let s="";for(let i=0;i<60;i++){const a=i*6*Math.PI/180,x1=160+Math.cos(a)*150,y1=160+Math.sin(a)*150,x2=160+Math.cos(a)*(i%5===0?142:146),y2=160+Math.sin(a)*(i%5===0?142:146);s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(35,224,122,${i%5===0?.35:.14})" stroke-width="${i%5===0?1.3:.7}"/>`;}const t=document.getElementById("ticks");if(t)t.innerHTML=s;})();
-
-  function drawGauge(pct){const len=251.3,off=len*(1-Math.min(100,pct)/100);const g=document.getElementById("gauge");if(g)g.innerHTML='<defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#23e07a"/><stop offset="100%" stop-color="#077a39"/></linearGradient></defs><path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="13" stroke-linecap="round"/><path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="url(#gg)" stroke-width="13" stroke-linecap="round" stroke-dasharray="'+len+'" stroke-dashoffset="'+off+'"/>';}
+  (function(){let s="";for(let i=0;i<60;i++){const a=i*6*Math.PI/180,x1=160+Math.cos(a)*150,y1=160+Math.sin(a)*150,x2=160+Math.cos(a)*(i%5===0?142:146),y2=160+Math.sin(a)*(i%5===0?142:146);s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(16,160,80,${i%5===0?.35:.16})" stroke-width="${i%5===0?1.3:.7}"/>`;}const t=document.getElementById("ticks");if(t)t.innerHTML=s;})();
+  function drawGauge(pct){const len=251.3,off=len*(1-Math.min(100,pct)/100);const g=document.getElementById("gauge");if(g)g.innerHTML='<defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#1fd06b"/><stop offset="100%" stop-color="#077a39"/></linearGradient></defs><path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#eef4f0" stroke-width="14" stroke-linecap="round"/><path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="url(#gg)" stroke-width="14" stroke-linecap="round" stroke-dasharray="'+len+'" stroke-dashoffset="'+off+'"/>';}
 
   async function loadCore(){
     try{
       const [bh,sup]=await Promise.all([rpc("eth_blockNumber",[]),rpc("eth_call",[{to:CARDS,data:"0x18160ddd"},"latest"])]);
       const block=hi(bh),minted=hi(sup),pct=minted/MAX*100;
-      set("tb-block",block.toLocaleString());set("ss-block",block.toLocaleString());set("n-block",block.toLocaleString());
-      set("cv-minted",minted.toLocaleString());set("cv-status","ALIVE");
-      set("ss-cards",minted.toLocaleString());set("ss-mint",pct.toFixed(1)+"%");
-      set("arcpct",pct.toFixed(0)+"%");drawGauge(pct);set("g-pct",pct.toFixed(1)+"%");set("g-sub",minted.toLocaleString()+" of 8,000");
-      const arc=document.getElementById("arc");if(arc){const C=578;arc.setAttribute("stroke-dasharray",C);setTimeout(()=>arc.style.strokeDashoffset=(C*(1-pct/100)).toFixed(0),120);arc.style.transition="stroke-dashoffset 1.4s cubic-bezier(.2,.7,.2,1)";}
-      set("foot-prov","Data: Abstract RPC · LitanyCards 0xd44a…03eB · OpenSea · block "+block.toLocaleString());
+      set("tb-block",block.toLocaleString());set("cv-block",block.toLocaleString());set("n-block",block.toLocaleString());
+      set("cv-minted",minted.toLocaleString());set("cv-status","ALIVE");set("k-minted",minted.toLocaleString());set("k-prog",pct.toFixed(1)+"%");
+      set("arcpct",pct.toFixed(0)+"%");drawGauge(pct);set("g-pct",pct.toFixed(1)+"%");set("g-sub",minted.toLocaleString()+" of 8,000 minted");
+      const arc=document.getElementById("arc");if(arc)setTimeout(()=>arc.style.strokeDashoffset=(578*(1-pct/100)).toFixed(0),120);
+      set("foot-prov","Data source: Abstract RPC · LitanyCards 0xd44a…03eB · OpenSea · block "+block.toLocaleString());
       return block;
-    }catch(e){set("cv-status","RPC ERR");return null;}
+    }catch(e){set("cv-status","RPC ERR");set("k-minted","unavailable");return null;}
   }
-  async function loadGas(){try{set("n-gas",(hi(await rpc("eth_gasPrice",[]))/1e9).toFixed(3)+" gwei");}catch(_){}}
+  async function loadGas(){try{set("n-gas",(hi(await rpc("eth_gasPrice",[]))/1e9).toFixed(3));}catch(_){}}
 
-  function setVol(vid,did,intv){const v=document.getElementById(vid),d=document.getElementById(did);if(!v)return;if(!intv){v.textContent="—";if(d)d.textContent="—";return;}v.textContent=(intv.volume!=null?fmtN(intv.volume,2):"—")+" Ξ";if(!d)return;const vc=intv.volume_change;if(vc==null){d.className="md flat";d.textContent="vs prior";return;}const p=vc*100;d.className="md "+(p>0.05?"up":p<-0.05?"down":"flat");d.textContent=(p>=0?"▲ +":"▼ ")+p.toFixed(1)+"%";}
+  function setVol(vid,did,intv){const v=document.getElementById(vid),d=document.getElementById(did);if(!v)return;if(!intv){v.textContent="—";if(d)d.textContent="—";return;}v.textContent=(intv.volume!=null?fmtN(intv.volume,2):"—")+" Ξ";if(!d)return;const vc=intv.volume_change;if(vc==null){d.className="mcd flat";d.textContent="vs prior";return;}const p=vc*100;d.className="mcd "+(p>0.05?"up":p<-0.05?"down":"flat");d.textContent=(p>=0?"▲ +":"▼ ")+p.toFixed(1)+"%";}
 
   async function loadMarket(){
     try{
-      const c=await osea("/api/v2/chain/abstract/contract/"+CARDS);
-      const slug=c.collection||(c.contract&&c.contract.collection);if(!slug)throw 0;
-      const s=await osea("/api/v2/collections/"+slug+"/stats");
-      const tot=s.total||{}, iv={}; (s.intervals||[]).forEach(x=>iv[x.interval]=x);
-      if(tot.floor_price!=null){set("m-floor",fmtN(tot.floor_price,4)+" Ξ");set("ss-floor",fmtN(tot.floor_price,3)+" Ξ");}
-      if(tot.num_owners!=null){set("m-holders",fmtN(tot.num_owners,0));set("ss-holders",fmtN(tot.num_owners,0));}
+      const c=await osea("/api/v2/chain/abstract/contract/"+CARDS);const slug=c.collection||(c.contract&&c.contract.collection);if(!slug)return;
+      const s=await osea("/api/v2/collections/"+slug+"/stats");const tot=s.total||{}, iv={}; (s.intervals||[]).forEach(x=>iv[x.interval]=x);
+      if(tot.floor_price!=null)set("m-floor",fmtN(tot.floor_price,4)+" Ξ");
+      if(tot.num_owners!=null)set("m-holders",fmtN(tot.num_owners,0));
       setVol("m-v24","m-v24-d",iv.one_day);setVol("m-v7","m-v7-d",iv.seven_day);
-      if(iv.one_day){const e=document.getElementById("ss-vol");if(e)e.textContent=fmtN(iv.one_day.volume,1)+" Ξ";const d=document.getElementById("ss-vold");if(d&&iv.one_day.volume_change!=null){const p=iv.one_day.volume_change*100;d.className="d "+(p>0.05?"up":p<-0.05?"down":"flat");d.textContent=(p>=0?"▲ +":"▼ ")+p.toFixed(1)+"%";}}
+      set("e-tvol",tot.volume!=null?fmtN(tot.volume,1)+" Ξ":"—");
+      set("e-24h",iv.one_day?fmtN(iv.one_day.volume,2)+" Ξ":"—");
+      set("e-7d30d",(iv.seven_day?fmtN(iv.seven_day.volume,1):"—")+" / "+(iv.thirty_day?fmtN(iv.thirty_day.volume,1):"—")+" Ξ");
     }catch(e){}
   }
   async function loadTiers(){
-    try{const r=await fetch("/rarity_index.json",{cache:"no-store"});if(!r.ok){document.getElementById("tiergrid").innerHTML='<div style="grid-column:1/-1;color:var(--faint);font-size:11px;font-family:JetBrains Mono">index not built — run build_rarity_index.py</div>';return;}
+    try{const r=await fetch("/rarity_index.json",{cache:"no-store"});if(!r.ok){document.getElementById("tiergrid").innerHTML='<div style="grid-column:1/-1;color:var(--faint);font-size:12px;font-family:JetBrains Mono">index not built — run build_rarity_index.py</div>';return;}
       const d=await r.json(),total=d.totalCards,t={Legendary:0,Epic:0,Rare:0,Uncommon:0,Common:0};
       d.cards.forEach(c=>{const p=c.rank/total;if(p<=0.01)t.Legendary++;else if(p<=0.05)t.Epic++;else if(p<=0.15)t.Rare++;else if(p<=0.40)t.Uncommon++;else t.Common++;});
-      const order=[["Legendary","#a06bff"],["Epic","#3b82f6"],["Rare","#10b981"],["Uncommon","#23e07a"],["Common","#8a958d"]];
+      const order=[["Legendary","#8b5cf6"],["Epic","#3b82f6"],["Rare","#10b981"],["Uncommon","#12a150"],["Common","#9aa8a0"]];
       document.getElementById("tiergrid").innerHTML=order.map(([n,c])=>{const cnt=t[n]||0,pc=total?cnt/total*100:0;return '<div class="tile" style="background:'+c+'"><div class="tn">'+n+'</div><div><div class="tc">'+cnt.toLocaleString()+'</div><div class="tp">'+pc.toFixed(1)+'%</div></div></div>';}).join("");
     }catch(e){}
   }
 
   let graph={nodes:[],edges:[]};
-  async function loadFeedAndGraph(block){
-    const feed=document.getElementById("feed"),empty=document.getElementById("net-empty");
+  async function loadActivityAndGraph(block){
+    const body=document.getElementById("act-body"),empty=document.getElementById("net-empty");
     try{
       if(!block)block=hi(await rpc("eth_blockNumber",[]));
       const from="0x"+Math.max(0,block-WINDOW).toString(16);
       const logs=await rpc("eth_getLogs",[{address:CARDS,topics:[TT],fromBlock:from,toBlock:"latest"}]);
       set("net-window",WINDOW.toLocaleString()+"b");
-      if(!Array.isArray(logs)||!logs.length){feed.innerHTML='<div class="feedstate">No transfers in the last '+WINDOW.toLocaleString()+' blocks.</div>';empty.style.display="grid";empty.textContent="No recent transfers.";set("net-nodes","0");set("net-edges","0");return;}
-      const recent=logs.slice(-18).reverse(), ubl=[...new Set(recent.map(l=>l.blockNumber))], ts={};
+      if(!Array.isArray(logs)||!logs.length){body.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--faint);padding:34px">No transfers in the last '+WINDOW.toLocaleString()+' blocks.</td></tr>';empty.style.display="grid";empty.textContent="No recent transfers yet.";set("net-nodes","0");set("net-edges","0");return;}
+      const recent=logs.slice(-16).reverse(),ubl=[...new Set(recent.map(l=>l.blockNumber))],ts={};
       await Promise.all(ubl.map(async b=>{try{ts[b]=hi((await rpc("eth_getBlockByNumber",[b,false])).timestamp);}catch(_){ts[b]=null;}}));
-      feed.innerHTML=recent.map(l=>{const f=ta(l.topics[1]),t=ta(l.topics[2]),id=BigInt(l.topics[3]).toString(),m=f.toLowerCase()===ZERO,tt=ts[l.blockNumber];
-        return '<div class="frow"><div class="tag" style="background:'+(m?'var(--green-b)':'var(--cyan)')+'"></div><div class="body"><div class="t1"><span class="ev '+(m?'ev-mint">Mint':'ev-xfer">Transfer')+'</span> Card #'+id+'</div><div class="t2">'+(m?'mint':sa(f))+' → '+sa(t)+'</div><div class="meta"><span>'+(tt?rel(tt)+' ago':'—')+'</span><span>blk '+hi(l.blockNumber).toLocaleString()+'</span><a href="https://abscan.org/tx/'+l.transactionHash+'" target="_blank">'+sh(l.transactionHash)+' ↗</a></div></div></div>';}).join("");
-      // graph
-      const cap=logs.slice(-120), nm=new Map(); let edges=[];
-      function node(id,mint){if(!nm.has(id))nm.set(id,{id,mint:!!mint,deg:0,x:Math.random()*600,y:Math.random()*320,vx:0,vy:0});return nm.get(id);}
+      body.innerHTML=recent.map((l,i)=>{const f=ta(l.topics[1]),t=ta(l.topics[2]),id=BigInt(l.topics[3]).toString(),m=f.toLowerCase()===ZERO,bn=hi(l.blockNumber),tt=ts[l.blockNumber];
+        return `<tr class="rowin" style="animation-delay:${i*.03}s"><td><span class="evt ${m?'evt-m">Mint':'evt-t">Transfer'}</span></td><td class="addr">${m?'<span style="color:var(--faint)">mint</span>':sa(f)} → ${sa(t)}</td><td class="mono">#${id}</td><td class="mono">${bn.toLocaleString()}</td><td>${tt?rel(tt):'—'}</td><td><a class="hl" href="https://abscan.org/tx/${l.transactionHash}" target="_blank">${sh(l.transactionHash)}</a></td></tr>`;}).join("");
+      const cap=logs.slice(-120),nm=new Map();let edges=[];
+      function node(id,mint){if(!nm.has(id))nm.set(id,{id,mint:!!mint,deg:0,x:Math.random()*600,y:Math.random()*380,vx:0,vy:0});return nm.get(id);}
       cap.forEach(l=>{const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase();const a=node(f===ZERO?"MINT":f,f===ZERO),b=node(t);a.deg++;b.deg++;edges.push([a.id,b.id]);});
-      let nodes=[...nm.values()];if(nodes.length>60){const keep=new Set(nodes.sort((x,y)=>y.deg-x.deg).slice(0,60).map(n=>n.id));nodes=nodes.filter(n=>keep.has(n.id));edges=edges.filter(e=>keep.has(e[0])&&keep.has(e[1]));}
-      graph={nodes,edges,map:new Map(nodes.map(n=>[n.id,n]))};
-      set("net-nodes",nodes.filter(n=>n.id!=="MINT").length.toLocaleString());set("net-edges",edges.length.toLocaleString());
-      startGraph();
-    }catch(e){feed.innerHTML='<div class="feedstate">Feed unavailable: '+e.message+'</div>';empty.style.display="grid";empty.textContent="Network unavailable.";}
+      let nodes=[...nm.values()];if(nodes.length>62){const keep=new Set(nodes.sort((x,y)=>y.deg-x.deg).slice(0,62).map(n=>n.id));nodes=nodes.filter(n=>keep.has(n.id));edges=edges.filter(e=>keep.has(e[0])&&keep.has(e[1]));}
+      graph={nodes,edges,map:new Map(nodes.map(n=>[n.id,n]))};set("net-nodes",nodes.filter(n=>n.id!=="MINT").length.toLocaleString());set("net-edges",edges.length.toLocaleString());startGraph();
+    }catch(e){body.innerHTML='<tr><td colspan="6" style="text-align:center;padding:34px" class="err">Activity unavailable: '+e.message+'</td></tr>';empty.style.display="grid";empty.textContent="Network unavailable.";}
   }
-
   function startGraph(){
     const cv=document.getElementById("netcanvas"),ctx=cv.getContext("2d"),tip=document.getElementById("net-tip");
     let W,H,DPR=Math.min(2,devicePixelRatio||1),hover=null;
     function size(){const r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
     size();addEventListener("resize",size);
     const N=graph.nodes,E=graph.edges,M=graph.map;N.forEach(n=>{n.x=W/2+(Math.random()-.5)*W*.6;n.y=H/2+(Math.random()-.5)*H*.6;});
-    const maxDeg=Math.max(1,...N.map(n=>n.deg));const rad=n=>n.mint?12:5+(n.deg/maxDeg)*8;
+    const maxDeg=Math.max(1,...N.map(n=>n.deg));const rad=n=>n.mint?13:6+(n.deg/maxDeg)*9;
     function tick(){
-      for(let i=0;i<N.length;i++)for(let j=i+1;j<N.length;j++){const a=N[i],b=N[j];let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy||.01,d=Math.sqrt(d2);const f=1200/d2;a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;}
-      E.forEach(([ai,bi])=>{const a=M.get(ai),b=M.get(bi);if(!a||!b)return;let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||.01;const f=(d-64)*.012;a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;});
-      N.forEach(n=>{n.vx+=(W/2-n.x)*.0016;n.vy+=(H/2-n.y)*.0016;n.vx*=.86;n.vy*=.86;n.x+=Math.max(-6,Math.min(6,n.vx));n.y+=Math.max(-6,Math.min(6,n.vy));n.x=Math.max(16,Math.min(W-16,n.x));n.y=Math.max(16,Math.min(H-16,n.y));});
+      for(let i=0;i<N.length;i++)for(let j=i+1;j<N.length;j++){const a=N[i],b=N[j];let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy||.01,d=Math.sqrt(d2);const f=1400/d2;a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;}
+      E.forEach(([ai,bi])=>{const a=M.get(ai),b=M.get(bi);if(!a||!b)return;let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||.01;const f=(d-70)*.012;a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;});
+      N.forEach(n=>{n.vx+=(W/2-n.x)*.0016;n.vy+=(H/2-n.y)*.0016;n.vx*=.86;n.vy*=.86;n.x+=Math.max(-6,Math.min(6,n.vx));n.y+=Math.max(-6,Math.min(6,n.vy));n.x=Math.max(20,Math.min(W-20,n.x));n.y=Math.max(20,Math.min(H-20,n.y));});
       draw();requestAnimationFrame(tick);
     }
-    function draw(){ctx.clearRect(0,0,W,H);ctx.lineWidth=1;E.forEach(([ai,bi])=>{const a=M.get(ai),b=M.get(bi);if(!a||!b)return;ctx.strokeStyle=(hover&&(hover.id===ai||hover.id===bi))?"rgba(35,224,122,.5)":"rgba(35,224,122,.12)";ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();});
-      N.forEach(n=>{const r=rad(n),hub=n.deg>=maxDeg*.6&&!n.mint;ctx.beginPath();ctx.arc(n.x,n.y,r,0,7);ctx.fillStyle=n.mint?"#077a39":hub?"#22d3ee":"#23e07a";if(hover===n){ctx.shadowColor="rgba(35,224,122,.8)";ctx.shadowBlur=14;}ctx.globalAlpha=hover&&hover!==n?.45:1;ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;if(n.mint){ctx.fillStyle="#04140a";ctx.font="700 8px JetBrains Mono";ctx.textAlign="center";ctx.fillText("MINT",n.x,n.y+3);}});}
+    function draw(){ctx.clearRect(0,0,W,H);ctx.lineWidth=1;E.forEach(([ai,bi])=>{const a=M.get(ai),b=M.get(bi);if(!a||!b)return;ctx.strokeStyle=(hover&&(hover.id===ai||hover.id===bi))?"rgba(16,160,80,.55)":"rgba(16,160,80,.13)";ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();});
+      N.forEach(n=>{const r=rad(n),hub=n.deg>=maxDeg*.6&&!n.mint;ctx.beginPath();ctx.arc(n.x,n.y,r,0,7);ctx.fillStyle=n.mint?"#077a39":hub?"#0bb6c4":"#12a150";if(hover===n){ctx.shadowColor="rgba(16,160,80,.7)";ctx.shadowBlur=14;}ctx.globalAlpha=hover&&hover!==n?.5:1;ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;if(n.mint){ctx.fillStyle="#fff";ctx.font="700 9px JetBrains Mono";ctx.textAlign="center";ctx.fillText("MINT",n.x,n.y+3);}});}
     cv.onmousemove=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;hover=null;for(const n of N){if((mx-n.x)**2+(my-n.y)**2<(rad(n)+4)**2){hover=n;break;}}if(hover){tip.style.opacity=1;tip.style.left=hover.x+"px";tip.style.top=hover.y+"px";tip.textContent=(hover.mint?"Mint origin":sa(hover.id))+" · "+hover.deg+" tx";}else tip.style.opacity=0;};
     cv.onmouseleave=()=>{hover=null;tip.style.opacity=0;};
     tick();
   }
 
-  (async function(){const b=await loadCore();loadGas();loadMarket();loadTiers();loadFeedAndGraph(b);})();
+  const obs=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting)en.target.classList.add("in");}),{threshold:.12});
+  document.querySelectorAll(".reveal").forEach(s=>obs.observe(s));
+  const navlinks=[...document.querySelectorAll(".nav a")];
+  const spy=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){navlinks.forEach(a=>a.classList.toggle("active",a.getAttribute("href")==="#"+en.target.id));}}),{rootMargin:"-40% 0px -55% 0px"});
+  document.querySelectorAll(".sec").forEach(s=>spy.observe(s));
+
+  (async function(){const b=await loadCore();loadGas();loadMarket();loadTiers();loadActivityAndGraph(b);})();
 </script>
 
 </body>
