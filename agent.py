@@ -203,8 +203,9 @@ AGENT_METADATA = {
     "tags": ["litany", "gaming", "abstract", "battle", "farming", "nft", "onchain"],
     "categories": ["gaming", "autonomous", "onchain"],
     "active": True,
-    "x402support": False,
-    "supportedTrusts": ["reputation"],
+    "x402Support": False,
+    "supportedTrust": ["reputation", "crypto-economic"],
+    "updatedAt": int(time.time()),
     "services": [
         {"name": "AGW", "endpoint": "https://api.abs.xyz"},
         {"name": "OpenSea", "endpoint": "https://mcp.opensea.io/sse"},
@@ -213,6 +214,29 @@ AGENT_METADATA = {
             "endpoint": "https://mantis-pro-production.up.railway.app/mcp",
             "version": "2025-06-18",
             "mcpTools": ["scan_market", "get_floor_price", "get_wallet_status"]
+        },
+        {
+            "name": "OASF",
+            "endpoint": "https://github.com/agntcy/oasf/",
+            "version": "0.8.0",
+            "skills": [
+                "analytical_skills/data_analysis/blockchain_analysis",
+                "analytical_skills/pattern_recognition/anomaly_detection",
+                "tool_interaction/api_schema_understanding"
+            ],
+            "domains": [
+                "technology/blockchain",
+                "technology/blockchain/cryptocurrency",
+                "media_and_entertainment/gaming"
+            ]
+        },
+        {
+            "name": "web",
+            "endpoint": "https://mantispro.xyz"
+        },
+        {
+            "name": "email",
+            "endpoint": "smolobah21@gmail.com"
         }
     ],
     "registrations": [
