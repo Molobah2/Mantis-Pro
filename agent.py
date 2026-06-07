@@ -4,6 +4,8 @@ import requests
 import subprocess
 import threading
 import time
+import sqlite3
+import io
 from web3 import Web3
 from dotenv import load_dotenv
 import anthropic
@@ -119,14 +121,64 @@ def opensea_proxy():
         return jsonify({"error": str(e)}), 502
 
 # ── IDENTITY RESOLUTION (ANS .abs + optional AGW/Portal) ─────────
-# Resolves an Abstract address -> {username, avatar}, in priority order:
+# Resolves an Abstract address -> {name, twitter, avatar}, in priority order:
 #   1. AGW/Portal profile  — only if a confirmed endpoint is set via AGW_PROFILE_URL
-#   2. ANS .abs name        — real, on-chain reverse lookup (no config, no auth)
-#   3. unresolved           — UI falls back to a generated identicon
-# No usernames are ever invented; ANS reads are plain eth_call against the public contract.
-_agw_cache = {}            # addr -> {"data": {...}, "ts": epoch}
-_AGW_TTL = 6 * 3600        # 6h cache
+#   2. ANS .abs (+ twitter) — real on-chain reverse lookup (no config, no auth)
+#   3. unresolved           — UI shows a generated identicon
+# Multi-layer cache: SQLite (persistent) + in-memory hot mirror + cached avatar bytes.
+# Feed payloads are served from cache; a background thread refreshes stale entries.
+_ID_TTL = 48 * 3600        # identity freshness window
 AGW_PROFILE_URL = os.environ.get("AGW_PROFILE_URL", "").strip()
+_ID_DB = os.path.join(os.path.dirname(__file__), "identities.db")
+_id_lock = threading.Lock()
+_id_mem = {}               # wallet -> row dict (hot mirror)
+_img_cache = {}            # avatar url -> (content_type, bytes)
+
+def _id_db():
+    conn = sqlite3.connect(_ID_DB, check_same_thread=False)
+    conn.execute("""CREATE TABLE IF NOT EXISTS identities(
+        wallet TEXT PRIMARY KEY, name TEXT, twitter TEXT, avatar TEXT,
+        source TEXT, updated REAL)""")
+    return conn
+
+try:
+    _id_db().close()
+except Exception as _e:
+    print(f"identity db init: {_e}")
+
+def id_get(wallet):
+    wallet = wallet.lower()
+    if wallet in _id_mem:
+        return _id_mem[wallet]
+    try:
+        with _id_lock:
+            conn = _id_db()
+            cur = conn.execute("SELECT wallet,name,twitter,avatar,source,updated FROM identities WHERE wallet=?", (wallet,))
+            r = cur.fetchone()
+            conn.close()
+        if r:
+            row = {"wallet": r[0], "name": r[1], "twitter": r[2], "avatar": r[3], "source": r[4], "updated": r[5]}
+            _id_mem[wallet] = row
+            return row
+    except Exception as e:
+        print(f"id_get {wallet}: {e}")
+    return None
+
+def id_put(wallet, name, twitter, avatar, source):
+    wallet = wallet.lower()
+    row = {"wallet": wallet, "name": name, "twitter": twitter, "avatar": avatar,
+           "source": source, "updated": time.time()}
+    _id_mem[wallet] = row
+    try:
+        with _id_lock:
+            conn = _id_db()
+            conn.execute("INSERT OR REPLACE INTO identities VALUES (?,?,?,?,?,?)",
+                         (wallet, name, twitter, avatar, source, row["updated"]))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"id_put {wallet}: {e}")
+    return row
 
 # Abstract Name Service (ANS) V2 — independent naming protocol on Abstract.
 ANS_V2_ADDRESS = "0x86a282845a61302Ba4735d111b1a1417f6e617Ad"
@@ -195,19 +247,120 @@ def _resolve_portal(addr):
         return None
     return None
 
+def resolve_identity(wallet, network=True):
+    """Cache-first identity. Resolves over the network only on miss/stale when allowed."""
+    wallet = wallet.lower()
+    row = id_get(wallet)
+    if row and (time.time() - (row.get("updated") or 0) < _ID_TTL):
+        return row
+    if not network:
+        return row  # stale or None — caller renders identicon
+    prof = _resolve_portal(wallet) or _resolve_ans(wallet)
+    if prof:
+        return id_put(wallet, prof.get("username"), prof.get("twitter"), prof.get("avatar"), prof.get("source"))
+    return id_put(wallet, None, None, None, None)  # cache the negative result too
+
+def _identicon_svg(addr):
+    h = 2166136261
+    for ch in addr[2:]:
+        h = ((h ^ ord(ch)) * 16777619) & 0xFFFFFFFF
+    hue = h % 360
+    fg, bg = f"hsl({hue},58%,50%)", f"hsl({hue},32%,92%)"
+    cells = ""
+    for y in range(5):
+        for x in range(3):
+            if (h >> ((y * 3 + x) % 30)) & 1:
+                cells += f'<rect x="{x}" y="{y}" width="1" height="1"/>'
+                if 4 - x != x:
+                    cells += f'<rect x="{4-x}" y="{y}" width="1" height="1"/>'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 5" width="80" height="80">'
+            f'<rect width="5" height="5" fill="{bg}"/><g fill="{fg}">{cells}</g></svg>')
+
+def _img_fetch(url):
+    if url in _img_cache:
+        return _img_cache[url]
+    try:
+        r = requests.get(url, timeout=6)
+        if r.status_code == 200 and r.content:
+            ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0]
+            if len(_img_cache) > 800:
+                _img_cache.clear()
+            _img_cache[url] = (ct, r.content)
+            return _img_cache[url]
+    except Exception:
+        pass
+    return None
+
 @app.route("/api/agw-profile")
 def agw_profile():
     from flask import request
     addr = (request.args.get("address") or "").strip().lower()
     if not (addr.startswith("0x") and len(addr) == 42):
         return jsonify({"resolved": False, "error": "bad address"}), 400
-    now = time.time()
-    hit = _agw_cache.get(addr)
-    if hit and now - hit["ts"] < _AGW_TTL:
-        return jsonify(hit["data"])
-    data = _resolve_portal(addr) or _resolve_ans(addr) or {"resolved": False, "address": addr}
-    _agw_cache[addr] = {"data": data, "ts": now}
-    return jsonify(data)
+    row = resolve_identity(addr, network=True) or {}
+    return jsonify({"resolved": bool(row.get("name") or row.get("avatar") or row.get("twitter")),
+                    "address": addr, "username": row.get("name"),
+                    "avatar": row.get("avatar"), "twitter": row.get("twitter"),
+                    "source": row.get("source")})
+
+@app.route("/api/identities")
+def identities_batch():
+    """Batch identity lookup for the feed. Cache-first; bounded network resolves per call."""
+    from flask import request
+    raw = (request.args.get("addrs") or "").strip()
+    addrs = [a.lower() for a in raw.split(",") if a.startswith("0x") and len(a) == 42][:40]
+    out, budget = {}, 24
+    for a in addrs:
+        cached = id_get(a)
+        fresh = cached and (time.time() - (cached.get("updated") or 0) < _ID_TTL)
+        if fresh or budget <= 0:
+            row = cached
+        else:
+            budget -= 1
+            row = resolve_identity(a, network=True)
+        out[a] = ({"name": row.get("name"), "twitter": row.get("twitter"),
+                   "avatar": bool(row.get("avatar")),
+                   "resolved": bool(row.get("name") or row.get("avatar") or row.get("twitter"))}
+                  if row else {"resolved": False})
+    return jsonify(out)
+
+@app.route("/api/avatar")
+def avatar_proxy():
+    """Always returns a valid, cacheable image: proxied X/ANS avatar (cached bytes) or identicon."""
+    from flask import request, Response
+    addr = (request.args.get("addr") or "").strip().lower()
+    if not (addr.startswith("0x") and len(addr) == 42):
+        return Response(status=400)
+    row = id_get(addr)               # cache-only — never resolves in the image path
+    if row and row.get("avatar"):
+        got = _img_fetch(row["avatar"])
+        if got:
+            resp = Response(got[1], content_type=got[0])
+            resp.headers["Cache-Control"] = "public, max-age=86400"
+            return resp
+    resp = Response(_identicon_svg(addr), mimetype="image/svg+xml")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+def run_identity_refresh():
+    time.sleep(30)
+    while True:
+        try:
+            cutoff = time.time() - _ID_TTL
+            with _id_lock:
+                conn = _id_db()
+                stale = [r[0] for r in conn.execute(
+                    "SELECT wallet FROM identities WHERE updated < ? LIMIT 200", (cutoff,)).fetchall()]
+                conn.close()
+            for w in stale:
+                resolve_identity(w, network=True)
+            # warm avatar bytes so rows never wait on a live unavatar request
+            for w, row in list(_id_mem.items()):
+                if row.get("avatar"):
+                    _img_fetch(row["avatar"])
+        except Exception as e:
+            print(f"identity refresh: {e}")
+        time.sleep(24 * 3600)
 
 @app.route("/moody/woke")
 def moody_woke():
@@ -570,6 +723,9 @@ litany_thread.start()
 
 moody_thread = threading.Thread(target=run_moody, daemon=True)
 moody_thread.start()
+
+identity_thread = threading.Thread(target=run_identity_refresh, daemon=True)
+identity_thread.start()
 
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":
