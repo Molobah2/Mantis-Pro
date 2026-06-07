@@ -118,6 +118,97 @@ def opensea_proxy():
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
+# ── IDENTITY RESOLUTION (ANS .abs + optional AGW/Portal) ─────────
+# Resolves an Abstract address -> {username, avatar}, in priority order:
+#   1. AGW/Portal profile  — only if a confirmed endpoint is set via AGW_PROFILE_URL
+#   2. ANS .abs name        — real, on-chain reverse lookup (no config, no auth)
+#   3. unresolved           — UI falls back to a generated identicon
+# No usernames are ever invented; ANS reads are plain eth_call against the public contract.
+_agw_cache = {}            # addr -> {"data": {...}, "ts": epoch}
+_AGW_TTL = 6 * 3600        # 6h cache
+AGW_PROFILE_URL = os.environ.get("AGW_PROFILE_URL", "").strip()
+
+# Abstract Name Service (ANS) V2 — independent naming protocol on Abstract.
+ANS_V2_ADDRESS = "0x86a282845a61302Ba4735d111b1a1417f6e617Ad"
+ANS_ABI = [
+    {"name": "getNameByAddress", "type": "function", "stateMutability": "view",
+     "inputs": [{"name": "addr", "type": "address"}], "outputs": [{"name": "", "type": "string"}]},
+    {"name": "textRecords", "type": "function", "stateMutability": "view",
+     "inputs": [{"name": "name", "type": "string"}, {"name": "key", "type": "string"}],
+     "outputs": [{"name": "", "type": "string"}]},
+]
+_ans_contract = None
+def _ans():
+    global _ans_contract
+    if _ans_contract is None:
+        _ans_contract = w3.eth.contract(address=Web3.to_checksum_address(ANS_V2_ADDRESS), abi=ANS_ABI)
+    return _ans_contract
+
+def _resolve_ans(addr):
+    """Address -> {.abs name, avatar, twitter} via ANS V2 on-chain reads. None if no name."""
+    try:
+        name = _ans().functions.getNameByAddress(Web3.to_checksum_address(addr)).call()
+    except Exception:
+        return None
+    if not name:
+        return None
+    def _rec(key):
+        try:
+            return (_ans().functions.textRecords(name, key).call() or "").strip()
+        except Exception:
+            return ""
+    avatar = _rec("avatar") or None
+    twitter = _rec("twitter") or None
+    if twitter:
+        twitter = twitter.lstrip("@")
+        if "/" in twitter:                      # tolerate a full URL in the record
+            twitter = twitter.rstrip("/").split("/")[-1]
+        twitter = twitter or None
+    # If they linked X but set no explicit avatar, use their X profile picture.
+    if not avatar and twitter:
+        avatar = f"https://unavatar.io/x/{twitter}"
+    return {"resolved": True, "address": addr.lower(), "username": name,
+            "avatar": avatar, "twitter": twitter, "source": "ANS"}
+
+def _resolve_portal(addr):
+    """Optional AGW/Portal profile via a confirmed endpoint (set AGW_PROFILE_URL with {address})."""
+    if not AGW_PROFILE_URL:
+        return None
+    try:
+        resp = requests.get(AGW_PROFILE_URL.replace("{address}", addr),
+                            headers={"Accept": "application/json"}, timeout=6)
+        if resp.status_code != 200:
+            return None
+        j = resp.json()
+        user = j.get("user") if isinstance(j.get("user"), dict) else j
+        username = user.get("username") or user.get("name") or user.get("handle")
+        avatar = user.get("avatar") or user.get("pfp") or user.get("profilePicture") or user.get("image")
+        twitter = user.get("twitter") or user.get("x") or user.get("xHandle")
+        if isinstance(twitter, str):
+            twitter = twitter.lstrip("@").rstrip("/").split("/")[-1] or None
+        if username or avatar or twitter:
+            if not avatar and twitter:
+                avatar = f"https://unavatar.io/x/{twitter}"
+            return {"resolved": True, "address": addr.lower(),
+                    "username": username, "avatar": avatar, "twitter": twitter, "source": "portal"}
+    except Exception:
+        return None
+    return None
+
+@app.route("/api/agw-profile")
+def agw_profile():
+    from flask import request
+    addr = (request.args.get("address") or "").strip().lower()
+    if not (addr.startswith("0x") and len(addr) == 42):
+        return jsonify({"resolved": False, "error": "bad address"}), 400
+    now = time.time()
+    hit = _agw_cache.get(addr)
+    if hit and now - hit["ts"] < _AGW_TTL:
+        return jsonify(hit["data"])
+    data = _resolve_portal(addr) or _resolve_ans(addr) or {"resolved": False, "address": addr}
+    _agw_cache[addr] = {"data": data, "ts": now}
+    return jsonify(data)
+
 @app.route("/moody/woke")
 def moody_woke():
     woke_time = record_woke()
@@ -203,9 +294,8 @@ AGENT_METADATA = {
     "tags": ["litany", "gaming", "abstract", "battle", "farming", "nft", "onchain"],
     "categories": ["gaming", "autonomous", "onchain"],
     "active": True,
-    "x402Support": False,
-    "supportedTrust": ["reputation", "crypto-economic"],
-    "updatedAt": int(time.time()),
+    "x402support": False,
+    "supportedTrusts": ["reputation"],
     "services": [
         {"name": "AGW", "endpoint": "https://api.abs.xyz"},
         {"name": "OpenSea", "endpoint": "https://mcp.opensea.io/sse"},
@@ -214,29 +304,6 @@ AGENT_METADATA = {
             "endpoint": "https://mantis-pro-production.up.railway.app/mcp",
             "version": "2025-06-18",
             "mcpTools": ["scan_market", "get_floor_price", "get_wallet_status"]
-        },
-        {
-            "name": "OASF",
-            "endpoint": "https://github.com/agntcy/oasf/",
-            "version": "0.8.0",
-            "skills": [
-                "analytical_skills/data_analysis/blockchain_analysis",
-                "analytical_skills/pattern_recognition/anomaly_detection",
-                "tool_interaction/api_schema_understanding"
-            ],
-            "domains": [
-                "technology/blockchain",
-                "technology/blockchain/cryptocurrency",
-                "media_and_entertainment/gaming"
-            ]
-        },
-        {
-            "name": "web",
-            "endpoint": "https://mantispro.xyz"
-        },
-        {
-            "name": "email",
-            "endpoint": "smolobah21@gmail.com"
         }
     ],
     "registrations": [
