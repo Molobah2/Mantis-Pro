@@ -7,6 +7,7 @@ import time
 import sqlite3
 import io
 import re
+import base64
 from web3 import Web3
 from dotenv import load_dotenv
 import anthropic
@@ -92,6 +93,27 @@ def rarity_index_json():
         return jsonify({"error": "not built"}), 404
     with open(path, "r", encoding="utf-8") as f:
         return Response(f.read(), mimetype="application/json")
+
+@app.route("/activity")
+def activity_explorer():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "activity.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+@app.route("/api/card-image/<int:token_id>")
+def card_image(token_id):
+    from flask import Response
+    if not (1 <= token_id <= 8000):
+        return Response(status=404)
+    svg = _get_card_svg(token_id)
+    if not svg:
+        return Response(status=404)
+    resp = Response(svg, mimetype="image/svg+xml")
+    resp.headers["Cache-Control"] = "public, max-age=604800"
+    return resp
 
 @app.route("/api/abstract-rpc", methods=["POST"])
 def abstract_rpc():
@@ -333,6 +355,43 @@ def _mesh_faction_map():
             if w:
                 out[w] = {"faction": e.get("faction"), "claims": e.get("value"), "rank": e.get("rank")}
     return out
+
+# ── LITANY CARD IMAGE CACHE (real on-chain SVG via tokenURI) ─────
+CARDS_ADDR = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"
+_CARD_ABI = [{"name": "tokenURI", "type": "function", "stateMutability": "view",
+              "inputs": [{"name": "tokenId", "type": "uint256"}],
+              "outputs": [{"name": "", "type": "string"}]}]
+_card_contract = None
+_card_img_cache = {}   # tokenId -> svg bytes
+
+def _cards():
+    global _card_contract
+    if _card_contract is None:
+        _card_contract = w3.eth.contract(address=Web3.to_checksum_address(CARDS_ADDR), abi=_CARD_ABI)
+    return _card_contract
+
+def _get_card_svg(token_id):
+    if token_id in _card_img_cache:
+        return _card_img_cache[token_id]
+    try:
+        uri = _cards().functions.tokenURI(token_id).call()
+        b64_json = uri.split(",", 1)[1] if "," in uri else uri
+        b64_json += "=" * ((4 - len(b64_json) % 4) % 4)
+        meta = json.loads(base64.b64decode(b64_json))
+        img = meta.get("image", "")
+        if "base64," in img:
+            b64_img = img.split("base64,", 1)[1]
+            b64_img += "=" * ((4 - len(b64_img) % 4) % 4)
+            svg = base64.b64decode(b64_img)
+        elif img.startswith("data:image/svg+xml,"):
+            svg = img.split(",", 1)[1].encode()
+        else:
+            return None
+        _card_img_cache[token_id] = svg
+        return svg
+    except Exception as e:
+        print(f"card img {token_id}: {e}")
+        return None
 
 def _identicon_svg(addr):
     h = 2166136261

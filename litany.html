@@ -163,9 +163,9 @@
     <a href="#core" class="active"><span class="ico">◎</span> Litany Core</a>
     <a href="#market"><span class="ico">▤</span> Market Overview</a>
     <a href="#overview"><span class="ico">▦</span> Collection</a>
-    <a href="#network"><span class="ico">⊹</span> Transfer Network</a>
-    <a href="#activity"><span class="ico">≋</span> Activity</a>
+    <a href="#activity"><span class="ico">≋</span> Recent Activity</a>
     <div class="grp">Intelligence</div>
+    <a href="/activity"><span class="ico">⚡</span> Activity Explorer</a>
     <a href="/litany/rarity"><span class="ico">◆</span> Rarity Engine</a>
     <a href="/litany/scanner"><span class="ico">⌕</span> Wallet Scanner</a>
     <a href="#holders"><span class="ico">◍</span> Holder Intel</a>
@@ -254,20 +254,10 @@
       </div>
     </section>
 
-    <!-- TRANSFER NETWORK -->
-    <section class="sec reveal" id="network">
-      <div class="shead"><div><h2>Transfer Intelligence Network</h2><div class="desc">A live force-directed graph of real onchain Transfer relationships in the recent block window.</div></div><span class="badge b-on">Verified Onchain</span></div>
-      <div class="netwrap">
-        <canvas id="netcanvas"></canvas>
-        <div class="net-stats"><div><span class="nk">Wallets</span><span class="nv" id="net-nodes">—</span></div><div><span class="nk">Transfers</span><span class="nv" id="net-edges">—</span></div><div><span class="nk">Window</span><span class="nv" id="net-window">—</span></div></div>
-        <div class="net-tip" id="net-tip"></div><div class="net-empty" id="net-empty"></div>
-      </div>
-    </section>
-
-    <!-- ACTIVITY -->
+    <!-- RECENT ACTIVITY PREVIEW -->
     <section class="sec reveal" id="activity">
-      <div class="shead"><div><h2>Live Collection Activity</h2><div class="desc">Most recent mints and transfers. Avatars resolve to AGW profiles when available, otherwise a generated identicon.</div></div><span class="badge b-on">Verified Onchain</span></div>
-      <div class="afeed" id="act-feed"><div class="afstate">Reading onchain Transfer events…</div></div>
+      <div class="shead"><div><h2>Recent Activity</h2><div class="desc">Latest mints and transfers — operator names and faction from on-chain sources.</div></div><a href="/activity" class="badge b-on" style="text-decoration:none;cursor:pointer">Activity Explorer →</a></div>
+      <div class="afeed" id="act-feed"><div class="afstate">Loading recent activity…</div></div>
     </section>
 
     <!-- HOLDER INTEL -->
@@ -387,62 +377,29 @@
     }catch(e){}
   }
 
-  let graph={nodes:[],edges:[]};
-  async function loadActivityAndGraph(block){
-    const feed=document.getElementById("act-feed"),empty=document.getElementById("net-empty");
+  async function loadRecentActivity(){
+    const feed=document.getElementById("act-feed");
+    if(!feed)return;
     try{
-      if(!block)block=hi(await rpc("eth_blockNumber",[]));
-      // Abstract blocks are ~1s apart, so a few thousand blocks is often empty.
-      // Scan backward in safe-sized chunks until we have enough transfers (or hit the lookback cap).
-      const CHUNK=12000, MAX_CHUNKS=50, NEED=35;
-      let logs=[], to=block, oldest=block, chunks=0;
-      while(to>=0 && chunks<MAX_CHUNKS && logs.length<NEED){
-        const fromB=Math.max(0,to-CHUNK+1);
-        try{
-          const part=await rpc("eth_getLogs",[{address:CARDS,topics:[TT],fromBlock:"0x"+fromB.toString(16),toBlock:"0x"+to.toString(16)}]);
-          if(Array.isArray(part)&&part.length){logs=part.concat(logs);oldest=fromB;}
-        }catch(_){}
-        chunks++; to=fromB-1;
+      const latest=hi(await rpc("eth_blockNumber",[]));
+      let logs=[],to=latest;
+      for(let c=0;c<12&&logs.length<8;c++){
+        const fb=Math.max(0,to-12000+1);
+        try{const p=await rpc("eth_getLogs",[{address:CARDS,topics:[TT],fromBlock:"0x"+fb.toString(16),toBlock:"0x"+to.toString(16)}]);if(Array.isArray(p)&&p.length)logs=p.concat(logs);}catch(_){}
+        to=fb-1;
       }
-      set("net-window",(block-oldest).toLocaleString()+"b");
-      if(!logs.length){feed.innerHTML='<div class="afstate">No Litany transfers found in the recent window.</div>';empty.style.display="grid";empty.textContent="No recent transfers.";set("net-nodes","0");set("net-edges","0");return;}
-      const recent=logs.slice(-16).reverse(),ubl=[...new Set(recent.map(l=>l.blockNumber))],ts={};
-      await Promise.all(ubl.map(async b=>{try{ts[b]=hi((await rpc("eth_getBlockByNumber",[b,false])).timestamp);}catch(_){ts[b]=null;}}));
-      // one batched, cached identity lookup for all visible operators — no per-row discovery
+      if(!logs.length){feed.innerHTML='<div class="afstate">No recent activity found. <a href="/activity" style="color:var(--green-deep);font-weight:700">Open Activity Explorer →</a></div>';return;}
+      const recent=logs.slice(-5).reverse();
       const tos=[...new Set(recent.map(l=>ta(l.topics[2]).toLowerCase()))];
-      let idmap={};
-      try{idmap=await fetch('/api/identities?addrs='+tos.join(',')).then(r=>r.json());}catch(_){idmap={};}
-      feed.innerHTML=recent.map((l,i)=>{const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase(),id=BigInt(l.topics[3]).toString(),m=f===ZERO,tt=ts[l.blockNumber];
-        const idn=idmap[t]||{},nm=idn.name||sa(t);
+      let idmap={};try{idmap=await fetch('/api/identities?addrs='+tos.join(',')).then(r=>r.json());}catch(_){}
+      feed.innerHTML=recent.map((l,i)=>{
+        const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase(),id=BigInt(l.topics[3]).toString(),m=f===ZERO;
+        const idn=idmap[t]||{},nm=idn.name||sa(t),fb=idn.faction?facBadge(idn.faction):'';
         const xh=idn.twitter?' <span class="xh" onclick="openX(event,\''+esc(idn.twitter)+'\')">𝕏 @'+esc(idn.twitter)+'</span>':'';
-        const fb=idn.faction?facBadge(idn.faction):'';
-        const action=m?('<span class="ev ev-m">Mint</span>Minted Litany Card #'+id):('<span class="ev ev-t">Transfer</span>Acquired Card #'+id+' from '+sa(f));
-        return '<a class="afrow rowin" style="animation-delay:'+(i*.03)+'s" href="/litany/scanner#'+t+'"><img class="av" width="40" height="40" loading="lazy" decoding="async" src="/api/avatar?addr='+t+'" alt=""><div class="ab"><div class="an">'+esc(nm)+xh+fb+'</div><div class="aa">'+action+'</div></div><div class="at">'+(tt?rel(tt):'—')+'<br><a href="https://abscan.org/tx/'+l.transactionHash+'" target="_blank" onclick="event.stopPropagation()">'+sh(l.transactionHash)+'</a></div></a>';}).join("");
-      const cap=logs.slice(-120),nm2=new Map();let edges=[];
-      function node(id,mint){if(!nm2.has(id))nm2.set(id,{id,mint:!!mint,deg:0,x:Math.random()*600,y:Math.random()*380,vx:0,vy:0});return nm2.get(id);}
-      cap.forEach(l=>{const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase();const a=node(f===ZERO?"MINT":f,f===ZERO),b=node(t);a.deg++;b.deg++;edges.push([a.id,b.id]);});
-      let nodes=[...nm2.values()];if(nodes.length>62){const keep=new Set(nodes.sort((x,y)=>y.deg-x.deg).slice(0,62).map(n=>n.id));nodes=nodes.filter(n=>keep.has(n.id));edges=edges.filter(e=>keep.has(e[0])&&keep.has(e[1]));}
-      graph={nodes,edges,map:new Map(nodes.map(n=>[n.id,n]))};set("net-nodes",nodes.filter(n=>n.id!=="MINT").length.toLocaleString());set("net-edges",edges.length.toLocaleString());startGraph();
-    }catch(e){feed.innerHTML='<div class="afstate err">Activity unavailable: '+e.message+'</div>';empty.style.display="grid";empty.textContent="Network unavailable.";}
-  }
-  function startGraph(){
-    const cv=document.getElementById("netcanvas"),ctx=cv.getContext("2d"),tip=document.getElementById("net-tip");
-    let W,H,DPR=Math.min(2,devicePixelRatio||1),hover=null;
-    function size(){const r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
-    size();addEventListener("resize",size);
-    const N=graph.nodes,E=graph.edges,M=graph.map;N.forEach(n=>{n.x=W/2+(Math.random()-.5)*W*.6;n.y=H/2+(Math.random()-.5)*H*.6;});
-    const maxDeg=Math.max(1,...N.map(n=>n.deg));const rad=n=>n.mint?13:6+(n.deg/maxDeg)*9;
-    function tick(){
-      for(let i=0;i<N.length;i++)for(let j=i+1;j<N.length;j++){const a=N[i],b=N[j];let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy||.01,d=Math.sqrt(d2);const f=1400/d2;a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;}
-      E.forEach(([ai,bi])=>{const a=M.get(ai),b=M.get(bi);if(!a||!b)return;let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||.01;const f=(d-70)*.012;a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;});
-      N.forEach(n=>{n.vx+=(W/2-n.x)*.0016;n.vy+=(H/2-n.y)*.0016;n.vx*=.86;n.vy*=.86;n.x+=Math.max(-6,Math.min(6,n.vx));n.y+=Math.max(-6,Math.min(6,n.vy));n.x=Math.max(20,Math.min(W-20,n.x));n.y=Math.max(20,Math.min(H-20,n.y));});
-      draw();requestAnimationFrame(tick);
-    }
-    function draw(){ctx.clearRect(0,0,W,H);ctx.lineWidth=1;E.forEach(([ai,bi])=>{const a=M.get(ai),b=M.get(bi);if(!a||!b)return;ctx.strokeStyle=(hover&&(hover.id===ai||hover.id===bi))?"rgba(16,160,80,.55)":"rgba(16,160,80,.13)";ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();});
-      N.forEach(n=>{const r=rad(n),hub=n.deg>=maxDeg*.6&&!n.mint;ctx.beginPath();ctx.arc(n.x,n.y,r,0,7);ctx.fillStyle=n.mint?"#077a39":hub?"#0bb6c4":"#12a150";if(hover===n){ctx.shadowColor="rgba(16,160,80,.7)";ctx.shadowBlur=14;}ctx.globalAlpha=hover&&hover!==n?.5:1;ctx.fill();ctx.shadowBlur=0;ctx.globalAlpha=1;if(n.mint){ctx.fillStyle="#fff";ctx.font="700 9px JetBrains Mono";ctx.textAlign="center";ctx.fillText("MINT",n.x,n.y+3);}});}
-    cv.onmousemove=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;hover=null;for(const n of N){if((mx-n.x)**2+(my-n.y)**2<(rad(n)+4)**2){hover=n;break;}}if(hover){tip.style.opacity=1;tip.style.left=hover.x+"px";tip.style.top=hover.y+"px";tip.textContent=(hover.mint?"Mint origin":sa(hover.id))+" · "+hover.deg+" tx";}else tip.style.opacity=0;};
-    cv.onmouseleave=()=>{hover=null;tip.style.opacity=0;};
-    tick();
+        const action=m?('<span class="ev ev-m">Mint</span>Minted Litany Card #'+id):('<span class="ev ev-t">Transfer</span>Acquired Card #'+id);
+        return '<a class="afrow rowin" style="animation-delay:'+(i*.04)+'s" href="/litany/scanner#'+t+'"><img class="av" width="40" height="40" loading="lazy" decoding="async" src="/api/avatar?addr='+t+'" alt=""><div class="ab"><div class="an">'+esc(nm)+xh+fb+'</div><div class="aa">'+action+'</div></div></a>';
+      }).join('')+'<a href="/activity" style="display:block;padding:11px 18px;border-top:1px solid var(--line);font-weight:700;font-size:13px;color:var(--green-deep);text-align:right">View Activity Explorer →</a>';
+    }catch(e){feed.innerHTML='<div class="afstate">Activity unavailable. <a href="/activity" style="color:var(--green-deep)">Try Activity Explorer →</a></div>';}
   }
 
   const obs=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting)en.target.classList.add("in");}),{threshold:.12});
@@ -469,7 +426,7 @@
     }catch(e){fc.innerHTML='<div class="card"><div class="value pending">Mesh unavailable.</div></div>';lb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--faint);padding:30px">Mesh unavailable.</td></tr>';}
   }
 
-  (async function(){const b=await loadCore();loadGas();loadMarket();loadTiers();loadActivityAndGraph(b);loadMesh();})();
+  (async function(){const b=await loadCore();loadGas();loadMarket();loadTiers();loadRecentActivity();loadMesh();})();
 </script>
 
 </body>

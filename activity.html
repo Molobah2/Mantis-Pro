@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Explorer — Mantis Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b0a;--bg2:#0c1110;--panel:rgba(255,255,255,.025);--panel2:rgba(255,255,255,.04);
+    --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.13);
+    --ink:#eaf2ec;--muted:rgba(234,242,236,.6);--faint:rgba(234,242,236,.36);
+    --green:#10a050;--green-b:#23e07a;--green-soft:rgba(35,224,122,.1);
+    --cyan:#22d3ee;--red:#e5484d;--gold:#f5c451;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;overflow-x:hidden;
+    background-image:radial-gradient(80% 50% at 50% -10%,rgba(16,160,80,.07),transparent 55%)}
+  a{color:inherit;text-decoration:none}.mono{font-family:'JetBrains Mono',monospace}
+  ::selection{background:rgba(35,224,122,.22)}
+  ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+
+  /* TOP BAR */
+  .topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:16px;padding:12px 28px;background:rgba(7,11,10,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:14px;letter-spacing:-.3px;white-space:nowrap}
+  .brand .m{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--green-b),var(--green));display:grid;place-items:center;color:#04140a;font-size:13px;box-shadow:0 3px 12px rgba(35,224,122,.4)}
+  .brand small{display:block;font-size:8.5px;letter-spacing:1.6px;color:var(--faint);text-transform:uppercase;font-weight:700;margin-top:1px}
+  .topbar .links{display:flex;align-items:center;gap:16px;font-size:12.5px;color:var(--muted);font-weight:600;margin-left:auto}
+  .topbar .links a:hover{color:var(--ink)}
+  .pill{display:flex;align-items:center;gap:6px;font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--muted);padding:5px 10px;border:1px solid var(--line);border-radius:8px;white-space:nowrap}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green-b);animation:beat 2.4s infinite}
+  @keyframes beat{0%,100%{box-shadow:0 0 0 0 rgba(35,224,122,.45)}50%{box-shadow:0 0 0 5px rgba(35,224,122,0)}}
+
+  /* FILTER TABS */
+  .filters{display:flex;align-items:center;gap:6px;padding:14px 28px;border-bottom:1px solid var(--line)}
+  .filters .lbl{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--faint);margin-right:6px}
+  .tab{font-size:12px;font-weight:600;padding:6px 14px;border-radius:9px;border:1px solid transparent;cursor:pointer;transition:.15s;color:var(--muted)}
+  .tab:hover{background:var(--panel2);color:var(--ink)}
+  .tab.active{background:var(--green-soft);border-color:rgba(35,224,122,.35);color:var(--green-b)}
+  .stat-pill{font-size:10.5px;font-family:'JetBrains Mono',monospace;padding:4px 10px;border-radius:7px;background:var(--panel);border:1px solid var(--line);color:var(--muted);margin-left:auto}
+
+  /* MAIN GRID */
+  .grid{display:grid;grid-template-columns:1fr 300px;gap:16px;padding:16px 28px 60px;align-items:start}
+  @media(max-width:1080px){.grid{grid-template-columns:1fr}}
+
+  /* EVENT CARDS */
+  .feed{display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;transition:border-color .18s,background .18s}
+  .card:hover{border-color:rgba(35,224,122,.3);background:var(--panel2)}
+  .card .body{display:flex;align-items:flex-start;gap:14px;padding:14px 16px}
+  .av-wrap{position:relative;flex-shrink:0}
+  .card .av{width:52px;height:52px;border-radius:50%;object-fit:cover;border:2.5px solid rgba(255,255,255,.15);background:#0f1a12;display:block}
+  .card .thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;border:1px solid var(--line);background:var(--panel2);flex-shrink:0;align-self:center}
+  .card .thumb.missing{display:none}
+  .info{flex:1;min-width:0}
+  .info .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .info .nm{font-weight:700;font-size:14px;color:var(--ink)}
+  .info .wa{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--faint);margin-top:3px}
+  .info .act{font-size:13px;color:var(--muted);margin-top:5px}
+  .info .act strong{color:var(--green-b);font-weight:600}
+  .card .meta{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;border-top:1px solid var(--line);gap:10px}
+  .card .meta .ml{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--faint);display:flex;gap:14px}
+  .card .meta .mr{display:flex;gap:8px}
+  .card .meta a{font-size:11px;font-weight:600;padding:4px 10px;border-radius:7px;border:1px solid var(--line);color:var(--muted);transition:.15s}
+  .card .meta a:hover{border-color:rgba(35,224,122,.4);color:var(--green-b)}
+  .ev{display:inline-flex;align-items:center;font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;padding:3px 9px;border-radius:7px}
+  .ev-m{color:var(--green-b);background:rgba(35,224,122,.15);box-shadow:0 0 8px rgba(35,224,122,.15)}
+  .ev-t{color:var(--cyan);background:rgba(34,211,238,.12)}
+  .fac{display:inline-flex;align-items:center;font-size:8.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 7px;border-radius:6px;color:#fff;background:var(--fc,#8a958d)}
+  .xh{color:#1d9bf0;font-size:11.5px;font-weight:600;cursor:pointer}
+  .xh:hover{text-decoration:underline}
+
+  /* LOADING / EMPTY */
+  .fstate{padding:40px;text-align:center;color:var(--faint);font-family:'JetBrains Mono',monospace;font-size:13px}
+  .spinner{width:24px;height:24px;border:2px solid var(--line);border-top-color:var(--green-b);border-radius:50%;margin:0 auto 14px;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .load-more{width:100%;padding:13px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:.18s;font-family:'Inter',sans-serif}
+  .load-more:hover{border-color:rgba(35,224,122,.4);color:var(--green-b);background:var(--panel2)}
+
+  /* RIGHT PANELS */
+  .rpanel{position:sticky;top:74px;display:flex;flex-direction:column;gap:14px}
+  @media(max-width:1080px){.rpanel{position:static}}
+  .rcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .rh{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .rh h3{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:8px;color:var(--green-b)}
+  .rrow{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12.5px}
+  .rrow:last-child{border-bottom:none}
+  .rrow .rk{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--faint);width:22px;flex-shrink:0}
+  .rrow .rn{flex:1;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rrow .rv{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--green-b)}
+  .bar-row{padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+  .bar-item .bi{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
+  .bar-item .bn{font-weight:600}
+  .bar-item .bv{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint)}
+  .bar-track{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden}
+  .bar-fill{height:100%;border-radius:3px;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+
+  .reveal{opacity:0;transform:translateY(12px);transition:.6s cubic-bezier(.2,.7,.2,1)}.reveal.in{opacity:1;transform:none}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 9px;border-radius:7px}
+  .badge::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+  .b-on{color:var(--green-b);background:var(--green-soft)}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="brand"><div class="m">≋</div><div>ACTIVITY EXPLORER<small>Mantis · Litany Ecosystem</small></div></div>
+  <div class="links">
+    <a href="/litany">← Dashboard</a>
+    <a href="/litany/scanner">Scanner</a>
+    <a href="/litany/rarity">Rarity</a>
+    <div class="pill"><span class="dot"></span> Live · Abstract 2741</div>
+  </div>
+</div>
+
+<!-- FILTER TABS -->
+<div class="filters">
+  <span class="lbl">Filter</span>
+  <button class="tab active" onclick="setFilter('all',this)">All Events</button>
+  <button class="tab" onclick="setFilter('mint',this)">Mints</button>
+  <button class="tab" onclick="setFilter('transfer',this)">Transfers</button>
+  <span class="stat-pill" id="stat-pill">—</span>
+</div>
+
+<div class="grid">
+  <!-- FEED -->
+  <div>
+    <div class="feed" id="feed"><div class="fstate"><div class="spinner"></div>Scanning blockchain for Litany activity…</div></div>
+    <button class="load-more" id="load-more" style="display:none;margin-top:12px" onclick="loadMore()">Load more events</button>
+  </div>
+
+  <!-- RIGHT PANELS -->
+  <div class="rpanel">
+    <div class="rcard reveal" id="stats-panel">
+      <div class="rh"><h3>⚡ Live Stats</h3><span class="badge b-on">Live</span></div>
+      <div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><div style="font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700">Events Loaded</div><div style="font-size:22px;font-weight:800;font-family:'JetBrains Mono';margin-top:4px;color:var(--green-b)" id="s-total">—</div></div>
+        <div><div style="font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700">Mints</div><div style="font-size:22px;font-weight:800;font-family:'JetBrains Mono';margin-top:4px" id="s-mints">—</div></div>
+        <div><div style="font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700">Transfers</div><div style="font-size:22px;font-weight:800;font-family:'JetBrains Mono';margin-top:4px" id="s-transfers">—</div></div>
+        <div><div style="font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:700">Operators</div><div style="font-size:22px;font-weight:800;font-family:'JetBrains Mono';margin-top:4px" id="s-ops">—</div></div>
+      </div>
+    </div>
+
+    <div class="rcard reveal" id="top-ops-panel">
+      <div class="rh"><h3>⬡ Top Operators</h3></div>
+      <div id="top-ops"><div class="fstate" style="padding:20px">Loading…</div></div>
+    </div>
+
+    <div class="rcard reveal" id="faction-panel">
+      <div class="rh"><h3>◈ Faction Control</h3></div>
+      <div class="bar-row" id="faction-bars"><div class="fstate" style="padding:20px">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const RPC="/api/abstract-rpc", CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB";
+  const TT="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", ZERO="0x0000000000000000000000000000000000000000";
+  const CHUNK=12000, MAX_CHUNKS=60, NEED=60;
+  let rid=1;
+  async function rpc(m,p){const r=await fetch(RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:rid++,method:m,params:p})});const j=await r.json();if(j.error)throw new Error(j.error.message);return j.result;}
+  const hi=h=>h?parseInt(h,16):0, ta=t=>"0x"+t.slice(26), sa=a=>a.slice(0,6)+"…"+a.slice(-4), sh=h=>h.slice(0,10)+"…";
+  function rel(ts){const s=Math.floor(Date.now()/1e3)-ts;if(s<60)return s+"s ago";if(s<3600)return(s/60|0)+"m ago";if(s<86400)return(s/3600|0)+"h ago";return(s/86400|0)+"d ago";}
+  function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function openX(e,h){e.preventDefault();e.stopPropagation();window.open('https://x.com/'+h,'_blank','noopener');}
+  const FAC={horizon:{c:"#12a150",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
+  function facBadge(f){const x=FAC[f];if(!x)return '';return '<span class="fac" style="--fc:'+x.c+'">'+x.n+'</span>';}
+  function set(id,t){const e=document.getElementById(id);if(e)e.textContent=t;}
+
+  let allLogs=[], activeFilter='all', rendered=0, idmap={};
+  const BATCH=20;
+
+  async function fetchLogs(){
+    const latest=hi(await rpc("eth_blockNumber",[]));
+    let logs=[], to=latest, chunks=0;
+    while(to>=0 && chunks<MAX_CHUNKS && logs.length<NEED){
+      const fb=Math.max(0,to-CHUNK+1);
+      try{const p=await rpc("eth_getLogs",[{address:CARDS,topics:[TT],fromBlock:"0x"+fb.toString(16),toBlock:"0x"+to.toString(16)}]);if(Array.isArray(p)&&p.length)logs=p.concat(logs);}catch(_){}
+      chunks++;to=fb-1;
+    }
+    return logs.sort((a,b)=>hi(a.blockNumber)-hi(b.blockNumber)||(a.logIndex||0)-(b.logIndex||0));
+  }
+
+  async function resolveTimestamps(logs){
+    const blocks=[...new Set(logs.map(l=>l.blockNumber))], ts={};
+    await Promise.all(blocks.map(async b=>{try{ts[b]=hi((await rpc("eth_getBlockByNumber",[b,false])).timestamp);}catch(_){ts[b]=null;}}));
+    return ts;
+  }
+
+  function filtered(){return activeFilter==='mint'?allLogs.filter(l=>ta(l.topics[1]).toLowerCase()===ZERO):activeFilter==='transfer'?allLogs.filter(l=>ta(l.topics[1]).toLowerCase()!==ZERO):allLogs;}
+
+  function updateStats(){
+    const mints=allLogs.filter(l=>ta(l.topics[1]).toLowerCase()===ZERO).length;
+    const transfers=allLogs.length-mints;
+    const ops=new Set(allLogs.map(l=>ta(l.topics[2]).toLowerCase())).size;
+    set("s-total",allLogs.length.toLocaleString());set("s-mints",mints.toLocaleString());set("s-transfers",transfers.toLocaleString());set("s-ops",ops.toLocaleString());
+    const f=filtered();set("stat-pill",f.length.toLocaleString()+" events");
+  }
+
+  let ts={};
+  async function renderFeed(reset=true){
+    const feed=document.getElementById("feed"),btn=document.getElementById("load-more");
+    const logs=filtered().slice().reverse();
+    if(reset)rendered=0;
+    const batch=logs.slice(rendered,rendered+BATCH);
+    if(!batch.length){feed.innerHTML='<div class="fstate">No events for this filter.</div>';btn.style.display="none";return;}
+    const addrs=[...new Set(batch.map(l=>ta(l.topics[2]).toLowerCase()))];
+    try{const r=await fetch('/api/identities?addrs='+addrs.join(',')).then(r=>r.json());Object.assign(idmap,r);}catch(_){}
+    const html=batch.map(l=>{
+      const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase(),id=BigInt(l.topics[3]).toString(),m=f===ZERO;
+      const idn=idmap[t]||{},nm=idn.name||sa(t),bts=ts[l.blockNumber];
+      const fc=(FAC[idn.faction]||{}).c||'rgba(255,255,255,.15)';
+      const xh=idn.twitter?'<span class="xh" onclick="openX(event,\''+esc(idn.twitter)+'\')">𝕏 @'+esc(idn.twitter)+'</span>':'';
+      const fb=idn.faction?facBadge(idn.faction):'';
+      const evb=m?'<span class="ev ev-m">Mint</span>':'<span class="ev ev-t">Transfer</span>';
+      const actText=m?('Minted <strong>Litany Card #'+id+'</strong>'):('Acquired <strong>Card #'+id+'</strong> from '+sa(f));
+      const time=bts?rel(bts):'blk '+hi(l.blockNumber).toLocaleString();
+      return '<div class="card">'
+        +'<div class="body">'
+          +'<img class="av" width="52" height="52" loading="lazy" src="/api/avatar?addr='+t+'" alt="" style="border-color:'+fc+'">'
+          +'<div class="info">'
+            +'<div class="top">'+evb+'<span class="nm">'+esc(nm)+'</span>'+fb+xh+'</div>'
+            +'<div class="wa">'+t.slice(0,10)+'…'+t.slice(-8)+'</div>'
+            +'<div class="act">'+actText+'</div>'
+          +'</div>'
+          +'<img class="thumb" loading="lazy" src="/api/card-image/'+id+'" alt="Card #'+id+'" onerror="this.classList.add(\'missing\')">'
+        +'</div>'
+        +'<div class="meta">'
+          +'<div class="ml"><span>'+time+'</span><span>Block '+hi(l.blockNumber).toLocaleString()+'</span></div>'
+          +'<div class="mr"><a href="/litany/scanner#'+t+'">View Operator ↗</a><a href="https://abscan.org/tx/'+l.transactionHash+'" target="_blank">Tx ↗</a></div>'
+        +'</div>'
+      +'</div>';
+    }).join('');
+    if(reset)feed.innerHTML=html; else feed.insertAdjacentHTML('beforeend',html);
+    rendered+=batch.length;
+    btn.style.display=rendered<logs.length?'block':'none';
+  }
+
+  async function loadMore(){renderFeed(false);}
+
+  function setFilter(f,btn){activeFilter=f;document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');updateStats();renderFeed(true);}
+
+  async function loadSidePanels(){
+    try{
+      const j=await fetch('/api/litany-mesh?path=/leaderboards').then(r=>r.json());
+      const entries=(j&&j.data&&j.data.entries)||[];
+      const top=entries.slice(0,8);
+      const addrs=top.map(e=>(e.wallet||'').toLowerCase());
+      let nm={};try{nm=await fetch('/api/identities?addrs='+addrs.join(',')).then(r=>r.json());}catch(_){}
+      document.getElementById('top-ops').innerHTML=top.map(e=>{const w=(e.wallet||'').toLowerCase(),n=(nm[w]||{}).name||sa(w),x=FAC[e.faction]||{c:'#8a958d'};
+        return '<div class="rrow"><span class="rk">#'+e.rank+'</span><span class="rn"><a href="/litany/scanner#'+w+'" style="color:var(--ink)">'+esc(n)+'</a></span><span class="fac" style="--fc:'+x.c+';font-size:7.5px">'+x.n+'</span><span class="rv">'+(e.value||0)+'</span></div>';}).join('');
+      const agg={};let tot=0;
+      entries.forEach(e=>{const f=e.faction||'?';(agg[f]=agg[f]||{ops:0,claims:0});agg[f].ops++;agg[f].claims+=(e.value||0);tot+=(e.value||0);});
+      const order=['horizon','lens','breach'].filter(f=>agg[f]);
+      document.getElementById('faction-bars').innerHTML=order.map(f=>{const x=FAC[f]||{c:'#8a958d',n:f},a=agg[f],share=tot?a.claims/tot*100:0;
+        return '<div class="bar-item"><div class="bi"><span class="bn">'+x.n+'</span><span class="bv">'+a.claims+' claims · '+a.ops+' ops</span></div><div class="bar-track"><div class="bar-fill" style="width:'+share.toFixed(1)+'%;background:'+x.c+'"></div></div></div>';}).join('');
+    }catch(e){document.getElementById('top-ops').innerHTML='<div class="fstate" style="padding:16px">Unavailable.</div>';}
+  }
+
+  const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('in');}),{threshold:.1});
+  document.querySelectorAll('.reveal').forEach(s=>obs.observe(s));
+
+  (async function(){
+    try{
+      allLogs=await fetchLogs();
+      ts=await resolveTimestamps(allLogs.slice(-BATCH));
+      updateStats();
+      renderFeed(true);
+    }catch(e){document.getElementById('feed').innerHTML='<div class="fstate">Feed unavailable: '+e.message+'</div>';}
+    loadSidePanels();
+  })();
+</script>
+</body>
+</html>
