@@ -116,21 +116,31 @@
   .net-empty{position:absolute;inset:0;display:none;place-items:center;text-align:center;color:var(--faint);font-size:13px;padding:20px}
 
   .table-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
-  .afeed{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
-  .afstate{padding:34px;text-align:center;color:var(--faint);font-size:13px}
-  .afrow{display:flex;align-items:center;gap:13px;padding:12px 18px;border-bottom:1px solid var(--line-soft);transition:background .15s}
-  .afrow:last-child{border-bottom:none}.afrow:hover{background:var(--green-soft)}
-  .afrow .av{width:40px;height:40px;border-radius:50%;flex-shrink:0;background:#eef4f0;border:1px solid var(--line);object-fit:cover}
+  /* ── Activity Intelligence Feed — dark premium ── */
+  .afeed{display:flex;flex-direction:column;background:#080d09;border:1px solid rgba(35,224,122,.15);border-radius:16px;overflow:hidden;box-shadow:0 0 40px rgba(0,0,0,.2),inset 0 1px 0 rgba(35,224,122,.08)}
+  .afstate{padding:34px;text-align:center;color:rgba(234,242,236,.38);font-size:13px;font-family:'JetBrains Mono',monospace}
+  .afrow{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.05);text-decoration:none;transition:background .15s;position:relative}
+  .afrow:last-child{border-bottom:none}
+  .afrow:hover{background:rgba(35,224,122,.05)}
+  .afrow:hover::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:rgba(35,224,122,.55);border-radius:0 2px 2px 0}
+  .afrow .av{width:52px;height:52px;border-radius:50%;flex-shrink:0;object-fit:cover;border:2.5px solid rgba(255,255,255,.15);background:#111;transition:box-shadow .2s}
+  .afrow:hover .av{box-shadow:0 0 14px rgba(35,224,122,.3)}
   .afrow .ab{flex:1;min-width:0}
-  .afrow .an{font-weight:700;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .afrow .xh{color:#1d9bf0;font-weight:600;font-size:12.5px;cursor:pointer;margin-left:4px}
+  .afrow .an{display:flex;align-items:center;gap:7px;white-space:nowrap;overflow:hidden}
+  .afrow .anm{font-weight:700;font-size:14px;color:#eaf2ec;letter-spacing:-.2px;flex-shrink:0}
+  .afrow .xh{color:#1d9bf0;font-weight:600;font-size:11.5px;cursor:pointer;flex-shrink:0}
   .afrow .xh:hover{text-decoration:underline}
-  .fac{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 7px;border-radius:6px;color:#fff;background:var(--fc,#8a958d);vertical-align:middle;margin-left:6px}
-  .afrow .ev{font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:6px;margin-right:6px}
-  .afrow .ev-m{color:var(--green);background:rgba(16,160,80,.1)}.afrow .ev-t{color:var(--muted);background:rgba(93,111,100,.1)}
-  .afrow .aa{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .afrow .at{text-align:right;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);line-height:1.7}
-  .afrow .at a{color:var(--green-deep)}
+  .fac{display:inline-flex;align-items:center;font-size:8.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 7px;border-radius:6px;color:#fff;background:var(--fc,#8a958d);flex-shrink:0}
+  .afrow .ev{display:inline-flex;align-items:center;font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;padding:3px 9px;border-radius:7px;flex-shrink:0}
+  .afrow .ev-m{color:#23e07a;background:rgba(35,224,122,.15);box-shadow:0 0 8px rgba(35,224,122,.18)}
+  .afrow .ev-t{color:#22d3ee;background:rgba(34,211,238,.12)}
+  .afrow .aa{font-size:12.5px;color:rgba(234,242,236,.6);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .afrow .aw{font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(234,242,236,.28);margin-top:2px}
+  .afrow .at{text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+  .afrow .atm{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:rgba(234,242,236,.32)}
+  .afrow .at a{font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(35,224,122,.65);text-decoration:none}
+  .afrow .at a:hover{color:#23e07a;text-decoration:underline}
+  .live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#23e07a;box-shadow:0 0 0 0 rgba(35,224,122,.5);animation:beat 2.4s infinite;margin-right:8px;vertical-align:middle}
   table{width:100%;border-collapse:collapse}
   thead th{text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:800;padding:13px 20px;border-bottom:1px solid var(--line)}
   tbody td{padding:12px 20px;font-size:13px;border-bottom:1px solid var(--line-soft)}tbody tr:last-child td{border-bottom:none}tbody tr:hover{background:var(--green-soft)}
@@ -266,7 +276,7 @@
 
     <!-- ACTIVITY -->
     <section class="sec reveal" id="activity">
-      <div class="shead"><div><h2>Live Collection Activity</h2><div class="desc">Most recent mints and transfers. Avatars resolve to AGW profiles when available, otherwise a generated identicon.</div></div><span class="badge b-on">Verified Onchain</span></div>
+      <div class="shead"><div><h2><span class="live-dot"></span>Live Collection Activity</h2><div class="desc">Real-time operator intelligence — mints and transfers across the Litany ecosystem.</div></div><span class="badge b-on">Verified Onchain</span></div>
       <div class="afeed" id="act-feed"><div class="afstate">Reading onchain Transfer events…</div></div>
     </section>
 
@@ -416,8 +426,10 @@
         const idn=idmap[t]||{},nm=idn.name||sa(t);
         const xh=idn.twitter?' <span class="xh" onclick="openX(event,\''+esc(idn.twitter)+'\')">𝕏 @'+esc(idn.twitter)+'</span>':'';
         const fb=idn.faction?facBadge(idn.faction):'';
-        const action=m?('<span class="ev ev-m">Mint</span>Minted Litany Card #'+id):('<span class="ev ev-t">Transfer</span>Acquired Card #'+id+' from '+sa(f));
-        return '<a class="afrow rowin" style="animation-delay:'+(i*.03)+'s" href="/litany/scanner#'+t+'"><img class="av" width="40" height="40" loading="lazy" decoding="async" src="/api/avatar?addr='+t+'" alt=""><div class="ab"><div class="an">'+esc(nm)+xh+fb+'</div><div class="aa">'+action+'</div></div><div class="at">'+(tt?rel(tt):'—')+'<br><a href="https://abscan.org/tx/'+l.transactionHash+'" target="_blank" onclick="event.stopPropagation()">'+sh(l.transactionHash)+'</a></div></a>';}).join("");
+        const fc=(FAC[idn.faction]||{}).c||'rgba(255,255,255,.18)';
+        const evBadge=m?'<span class="ev ev-m">Mint</span>':'<span class="ev ev-t">Transfer</span>';
+        const actionText=m?('Minted Litany Card #'+id):('Acquired Card #'+id+(f!==ZERO?' · from '+sa(f):''));
+        return '<a class="afrow rowin" style="animation-delay:'+(i*.03)+'s" href="/litany/scanner#'+t+'"><img class="av" width="52" height="52" loading="lazy" decoding="async" src="/api/avatar?addr='+t+'" alt="" style="border-color:'+fc+'"><div class="ab"><div class="an"><span class="anm">'+esc(nm)+'</span>'+xh+fb+'</div><div class="aa">'+actionText+'</div><div class="aw">'+t.slice(0,8)+'…'+t.slice(-6)+'</div></div><div class="at">'+evBadge+'<div class="atm">'+(tt?rel(tt):'—')+'</div><a href="https://abscan.org/tx/'+l.transactionHash+'" target="_blank" onclick="event.stopPropagation()">'+sh(l.transactionHash)+'↗</a></div></a>';}).join("");
       const cap=logs.slice(-120),nm2=new Map();let edges=[];
       function node(id,mint){if(!nm2.has(id))nm2.set(id,{id,mint:!!mint,deg:0,x:Math.random()*600,y:Math.random()*380,vx:0,vy:0});return nm2.get(id);}
       cap.forEach(l=>{const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase();const a=node(f===ZERO?"MINT":f,f===ZERO),b=node(t);a.deg++;b.deg++;edges.push([a.id,b.id]);});
