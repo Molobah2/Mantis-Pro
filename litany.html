@@ -125,6 +125,7 @@
   .afrow .an{font-weight:700;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .afrow .xh{color:#1d9bf0;font-weight:600;font-size:12.5px;cursor:pointer;margin-left:4px}
   .afrow .xh:hover{text-decoration:underline}
+  .fac{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 7px;border-radius:6px;color:#fff;background:var(--fc,#8a958d);vertical-align:middle;margin-left:6px}
   .afrow .ev{font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:6px;margin-right:6px}
   .afrow .ev-m{color:var(--green);background:rgba(16,160,80,.1)}.afrow .ev-t{color:var(--muted);background:rgba(93,111,100,.1)}
   .afrow .aa{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -170,7 +171,8 @@
     <a href="#holders"><span class="ico">◍</span> Holder Intel</a>
     <a href="#economic"><span class="ico">$</span> Economic</a>
     <div class="grp">Ecosystem</div>
-    <a href="#modules"><span class="ico">⬡</span> Hollows · Mesh · Arena</a>
+    <a href="#mesh"><span class="ico">⬡</span> Mesh Command</a>
+    <a href="#modules"><span class="ico">◇</span> Hollows · Arena</a>
     <a href="#network-panel"><span class="ico">◈</span> Abstract Network</a>
   </nav>
   <div class="foot">Built by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a><br>Mantis Pro · community tool<br>Not an official Litany product</div>
@@ -289,6 +291,14 @@
       </div>
     </section>
 
+    <!-- MESH COMMAND CENTER -->
+    <section class="sec reveal" id="mesh">
+      <div class="shead"><div><h2>Mesh Command Center</h2><div class="desc">Live territory control from the Litany Mesh API — faction shares and top operators by cells claimed.</div></div><span class="badge b-on">Verified · Litany Mesh</span></div>
+      <div class="grid g3" id="mesh-factions"><div class="card"><div class="value pending">Loading factions…</div></div></div>
+      <div class="table-card" style="margin-top:16px"><table><thead><tr><th>#</th><th>Operator</th><th>Faction</th><th>Cells Claimed</th></tr></thead>
+      <tbody id="mesh-lb"><tr><td colspan="4" style="text-align:center;color:var(--faint);padding:30px">Loading territory leaderboard…</td></tr></tbody></table></div>
+    </section>
+
     <!-- MODULES -->
     <section class="sec reveal" id="modules">
       <div class="shead"><div><h2>Ecosystem Modules</h2><div class="desc">Each activates automatically when its protocol source goes public — no fabricated state.</div></div><span class="meta">Layer 4 · Protocol Intelligence</span></div>
@@ -333,6 +343,8 @@
   // ── identity helpers (names + avatars come from the cached API) ──
   function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function openX(e,h){e.preventDefault();e.stopPropagation();window.open('https://x.com/'+h,'_blank','noopener');}
+  const FAC={horizon:{c:"#12a150",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
+  function facBadge(f){const x=FAC[f];if(!x)return f?('<span class="fac">'+esc(f)+'</span>'):'';return '<span class="fac" style="--fc:'+x.c+'">'+x.n+'</span>';}
   document.getElementById("opsearch").addEventListener("keydown",e=>{if(e.key==="Enter"){const v=e.target.value.trim();location.href=/^0x[a-fA-F0-9]{40}$/.test(v)?"/litany/scanner#"+v:"/litany/scanner";}});
 
   (function(){let s="";for(let i=0;i<60;i++){const a=i*6*Math.PI/180,x1=160+Math.cos(a)*150,y1=160+Math.sin(a)*150,x2=160+Math.cos(a)*(i%5===0?142:146),y2=160+Math.sin(a)*(i%5===0?142:146);s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(16,160,80,${i%5===0?.35:.16})" stroke-width="${i%5===0?1.3:.7}"/>`;}const t=document.getElementById("ticks");if(t)t.innerHTML=s;})();
@@ -393,8 +405,9 @@
       feed.innerHTML=recent.map((l,i)=>{const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase(),id=BigInt(l.topics[3]).toString(),m=f===ZERO,tt=ts[l.blockNumber];
         const idn=idmap[t]||{},nm=idn.name||sa(t);
         const xh=idn.twitter?' <span class="xh" onclick="openX(event,\''+esc(idn.twitter)+'\')">𝕏 @'+esc(idn.twitter)+'</span>':'';
+        const fb=idn.faction?facBadge(idn.faction):'';
         const action=m?('<span class="ev ev-m">Mint</span>Minted Litany Card #'+id):('<span class="ev ev-t">Transfer</span>Acquired Card #'+id+' from '+sa(f));
-        return '<a class="afrow rowin" style="animation-delay:'+(i*.03)+'s" href="/litany/scanner#'+t+'"><img class="av" width="40" height="40" loading="lazy" decoding="async" src="/api/avatar?addr='+t+'" alt=""><div class="ab"><div class="an">'+esc(nm)+xh+'</div><div class="aa">'+action+'</div></div><div class="at">'+(tt?rel(tt):'—')+'<br><a href="https://abscan.org/tx/'+l.transactionHash+'" target="_blank" onclick="event.stopPropagation()">'+sh(l.transactionHash)+'</a></div></a>';}).join("");
+        return '<a class="afrow rowin" style="animation-delay:'+(i*.03)+'s" href="/litany/scanner#'+t+'"><img class="av" width="40" height="40" loading="lazy" decoding="async" src="/api/avatar?addr='+t+'" alt=""><div class="ab"><div class="an">'+esc(nm)+xh+fb+'</div><div class="aa">'+action+'</div></div><div class="at">'+(tt?rel(tt):'—')+'<br><a href="https://abscan.org/tx/'+l.transactionHash+'" target="_blank" onclick="event.stopPropagation()">'+sh(l.transactionHash)+'</a></div></a>';}).join("");
       const cap=logs.slice(-120),nm2=new Map();let edges=[];
       function node(id,mint){if(!nm2.has(id))nm2.set(id,{id,mint:!!mint,deg:0,x:Math.random()*600,y:Math.random()*380,vx:0,vy:0});return nm2.get(id);}
       cap.forEach(l=>{const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase();const a=node(f===ZERO?"MINT":f,f===ZERO),b=node(t);a.deg++;b.deg++;edges.push([a.id,b.id]);});
@@ -428,7 +441,25 @@
   const spy=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){navlinks.forEach(a=>a.classList.toggle("active",a.getAttribute("href")==="#"+en.target.id));}}),{rootMargin:"-40% 0px -55% 0px"});
   document.querySelectorAll(".sec").forEach(s=>spy.observe(s));
 
-  (async function(){const b=await loadCore();loadGas();loadMarket();loadTiers();loadActivityAndGraph(b);})();
+  async function loadMesh(){
+    const fc=document.getElementById("mesh-factions"),lb=document.getElementById("mesh-lb");
+    try{
+      const j=await fetch('/api/litany-mesh?path=/leaderboards').then(r=>r.json());
+      const d=j&&j.data?j.data:null,entries=(d&&d.entries)?d.entries:[];
+      if(!entries.length){fc.innerHTML='<div class="card"><div class="value pending">No mesh data.</div></div>';lb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--faint);padding:30px">No entries.</td></tr>';return;}
+      const agg={};let total=0;
+      entries.forEach(e=>{const f=e.faction||'unknown';(agg[f]=agg[f]||{ops:0,claims:0});agg[f].ops++;agg[f].claims+=(e.value||0);total+=(e.value||0);});
+      const order=['horizon','lens','breach'].filter(f=>agg[f]);Object.keys(agg).forEach(f=>{if(!order.includes(f))order.push(f);});
+      fc.innerHTML=order.map(f=>{const x=FAC[f]||{c:'#8a958d',n:f};const a=agg[f];const share=total?(a.claims/total*100):0;
+        return '<div class="card"><div class="top"><span class="label">'+x.n+'</span><span class="badge" style="color:'+x.c+';background:rgba(0,0,0,.05)">'+a.ops+' ops</span></div><div class="value" style="color:'+x.c+'">'+a.claims.toLocaleString()+'</div><div class="sub">cells claimed · '+share.toFixed(1)+'% of ring</div><div style="height:6px;border-radius:4px;background:var(--line-soft);margin-top:12px;overflow:hidden"><div style="height:100%;width:'+share.toFixed(1)+'%;background:'+x.c+'"></div></div></div>';}).join("");
+      const top=entries.slice(0,20),addrs=[...new Set(top.map(e=>(e.wallet||'').toLowerCase()))];
+      let idmap={};try{idmap=await fetch('/api/identities?addrs='+addrs.join(',')).then(r=>r.json());}catch(_){}
+      lb.innerHTML=top.map(e=>{const w=(e.wallet||'').toLowerCase(),idn=idmap[w]||{},nm=idn.name||sa(w),x=FAC[e.faction]||{c:'#8a958d',n:e.faction};
+        return '<tr><td class="mono" style="color:var(--green-deep);font-weight:700">#'+e.rank+'</td><td><a class="hl" href="/litany/scanner#'+w+'">'+esc(nm)+'</a></td><td><span class="fac" style="--fc:'+x.c+'">'+(x.n||'—')+'</span></td><td class="mono">'+(e.value||0).toLocaleString()+'</td></tr>';}).join("");
+    }catch(e){fc.innerHTML='<div class="card"><div class="value pending">Mesh unavailable.</div></div>';lb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--faint);padding:30px">Mesh unavailable.</td></tr>';}
+  }
+
+  (async function(){const b=await loadCore();loadGas();loadMarket();loadTiers();loadActivityAndGraph(b);loadMesh();})();
 </script>
 
 </body>

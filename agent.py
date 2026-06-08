@@ -6,6 +6,7 @@ import threading
 import time
 import sqlite3
 import io
+import re
 from web3 import Web3
 from dotenv import load_dotenv
 import anthropic
@@ -247,6 +248,40 @@ def _resolve_portal(addr):
         return None
     return None
 
+_litany_cache = {}        # addr -> {"name":..., "avatar":...}
+_litany_ts = 0.0
+_LITANY_TTL = 3600        # refresh the leaderboard hourly
+_LITANY_LB = "https://litany.gg/market/leaderboard"
+
+def _load_litany_names():
+    """Scrape the public, server-rendered Litany market leaderboard for address -> {name, avatar}."""
+    global _litany_cache, _litany_ts
+    if _litany_cache and (time.time() - _litany_ts < _LITANY_TTL):
+        return _litany_cache
+    try:
+        html = requests.get(_LITANY_LB, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"},
+                            timeout=10).text
+        found = {}
+        for m in re.finditer(r'href="[^"]*?market/profile/(0x[0-9a-fA-F]{40})"[^>]*>(.*?)</a>', html, re.S | re.I):
+            addr = m.group(1).lower()
+            raw = m.group(2)
+            img = re.search(r'<img[^>]+src="([^"]+)"', raw, re.I)
+            avatar = img.group(1) if img else None
+            if avatar and avatar.startswith("/"):
+                avatar = "https://litany.gg" + avatar
+            name = re.sub(r'<[^>]+>', ' ', raw)
+            name = re.sub(r'0x[0-9a-fA-F]{2,8}\s*[…\.]{1,3}\s*[0-9a-fA-F]{2,8}', ' ', name)
+            name = re.sub(r'\s+', ' ', name).strip()
+            if name.lower() == "unknown operator":
+                name = None
+            if name or avatar:
+                found[addr] = {"name": name, "avatar": avatar}
+        if found:
+            _litany_cache, _litany_ts = found, time.time()
+    except Exception as e:
+        print(f"litany names: {e}")
+    return _litany_cache
+
 def resolve_identity(wallet, network=True):
     """Cache-first identity. Resolves over the network only on miss/stale when allowed."""
     wallet = wallet.lower()
@@ -258,7 +293,46 @@ def resolve_identity(wallet, network=True):
     prof = _resolve_portal(wallet) or _resolve_ans(wallet)
     if prof:
         return id_put(wallet, prof.get("username"), prof.get("twitter"), prof.get("avatar"), prof.get("source"))
+    lit = _load_litany_names().get(wallet)
+    if lit and (lit.get("name") or lit.get("avatar")):
+        return id_put(wallet, lit.get("name"), None, lit.get("avatar"), "litany")
     return id_put(wallet, None, None, None, None)  # cache the negative result too
+
+# ── LITANY MESH API (public, no auth — verified endpoints) ───────
+_MESH_BASE = "https://litany.gg/api/mesh"
+_mesh_lb = {"data": None, "ts": 0.0}
+_MESH_TTL = 120
+
+def _mesh_get(path):
+    try:
+        r = requests.get(_MESH_BASE + path, headers={"Accept": "application/json",
+                         "User-Agent": "Mozilla/5.0"}, timeout=10)
+        j = r.json()
+        if isinstance(j, dict) and j.get("ok"):
+            return j.get("data")
+    except Exception as e:
+        print(f"mesh {path}: {e}")
+    return None
+
+def _mesh_leaderboard():
+    now = time.time()
+    if _mesh_lb["data"] and now - _mesh_lb["ts"] < _MESH_TTL:
+        return _mesh_lb["data"]
+    d = _mesh_get("/leaderboards")
+    if d:
+        _mesh_lb["data"], _mesh_lb["ts"] = d, now
+    return _mesh_lb["data"]
+
+def _mesh_faction_map():
+    """wallet -> {faction, claims, rank} derived from the verified mesh leaderboard."""
+    d = _mesh_leaderboard()
+    out = {}
+    if d and isinstance(d.get("entries"), list):
+        for e in d["entries"]:
+            w = (e.get("wallet") or "").lower()
+            if w:
+                out[w] = {"faction": e.get("faction"), "claims": e.get("value"), "rank": e.get("rank")}
+    return out
 
 def _identicon_svg(addr):
     h = 2166136261
@@ -309,6 +383,7 @@ def identities_batch():
     from flask import request
     raw = (request.args.get("addrs") or "").strip()
     addrs = [a.lower() for a in raw.split(",") if a.startswith("0x") and len(a) == 42][:40]
+    fmap = _mesh_faction_map()
     out, budget = {}, 24
     for a in addrs:
         cached = id_get(a)
@@ -318,10 +393,14 @@ def identities_batch():
         else:
             budget -= 1
             row = resolve_identity(a, network=True)
-        out[a] = ({"name": row.get("name"), "twitter": row.get("twitter"),
-                   "avatar": bool(row.get("avatar")),
-                   "resolved": bool(row.get("name") or row.get("avatar") or row.get("twitter"))}
-                  if row else {"resolved": False})
+        mesh = fmap.get(a) or {}
+        entry = ({"name": row.get("name"), "twitter": row.get("twitter"),
+                  "avatar": bool(row.get("avatar")),
+                  "resolved": bool(row.get("name") or row.get("avatar") or row.get("twitter"))}
+                 if row else {"resolved": False})
+        entry["faction"] = mesh.get("faction")
+        entry["claims"] = mesh.get("claims")
+        out[a] = entry
     return jsonify(out)
 
 @app.route("/api/avatar")
@@ -341,6 +420,25 @@ def avatar_proxy():
     resp = Response(_identicon_svg(addr), mimetype="image/svg+xml")
     resp.headers["Cache-Control"] = "public, max-age=86400"
     return resp
+
+@app.route("/api/litany-mesh")
+def litany_mesh_proxy():
+    from flask import request, Response
+    path = (request.args.get("path") or "").strip()
+    allowed = path in {"/leaderboards", "/faction-stats", "/events", "/map", "/overlay"} \
+        or bool(re.match(r'^/wallet/0x[0-9a-fA-F]{40}(/territory)?$', path)) \
+        or bool(re.match(r'^/faction/(breach|lens|horizon)$', path)) \
+        or bool(re.match(r'^/cell/[\w:-]+$', path))
+    if not allowed:
+        return jsonify({"ok": False, "error": "path not allowed"}), 403
+    try:
+        r = requests.get(_MESH_BASE + path, headers={"Accept": "application/json",
+                         "User-Agent": "Mozilla/5.0"}, timeout=12)
+        resp = Response(r.content, status=r.status_code, content_type="application/json")
+        resp.headers["Cache-Control"] = "public, max-age=60"
+        return resp
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
 
 def run_identity_refresh():
     time.sleep(30)
