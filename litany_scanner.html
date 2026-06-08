@@ -274,6 +274,9 @@
 
   goBtn.addEventListener("click",analyze);
   addrEl.addEventListener("keydown",e=>{if(e.key==="Enter")analyze();});
+
+  // auto-run if an address is passed via #hash (e.g. from the terminal search bar)
+  (function(){const h=(location.hash||"").replace(/^#/,"").trim();if(/^0x[a-fA-F0-9]{40}$/.test(h)){addrEl.value=h;analyze();}})();
 </script>
 
 </body>

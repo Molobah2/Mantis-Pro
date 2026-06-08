@@ -392,10 +392,20 @@
     const feed=document.getElementById("act-feed"),empty=document.getElementById("net-empty");
     try{
       if(!block)block=hi(await rpc("eth_blockNumber",[]));
-      const from="0x"+Math.max(0,block-WINDOW).toString(16);
-      const logs=await rpc("eth_getLogs",[{address:CARDS,topics:[TT],fromBlock:from,toBlock:"latest"}]);
-      set("net-window",WINDOW.toLocaleString()+"b");
-      if(!Array.isArray(logs)||!logs.length){feed.innerHTML='<div class="afstate">No transfers in the last '+WINDOW.toLocaleString()+' blocks.</div>';empty.style.display="grid";empty.textContent="No recent transfers yet.";set("net-nodes","0");set("net-edges","0");return;}
+      // Abstract blocks are ~1s apart, so a few thousand blocks is often empty.
+      // Scan backward in safe-sized chunks until we have enough transfers (or hit the lookback cap).
+      const CHUNK=12000, MAX_CHUNKS=50, NEED=35;
+      let logs=[], to=block, oldest=block, chunks=0;
+      while(to>=0 && chunks<MAX_CHUNKS && logs.length<NEED){
+        const fromB=Math.max(0,to-CHUNK+1);
+        try{
+          const part=await rpc("eth_getLogs",[{address:CARDS,topics:[TT],fromBlock:"0x"+fromB.toString(16),toBlock:"0x"+to.toString(16)}]);
+          if(Array.isArray(part)&&part.length){logs=part.concat(logs);oldest=fromB;}
+        }catch(_){}
+        chunks++; to=fromB-1;
+      }
+      set("net-window",(block-oldest).toLocaleString()+"b");
+      if(!logs.length){feed.innerHTML='<div class="afstate">No Litany transfers found in the recent window.</div>';empty.style.display="grid";empty.textContent="No recent transfers.";set("net-nodes","0");set("net-edges","0");return;}
       const recent=logs.slice(-16).reverse(),ubl=[...new Set(recent.map(l=>l.blockNumber))],ts={};
       await Promise.all(ubl.map(async b=>{try{ts[b]=hi((await rpc("eth_getBlockByNumber",[b,false])).timestamp);}catch(_){ts[b]=null;}}));
       // one batched, cached identity lookup for all visible operators — no per-row discovery
