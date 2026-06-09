@@ -115,6 +115,38 @@ def card_image(token_id):
     resp.headers["Cache-Control"] = "public, max-age=604800"
     return resp
 
+@app.route("/operator/<address>")
+def operator_profile(address):
+    import os
+    path = os.path.join(os.path.dirname(__file__), "operator.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+_rarity_idx = None
+def _load_rarity_idx():
+    global _rarity_idx
+    if _rarity_idx is not None:
+        return _rarity_idx
+    try:
+        path = os.path.join(os.path.dirname(__file__), "rarity_index.json")
+        with open(path, "r") as f:
+            data = json.load(f)
+        _rarity_idx = {int(c["tokenId"]): c for c in data.get("cards", [])}
+    except Exception as e:
+        print(f"rarity idx: {e}")
+        _rarity_idx = {}
+    return _rarity_idx
+
+@app.route("/api/card-stats")
+def card_stats():
+    from flask import request
+    raw = (request.args.get("ids") or "").split(",")
+    ids = [int(x.strip()) for x in raw if x.strip().isdigit()][:100]
+    idx = _load_rarity_idx()
+    return jsonify({i: idx[i] for i in ids if i in idx})
+
 @app.route("/api/abstract-rpc", methods=["POST"])
 def abstract_rpc():
     import requests

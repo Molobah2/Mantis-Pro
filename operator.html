@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operator Profile — Mantis Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060b08;--bg2:#0c1410;--panel:rgba(255,255,255,.03);--panel2:rgba(255,255,255,.05);
+    --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);
+    --ink:#eaf2ec;--muted:rgba(234,242,236,.6);--faint:rgba(234,242,236,.35);
+    --green:#10a050;--green-b:#23e07a;--green-s:rgba(35,224,122,.1);
+    --cyan:#22d3ee;--red:#e5484d;--gold:#f5c451;--purple:#a06bff;
+    --leg:#a06bff;--epic:#3b82f6;--rare:#10b981;--unc:#10a050;--common:#6b7f72;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;overflow-x:hidden;
+    background-image:radial-gradient(90% 50% at 50% -8%,rgba(16,160,80,.09),transparent 55%)}
+  a{color:inherit;text-decoration:none}.mono{font-family:'JetBrains Mono',monospace}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+  ::selection{background:rgba(35,224,122,.22)}
+
+  .nav{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;padding:12px 28px;background:rgba(6,11,8,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:14px}
+  .brand .m{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--green-b),var(--green));display:grid;place-items:center;color:#03120a;font-size:14px;box-shadow:0 3px 14px rgba(35,224,122,.4)}
+  .brand small{font-size:8.5px;letter-spacing:1.6px;color:var(--faint);text-transform:uppercase;font-weight:700;display:block;margin-top:1px}
+  .nav .links{margin-left:auto;display:flex;gap:16px;font-size:12.5px;color:var(--muted);font-weight:600}
+  .nav .links a:hover{color:var(--ink)}
+
+  /* HERO */
+  .hero{padding:36px 28px 30px;border-bottom:1px solid var(--line);position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(70% 120% at 30% 0%,rgba(35,224,122,.06),transparent 60%);pointer-events:none}
+  .hero-inner{max-width:1100px;display:flex;align-items:flex-start;gap:28px;flex-wrap:wrap}
+  .av-hero{position:relative;flex-shrink:0}
+  .av-hero img{width:88px;height:88px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,.15);background:#111;display:block}
+  .av-ring{position:absolute;inset:-4px;border-radius:50%;border:2px solid;opacity:.7}
+  .hero-info{flex:1;min-width:240px}
+  .hero-info .nm{font-size:28px;font-weight:900;letter-spacing:-1px;line-height:1.1}
+  .hero-info .wa{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--faint);margin-top:5px}
+  .hero-info .tags{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .tag{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:4px 10px;border-radius:8px}
+  .t-faction{color:#fff}
+  .t-tier{color:var(--gold);background:rgba(245,196,81,.12);border:1px solid rgba(245,196,81,.25)}
+  .t-ach{color:var(--green-b);background:var(--green-s);border:1px solid rgba(35,224,122,.25)}
+  .hero-stats{display:flex;gap:0;margin-top:18px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .hs{padding:12px 20px;border-right:1px solid var(--line);text-align:center}
+  .hs:last-child{border-right:none}
+  .hs .hk{font-size:9.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .hs .hv{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;margin-top:4px;letter-spacing:-.5px}
+  .hv.g{color:var(--green-b)}
+  .score-block{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 8px}
+  .score-lbl{font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
+  .score-num{font-size:42px;font-weight:900;font-family:'JetBrains Mono',monospace;letter-spacing:-2px;color:var(--green-b);line-height:1}
+  .score-sub{font-size:11px;color:var(--muted);font-weight:600}
+
+  /* WRAP */
+  .wrap{max-width:1100px;padding:24px 28px 80px;display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start}
+  @media(max-width:1000px){.wrap{grid-template-columns:1fr}}
+  .main{display:flex;flex-direction:column;gap:16px}
+  .side{display:flex;flex-direction:column;gap:16px}
+
+  /* SECTIONS */
+  .sec{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .sh{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid var(--line)}
+  .sh h3{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;color:var(--green-b)}
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:6px}
+  .badge::before{content:"";width:4px;height:4px;border-radius:50%;background:currentColor}
+  .b-on{color:var(--green-b);background:var(--green-s)}.b-aw{color:var(--faint);background:rgba(255,255,255,.05)}
+  .sb{padding:16px 18px}
+
+  /* CARD GRID */
+  .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:10px;margin-bottom:16px}
+  .citem{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
+  .citem img{width:64px;height:64px;border-radius:8px;object-fit:contain;border:1px solid var(--line);background:var(--panel2);transition:border-color .15s,transform .15s}
+  .citem:hover img{border-color:rgba(35,224,122,.4);transform:translateY(-2px)}
+  .citem .cid{font-size:9.5px;font-family:'JetBrains Mono',monospace;color:var(--faint)}
+  .ctier{font-size:8px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:1px 5px;border-radius:4px;color:#fff}
+  .ct-leg{background:var(--leg)}.ct-epic{background:var(--epic)}.ct-rare{background:var(--rare)}.ct-unc{background:var(--unc)}.ct-com{background:var(--common)}
+  .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .stat-box{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center}
+  .stat-box .sk{font-size:9.5px;color:var(--faint);font-weight:700;letter-spacing:.6px;text-transform:uppercase}
+  .stat-box .sv{font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;margin-top:5px}
+
+  /* DONUT */
+  .donut-wrap{display:flex;align-items:center;gap:20px;padding:6px 0}
+  .donut-legend{display:flex;flex-direction:column;gap:7px;flex:1}
+  .leg-item{display:flex;align-items:center;gap:8px;font-size:12px}
+  .leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .leg-label{flex:1;color:var(--muted)}
+  .leg-val{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint)}
+
+  /* MESH */
+  .mesh-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .mbox{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .mbox .mk{font-size:9.5px;color:var(--faint);font-weight:700;letter-spacing:.6px;text-transform:uppercase}
+  .mbox .mv{font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace;margin-top:5px}
+  .ach-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .ach{display:flex;align-items:center;gap:7px;padding:7px 11px;border:1px solid var(--line2);border-radius:10px;font-size:12px;background:var(--panel2)}
+  .ach .ai{font-size:16px}
+  .ach .an{font-weight:700;color:var(--ink)}
+  .ach .ad{font-size:10px;color:var(--faint)}
+
+  /* TIMELINE */
+  .tline{display:flex;flex-direction:column;gap:0}
+  .te{display:flex;align-items:flex-start;gap:12px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.04);position:relative}
+  .te:last-child{border-bottom:none}
+  .te .tdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+  .te .tbody{flex:1;min-width:0}
+  .te .tact{font-size:12.5px;color:var(--ink)}
+  .te .tact strong{color:var(--green-b)}
+  .te .tmeta{font-size:10.5px;color:var(--faint);font-family:'JetBrains Mono',monospace;margin-top:2px}
+  .te .ttime{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--faint);flex-shrink:0}
+
+  /* RANK BARS */
+  .rbar-list{display:flex;flex-direction:column;gap:12px}
+  .rbar .rl{display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px}
+  .rbar .rn{font-weight:600}
+  .rbar .rv{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint)}
+  .rtrack{height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden}
+  .rfill{height:100%;border-radius:3px;background:var(--green-b);transition:width 1s cubic-bezier(.2,.7,.2,1)}
+
+  /* SCORE BREAKDOWN */
+  .sb-list{display:flex;flex-direction:column;gap:8px}
+  .sb-item{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px}
+  .sb-item .si{color:var(--muted)}
+  .sb-item .sval{font-family:'JetBrains Mono',monospace;color:var(--green-b);font-weight:700}
+
+  .awaiting{opacity:.55;border-style:dashed}
+  .await-msg{padding:20px;text-align:center;color:var(--faint);font-size:12px;font-family:'JetBrains Mono',monospace}
+
+  .skel{animation:pulse 1.8s ease infinite}
+  .skel-line{height:16px;border-radius:6px;background:rgba(255,255,255,.06);margin:6px 0}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
+
+  .fstate{padding:30px;text-align:center;color:var(--faint);font-size:12px;font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="brand"><div class="m">◎</div><div>OPERATOR PROFILE<small>Mantis · Intelligence</small></div></div>
+  <div class="links">
+    <a href="/activity">← Activity Explorer</a>
+    <a href="/litany">Dashboard</a>
+    <a href="/litany/scanner" id="scanner-link">Scanner</a>
+  </div>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-inner" id="hero-inner">
+    <div class="skel" style="width:88px;height:88px;border-radius:50%;background:rgba(255,255,255,.08);flex-shrink:0"></div>
+    <div style="flex:1"><div class="skel-line" style="width:240px"></div><div class="skel-line" style="width:160px"></div><div class="skel-line" style="width:320px;margin-top:16px"></div></div>
+  </div>
+</div>
+
+<div class="wrap" id="wrap" style="max-width:1100px;padding:24px 28px 80px">
+  <div class="main" id="main-col">
+    <div class="fstate">Loading operator intelligence…</div>
+  </div>
+  <div class="side" id="side-col"></div>
+</div>
+
+<script>
+  const CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB",RPC="/api/abstract-rpc";
+  const TT="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",ZERO="0x0000000000000000000000000000000000000000";
+  let rid=1;
+  async function rpc(m,p){const r=await fetch(RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:rid++,method:m,params:p})});const j=await r.json();if(j.error)throw new Error(j.error.message);return j.result;}
+  const hi=h=>h?parseInt(h,16):0,ta=t=>"0x"+t.slice(26),sa=a=>a.slice(0,6)+"…"+a.slice(-4),sh=h=>h.slice(0,10)+"…";
+  function rel(ts){const s=Math.floor(Date.now()/1e3)-ts;if(s<60)return s+"s ago";if(s<3600)return(s/60|0)+"m ago";if(s<86400)return(s/3600|0)+"h ago";if(s<30*86400)return(s/86400|0)+"d ago";return new Date(ts*1e3).toLocaleDateString();}
+  function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  function fmtN(n){return Number(n||0).toLocaleString();}
+
+  const FAC={horizon:{c:"#12a150",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
+
+  const ACHIEVEMENTS_MAP={
+    "first_drop_of_day":{n:"First Drop",i:"🌅",d:"First claim of the day"},
+    "streak_7":{n:"7-Day Streak",i:"🔥",d:"Seven consecutive daily claims"},
+    "streak_30":{n:"30-Day Streak",i:"⚡",d:"Thirty consecutive daily claims"},
+    "anchor":{n:"Anchor",i:"⚓",d:"Established a territory anchor"},
+    "explorer":{n:"Explorer",i:"🗺️",d:"Explored new regions"},
+    "top_10":{n:"Top 10",i:"🏆",d:"Reached the top 10"},
+    "first_claim":{n:"Pioneer",i:"🚀",d:"First ever claim"},
+    "faction_member":{n:"Faction",i:"⚔",d:"Joined a faction"},
+  };
+
+  function tierOf(card){
+    if(!card)return null;
+    const pct=card.percentile||0;
+    if(pct>=99)return{n:"Legendary",c:"ct-leg",color:"var(--leg)"};
+    if(pct>=95)return{n:"Epic",c:"ct-epic",color:"var(--epic)"};
+    if(pct>=85)return{n:"Rare",c:"ct-rare",color:"var(--rare)"};
+    if(pct>=60)return{n:"Uncommon",c:"ct-unc",color:"var(--unc)"};
+    return{n:"Common",c:"ct-com",color:"var(--common)"};
+  }
+
+  function computeScore({cards,cardStats,mesh,lbEntry}){
+    let s=0,breakdown=[];
+    const cc=cards.length;
+    const cardPts=cc*12;s+=cardPts;breakdown.push({l:"Cards owned ("+cc+")",v:cardPts});
+    const vals=cards.map(id=>cardStats[id]?.percentile||0);
+    const best=vals.length?Math.max(...vals):0;
+    const bestPts=Math.round(best*2.2);s+=bestPts;breakdown.push({l:"Best card quality",v:bestPts});
+    if(vals.length>1){const avg=vals.reduce((a,b)=>a+b,0)/vals.length;const avgPts=Math.round(avg*.8);s+=avgPts;breakdown.push({l:"Portfolio quality",v:avgPts});}
+    if(mesh){const cp=mesh.total_claims*6;s+=cp;breakdown.push({l:"Mesh claims ("+mesh.total_claims+")",v:cp});const ap=mesh.anchor_count*35;s+=ap;breakdown.push({l:"Anchors ("+mesh.anchor_count+")",v:ap});const achPts=(mesh.earned_achievement_ids||[]).length*80;s+=achPts;breakdown.push({l:"Achievements",v:achPts});}
+    if(lbEntry){const r=lbEntry.rank;const rankPts=r<=10?300:r<=25?175:r<=50?75:0;s+=rankPts;if(rankPts)breakdown.push({l:"Mesh rank #"+r,v:rankPts});}
+    return{score:Math.round(s),breakdown};
+  }
+
+  function svgDonut(data,size=120,stroke=14){
+    const r=(size-stroke)/2,cx=size/2,cy=size/2,circ=2*Math.PI*r;
+    const total=data.reduce((a,b)=>a+(b.val||0),0)||1;
+    let off=circ*.25;let arcs="";
+    data.forEach(d=>{const frac=(d.val||0)/total,dash=frac*circ;
+      arcs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${d.c}" stroke-width="${stroke}" stroke-dasharray="${dash.toFixed(2)} ${(circ-dash).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" style="transform:rotate(-90deg);transform-origin:${cx}px ${cy}px"/>`;off+=dash;});
+    const label=total>0?total.toLocaleString():"0";
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="${stroke}"/>${arcs}<text x="${cx}" y="${cy-5}" text-anchor="middle" fill="#eaf2ec" font-size="14" font-weight="800" font-family="JetBrains Mono">${label}</text><text x="${cx}" y="${cy+12}" text-anchor="middle" fill="rgba(234,242,236,.4)" font-size="9" font-family="Inter" font-weight="700">CARDS</text></svg>`;
+  }
+
+  function svgScoreArc(score,max=2000,size=110){
+    const C=2*Math.PI*42,pct=Math.min(1,score/max),used=pct*C,cx=55,cy=55;
+    return `<svg viewBox="0 0 110 110" width="${size}" height="${size}"><defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#23e07a"/><stop offset="100%" stop-color="#077a39"/></linearGradient></defs><circle cx="${cx}" cy="${cy}" r="42" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="9"/><circle cx="${cx}" cy="${cy}" r="42" fill="none" stroke="url(#sg)" stroke-width="9" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})" stroke-dasharray="${used.toFixed(1)} ${(C-used).toFixed(1)}" style="transition:stroke-dasharray 1.2s ease"/></svg>`;
+  }
+
+  function renderHero({addr,idn,mesh,lbEntry,score}){
+    const fac=FAC[idn.faction]||null;
+    const nm=idn.name||sa(addr);
+    const joinDate=mesh?.first_claim_at?new Date(mesh.first_claim_at).toLocaleDateString():null;
+    const lastActive=mesh?.last_claim_at?new Date(mesh.last_claim_at).toLocaleDateString():null;
+    const meshRank=lbEntry?.rank??"—";
+    const xLink=idn.twitter?`<a href="https://x.com/${esc(idn.twitter)}" target="_blank" style="color:#1d9bf0;font-weight:600;font-size:12px">𝕏 @${esc(idn.twitter)}</a>`:"";
+    document.getElementById("scanner-link").href="/litany/scanner#"+addr;
+    document.getElementById("hero-inner").innerHTML=`
+      <div class="av-hero">
+        <img id="hero-av" src="/api/avatar?addr=${addr}" alt="" onerror="this.src='/api/avatar?addr=${addr}'">
+        <div class="av-ring" style="border-color:${fac?fac.c:'rgba(255,255,255,.2)'}"></div>
+      </div>
+      <div class="hero-info">
+        <div class="nm">${esc(nm)}</div>
+        <div class="wa">${addr} ${xLink}</div>
+        <div class="tags">
+          ${fac?`<span class="tag t-faction" style="background:${fac.c}22;border:1px solid ${fac.c}55;color:${fac.c}">⬡ ${fac.n}</span>`:""}
+          ${mesh?.earned_achievement_ids?.length?`<span class="tag t-ach">${mesh.earned_achievement_ids.length} Achievement${mesh.earned_achievement_ids.length>1?"s":""}</span>`:""}
+          ${meshRank!=="—"?`<span class="tag" style="background:rgba(245,196,81,.1);border:1px solid rgba(245,196,81,.25);color:var(--gold)">Mesh #${meshRank}</span>`:""}
+        </div>
+        <div class="hero-stats" style="margin-top:16px">
+          <div class="hs"><div class="hk">Join Date</div><div class="hv" style="font-size:14px">${joinDate||"—"}</div></div>
+          <div class="hs"><div class="hk">Last Active</div><div class="hv" style="font-size:14px">${lastActive||"—"}</div></div>
+          <div class="hs"><div class="hk">Mesh Claims</div><div class="hv g">${fmtN(mesh?.total_claims)}</div></div>
+          <div class="hs"><div class="hk">Anchors</div><div class="hv g">${fmtN(mesh?.anchor_count)}</div></div>
+        </div>
+      </div>
+      <div class="score-block">
+        <div class="score-lbl">Operator Score</div>
+        <div style="position:relative;width:110px;height:110px;display:flex;align-items:center;justify-content:center">
+          <div style="position:absolute;inset:0">${svgScoreArc(score.score)}</div>
+          <div style="text-align:center;z-index:1">
+            <div class="score-num">${fmtN(score.score)}</div>
+          </div>
+        </div>
+        <div class="score-sub">Real · Reproducible</div>
+      </div>
+    `;
+  }
+
+  function renderCards({ownedCards,cardStats}){
+    if(!ownedCards.length){
+      document.getElementById("sec-cards").querySelector(".sb").innerHTML='<div class="fstate">No Litany Cards found for this operator.</div>';return;
+    }
+    const tiers={Legendary:0,Epic:0,Rare:0,Uncommon:0,Common:0};
+    const bestCard=ownedCards.reduce((best,id)=>{const c=cardStats[id];return(c&&(c.percentile||0)>(cardStats[best]?.percentile||0))?id:best;},ownedCards[0]);
+    ownedCards.forEach(id=>{const t=tierOf(cardStats[id]);if(t)tiers[t.n]++;});
+    const donutData=[
+      {val:tiers.Legendary,c:"var(--leg)",n:"Legendary"},
+      {val:tiers.Epic,c:"var(--epic)",n:"Epic"},
+      {val:tiers.Rare,c:"var(--rare)",n:"Rare"},
+      {val:tiers.Uncommon,c:"var(--unc)",n:"Uncommon"},
+      {val:tiers.Common,c:"var(--common)",n:"Common"},
+    ].filter(d=>d.val>0);
+    const grid=ownedCards.slice(0,20).map(id=>{const t=tierOf(cardStats[id]);
+      return `<div class="citem" onclick="window.location='/litany/rarity#${id}'"><img src="/api/card-image/${id}" loading="lazy" onerror="this.style.background='var(--panel2)';this.style.display='flex'"><div class="cid">#${id}</div>${t?`<div class="ctier ${t.c}">${t.n.slice(0,3)}</div>`:""}</div>`;}).join("");
+    const bestC=cardStats[bestCard];
+    const avgPct=ownedCards.length?Math.round(ownedCards.map(id=>cardStats[id]?.percentile||0).reduce((a,b)=>a+b,0)/ownedCards.length):0;
+    document.getElementById("sec-cards").querySelector(".sb").innerHTML=`
+      <div class="cgrid">${grid}${ownedCards.length>20?`<div style="display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--faint)">+${ownedCards.length-20} more</div>`:""}</div>
+      <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding-top:14px;border-top:1px solid var(--line)">
+        ${svgDonut(donutData)}
+        <div class="donut-legend">${donutData.map(d=>`<div class="leg-item"><div class="leg-dot" style="background:${d.c}"></div><span class="leg-label">${d.n}</span><span class="leg-val">${d.val}</span></div>`).join("")}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:140px">
+          <div class="stat-box"><div class="sk">Total Cards</div><div class="sv" style="color:var(--green-b)">${ownedCards.length}</div></div>
+          <div class="stat-box"><div class="sk">Best Card</div><div class="sv" style="font-size:14px">#${bestCard} ${bestC?`<span style="font-size:10px;color:var(--faint)">top ${(100-bestC.percentile).toFixed(1)}%</span>`:""}</div></div>
+          <div class="stat-box"><div class="sk">Avg Quality</div><div class="sv">${avgPct}th pct</div></div>
+        </div>
+      </div>`;
+  }
+
+  function renderMesh({mesh,lbEntry}){
+    if(!mesh){document.getElementById("sec-mesh").querySelector(".sb").innerHTML='<div class="fstate">No Mesh activity found.</div>';return;}
+    const f=FAC[mesh.faction]||{c:"#8a958d",n:mesh.faction||"—"};
+    const achs=(mesh.earned_achievement_ids||[]).map(id=>{const m=ACHIEVEMENTS_MAP[id]||{n:id,i:"🏅",d:id};
+      return `<div class="ach"><span class="ai">${m.i}</span><div><div class="an">${esc(m.n)}</div><div class="ad">${esc(m.d)}</div></div></div>`;}).join("");
+    document.getElementById("sec-mesh").querySelector(".sb").innerHTML=`
+      <div class="mesh-grid">
+        <div class="mbox"><div class="mk">Faction</div><div class="mv" style="color:${f.c};font-size:20px">⬡ ${f.n}</div></div>
+        <div class="mbox"><div class="mk">Mesh Rank</div><div class="mv" style="color:var(--gold)">${lbEntry?"#"+lbEntry.rank:"Unranked"}</div></div>
+        <div class="mbox"><div class="mk">Cells Claimed</div><div class="mv" style="color:var(--green-b)">${fmtN(mesh.total_claims)}</div></div>
+        <div class="mbox"><div class="mk">Anchors</div><div class="mv">${fmtN(mesh.anchor_count)}</div></div>
+      </div>
+      ${achs?`<div class="ach-grid">${achs}</div>`:'<div style="padding-top:10px;color:var(--faint);font-size:12px;font-family:JetBrains Mono">No achievements yet.</div>'}`;
+  }
+
+  async function renderActivity(addr){
+    const el=document.getElementById("sec-activity");
+    if(!el)return;
+    try{
+      const latest=hi(await rpc("eth_blockNumber",[]));
+      let logs=[],to=latest;
+      for(let c=0;c<20&&logs.length<8;c++){
+        const fb=Math.max(0,to-12000+1);
+        try{const p=await rpc("eth_getLogs",[{address:CARDS,topics:[TT,null,"0x000000000000000000000000"+addr.slice(2)],fromBlock:"0x"+fb.toString(16),toBlock:"0x"+to.toString(16)}]);if(Array.isArray(p)&&p.length)logs=p.concat(logs);}catch(_){}
+        to=fb-1;
+      }
+      if(!logs.length){el.querySelector(".sb").innerHTML='<div class="fstate">No on-chain activity found in recent window.</div>';return;}
+      const recent=logs.slice(-8).reverse();
+      const blocks=[...new Set(recent.map(l=>l.blockNumber))],ts={};
+      await Promise.all(blocks.map(async b=>{try{ts[b]=hi((await rpc("eth_getBlockByNumber",[b,false])).timestamp);}catch(_){}}));
+      el.querySelector(".sb").innerHTML='<div class="tline">'+recent.map(l=>{const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase(),id=BigInt(l.topics[3]).toString(),m=f===ZERO,bts=ts[l.blockNumber];
+        return `<div class="te"><div class="tdot" style="background:${m?"var(--green-b)":"var(--cyan)"}"></div><div class="tbody"><div class="tact">${m?"Minted":"Received"} <strong>Litany Card #${id}</strong>${!m?" from "+sa(f):""}</div><div class="tmeta"><a href="https://abscan.org/tx/${l.transactionHash}" target="_blank" style="color:rgba(35,224,122,.7)">${sh(l.transactionHash)}↗</a></div></div><div class="ttime">${bts?rel(bts):"—"}</div></div>`;}).join("")+'</div>';
+    }catch(e){if(el)el.querySelector(".sb").innerHTML='<div class="fstate">Activity unavailable.</div>';}
+  }
+
+  function renderScore(score,el){
+    el.innerHTML='<div class="sb-list">'+score.breakdown.map(b=>`<div class="sb-item"><span class="si">${esc(b.l)}</span><span class="sval">+${fmtN(b.v)}</span></div>`).join("")+`<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:800;font-size:13px"><span>Total Score</span><span style="color:var(--green-b)">${fmtN(score.score)}</span></div></div>`;
+  }
+
+  function renderRanks({lbEntry,lbEntries,ownedCards,cardStats}){
+    const el=document.getElementById("sec-ranks");if(!el)return;
+    const total=lbEntries.length||68;
+    const meshRankPct=lbEntry?Math.max(5,100-(lbEntry.rank-1)/total*100):null;
+    const bestPct=ownedCards.length?Math.max(...ownedCards.map(id=>cardStats[id]?.percentile||0)):null;
+    const bars=[];
+    if(meshRankPct!==null)bars.push({l:"Mesh Rank",v:"#"+lbEntry.rank+" / "+total,pct:meshRankPct,c:"var(--green-b)"});
+    if(bestPct!==null)bars.push({l:"Best Card Rarity",v:"Top "+(100-bestPct).toFixed(1)+"%",pct:bestPct,c:"var(--leg)"});
+    if(!bars.length){el.querySelector(".sb").innerHTML='<div class="fstate">No ranking data available.</div>';return;}
+    el.querySelector(".sb").innerHTML='<div class="rbar-list">'+bars.map(b=>`<div class="rbar"><div class="rl"><span class="rn">${b.l}</span><span class="rv">${b.v}</span></div><div class="rtrack"><div class="rfill" style="width:${b.pct.toFixed(1)}%;background:${b.c}"></div></div></div>`).join("")+'</div>';
+  }
+
+  (async function(){
+    const parts=window.location.pathname.split("/").filter(Boolean);
+    const addr=(parts[parts.length-1]||"").toLowerCase();
+    if(!addr.startsWith("0x")||addr.length!==42){document.getElementById("hero-inner").innerHTML='<div style="color:var(--faint);font-family:JetBrains Mono">Invalid operator address.</div>';return;}
+    document.getElementById("scanner-link").href="/litany/scanner#"+addr;
+    document.title=sa(addr)+" — Operator Profile";
+
+    const [identR,meshWR,meshLBR]=await Promise.allSettled([
+      fetch('/api/identities?addrs='+addr).then(r=>r.json()),
+      fetch('/api/litany-mesh?path=/wallet/'+addr).then(r=>r.json()),
+      fetch('/api/litany-mesh?path=/leaderboards').then(r=>r.json()),
+    ]);
+    const idn=identR.status==="fulfilled"?(identR.value[addr]||{}):{};
+    const mesh=meshWR.status==="fulfilled"&&meshWR.value?.data?meshWR.value.data:null;
+    const lbEntries=meshLBR.status==="fulfilled"&&meshLBR.value?.data?.entries?meshLBR.value.data.entries:[];
+    const lbEntry=lbEntries.find(e=>(e.wallet||"").toLowerCase()===addr)||null;
+
+    // Cards via OpenSea
+    let ownedCards=[];
+    try{
+      const r=await fetch('/api/opensea?path='+encodeURIComponent(`/api/v2/chain/abstract/account/${addr}/nfts?limit=200`));
+      const j=await r.json();
+      ownedCards=(j.nfts||[]).filter(n=>n.contract?.toLowerCase()===CARDS.toLowerCase()).map(n=>parseInt(n.identifier||n.token_id||0)).filter(Boolean);
+    }catch(_){}
+
+    // Card stats from rarity index
+    let cardStats={};
+    if(ownedCards.length){
+      try{const r=await fetch('/api/card-stats?ids='+ownedCards.slice(0,100).join(','));const j=await r.json();Object.keys(j).forEach(k=>{cardStats[parseInt(k)]=j[k];});}catch(_){}
+    }
+
+    const scoreObj=computeScore({cards:ownedCards,cardStats,mesh,lbEntry});
+
+    renderHero({addr,idn,mesh,lbEntry,score:scoreObj});
+    if(idn.name)document.title=esc(idn.name)+" — Operator Profile";
+
+    // Render main col
+    document.getElementById("main-col").innerHTML=`
+      <div class="sec" id="sec-cards"><div class="sh"><h3>◆ Card Intelligence</h3><span class="badge b-on">Onchain + Rarity Index</span></div><div class="sb"><div class="fstate">Loading cards…</div></div></div>
+      <div class="sec" id="sec-mesh"><div class="sh"><h3>⬡ Mesh Command</h3><span class="badge b-on">Litany Mesh API</span></div><div class="sb"><div class="fstate">Loading…</div></div></div>
+      <div class="sec" id="sec-activity"><div class="sh"><h3>≋ Activity Timeline</h3><span class="badge b-on">Verified Onchain</span></div><div class="sb"><div class="fstate">Loading…</div></div></div>
+      <div class="sec awaiting"><div class="sh"><h3>🜂 Hollow Intelligence</h3><span class="badge b-aw">Awaiting</span></div><div class="await-msg">Activates when the Hollows contract and registry are publicly accessible.</div></div>
+      <div class="sec awaiting"><div class="sh"><h3>⚔ Arena Profile</h3><span class="badge b-aw">Awaiting</span></div><div class="await-msg">Activates when Arena contract events are exposed.</div></div>
+    `;
+
+    // Render side col
+    document.getElementById("side-col").innerHTML=`
+      <div class="sec" id="sec-ranks"><div class="sh"><h3>📊 Rankings</h3></div><div class="sb"><div class="fstate">Loading…</div></div></div>
+      <div class="sec"><div class="sh"><h3>🏆 Operator Score</h3></div><div class="sb" id="score-sb"><div class="fstate">Loading…</div></div></div>
+    `;
+
+    renderCards({ownedCards,cardStats});
+    renderMesh({mesh,lbEntry});
+    renderActivity(addr);
+    renderRanks({lbEntry,lbEntries,ownedCards,cardStats});
+    renderScore(scoreObj,document.getElementById("score-sb"));
+  })();
+</script>
+</body>
+</html>
