@@ -44,6 +44,14 @@
   .profile{background:linear-gradient(135deg,#fff,#f7fbf8);border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
   .profile .who .addr{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
   .profile .who .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .op-link{display:inline-block;margin-top:12px;font-size:13px;font-weight:700;color:#fff;background:var(--green,#10a050);padding:9px 16px;border-radius:10px;text-decoration:none;transition:.15s;box-shadow:0 3px 12px rgba(16,160,80,.25)}
+  .op-link:hover{background:#0c8642;transform:translateY(-1px)}
+  .picker{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+  .pick{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 16px;cursor:pointer;transition:.15s;font-family:inherit}
+  .pick:hover{border-color:var(--green,#10a050);background:#f4faf6;transform:translateX(2px)}
+  .pick .pn{font-weight:700;font-size:15px;color:var(--ink,#0c1410)}
+  .pick .pa{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)}
+  .opfac{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 8px;border-radius:6px;color:#fff;background:var(--fc,#8a958d)}
   .profile .big{text-align:right}
   .profile .big .n{font-size:46px;font-weight:900;letter-spacing:-2px;color:var(--green);font-family:'JetBrains Mono',monospace;line-height:1}
   .profile .big .l{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:4px}
@@ -99,10 +107,10 @@
     <h1>Litany <b>Intelligence</b> Scanner</h1>
     <p>Paste a wallet to read a verified intelligence report on its Litany Card holdings — every value traceable to onchain data or OpenSea.</p>
     <div class="search">
-      <input id="addr" type="text" placeholder="0x… wallet address" autocomplete="off" spellcheck="false">
+      <input id="addr" type="text" placeholder="0x… wallet address or operator name" autocomplete="off" spellcheck="false">
       <button id="go">Analyze</button>
     </div>
-    <div class="hint">Reads balanceOf + tokenURI from the verified LitanyCards contract · floor from OpenSea</div>
+    <div class="hint">Search by wallet address or operator name · reads balanceOf + tokenURI from the verified LitanyCards contract · floor from OpenSea</div>
   </div>
 
   <div id="report" class="report"></div>
@@ -125,6 +133,9 @@
   const hi=h=>parseInt(h,16);
   function decString(hex){hex=hex.replace(/^0x/,"");if(hex.length<128)return "";const len=parseInt(hex.slice(64,128),16);const d=hex.slice(128,128+len*2);const b=new Uint8Array(len);for(let i=0;i<len;i++)b[i]=parseInt(d.substr(i*2,2),16);return new TextDecoder().decode(b);}
   const short=a=>a.slice(0,6)+"…"+a.slice(-4);
+  function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  let resolvedName=null;
+  const FAC={horizon:"#12a150",lens:"#2f6df0",breach:"#e5484d"};
 
   const report=document.getElementById("report"), goBtn=document.getElementById("go"), addrEl=document.getElementById("addr");
 
@@ -164,16 +175,34 @@
     }catch(e){return {tokenId,name:"Card #"+tokenId,attrs:{},err:true};}
   }
 
-  async function analyze(){
-    const wallet=addrEl.value.trim();
-    if(!/^0x[a-fA-F0-9]{40}$/.test(wallet)){fail("Enter a valid 0x wallet address.");return;}
+  async function operatorSearch(q){
+    if(!q||q.length<2){fail("Enter a wallet address or operator name.");return;}
+    loading();
+    let res=[];
+    try{res=await fetch('/api/operator-search?q='+encodeURIComponent(q)).then(r=>r.json());}catch(_){}
+    if(!res||!res.length){fail('No operator found matching "'+esc(q)+'". Names come from the Litany leaderboard — try a full wallet address instead.');return;}
+    if(res.length===1){resolvedName=res[0].name||null;addrEl.value=res[0].address;return analyze(res[0].address);}
+    report.className="report show";
+    report.innerHTML='<div class="sec"><h2>Select operator <span class="badge b-on">'+res.length+' matches</span></h2><div class="picker">'+res.map(r=>{
+      const fc=r.faction?'<span class="opfac" style="--fc:'+(FAC[r.faction]||'#8a958d')+'">'+esc(r.faction)+'</span>':'';
+      const nm=r.name?esc(r.name):short(r.address);
+      return '<button class="pick" data-a="'+r.address+'" data-n="'+(r.name?esc(r.name):'')+'"><span class="pn">'+nm+'</span>'+fc+'<span class="pa">'+short(r.address)+'</span></button>';
+    }).join('')+'</div></div>';
+    report.querySelectorAll(".pick").forEach(b=>b.addEventListener("click",()=>{resolvedName=b.dataset.n||null;addrEl.value=b.dataset.a;analyze(b.dataset.a);}));
+  }
+
+  async function analyze(forceAddr){
+    const raw=(forceAddr||addrEl.value).trim();
+    if(!/^0x[a-fA-F0-9]{40}$/.test(raw)){return operatorSearch(raw);}
+    const wallet=raw;
+    if(!forceAddr)resolvedName=null;
     goBtn.disabled=true;loading();
     try{
       // balance
       const balHex=await rpc("eth_call",[{to:CARDS,data:"0x70a08231"+wallet.slice(2).toLowerCase().padStart(64,"0")},"latest"]);
       const balance=hi(balHex);
       if(balance===0){report.className="report show";report.innerHTML=
-        '<div class="profile"><div class="who"><div class="addr">'+short(wallet)+'</div><div class="sub">No Litany Cards held by this wallet.</div></div><div class="big"><div class="n">0</div><div class="l">Cards</div></div></div>';
+        '<div class="profile"><div class="who"><div class="addr">'+(resolvedName?esc(resolvedName):short(wallet))+'</div><div class="sub">No Litany Cards held by this wallet.</div><a href="/operator/'+wallet+'" class="op-link">View Operator Profile →</a></div><div class="big"><div class="n">0</div><div class="l">Cards</div></div></div>';
         goBtn.disabled=false;return;}
 
       // owned ids + market floor (parallel)
@@ -212,7 +241,9 @@
 
     let h="";
     // profile
-    h+='<div class="profile"><div class="who"><div class="addr">'+short(wallet)+' <span class="badge b-on" style="margin-left:6px">Verified Onchain</span></div><div class="sub">Litany Card holdings · read from contract</div></div>'+
+    const title = resolvedName ? esc(resolvedName) : short(wallet);
+    h+='<div class="profile"><div class="who"><div class="addr">'+title+' <span class="badge b-on" style="margin-left:6px">Verified Onchain</span></div><div class="sub">'+(resolvedName?short(wallet)+' · ':'')+'Litany Card holdings · read from contract</div>'+
+       '<a href="/operator/'+wallet+'" class="op-link">View Operator Profile →</a></div>'+
        '<div class="big"><div class="n">'+balance+'</div><div class="l">Cards Held</div></div></div>';
 
     // collection breakdown

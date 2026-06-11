@@ -147,6 +147,29 @@ def card_stats():
     idx = _load_rarity_idx()
     return jsonify({i: idx[i] for i in ids if i in idx})
 
+@app.route("/api/operator-search")
+def operator_search():
+    from flask import request
+    q = (request.args.get("q") or "").strip().lower()
+    if len(q) < 2:
+        return jsonify([])
+    names = _load_litany_names() or {}
+    fmap = _mesh_faction_map()
+    seen, out = set(), []
+    for addr, info in names.items():
+        nm = info.get("name") or ""
+        if nm and q in nm.lower():
+            out.append({"address": addr, "name": nm, "faction": (fmap.get(addr) or {}).get("faction")})
+            seen.add(addr)
+    if q.startswith("0x") and len(q) >= 4:
+        for addr in set(list(names.keys()) + list(fmap.keys())):
+            if addr.startswith(q) and addr not in seen:
+                out.append({"address": addr, "name": (names.get(addr) or {}).get("name"),
+                            "faction": (fmap.get(addr) or {}).get("faction")})
+                seen.add(addr)
+    out.sort(key=lambda r: (r["name"] or "").lower())
+    return jsonify(out[:8])
+
 @app.route("/api/abstract-rpc", methods=["POST"])
 def abstract_rpc():
     import requests
