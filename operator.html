@@ -50,10 +50,10 @@
   .hs .hk{font-size:9.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);font-weight:700}
   .hs .hv{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;margin-top:4px;letter-spacing:-.5px}
   .hv.g{color:var(--green-b)}
-  .score-block{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 8px}
-  .score-lbl{font-size:9.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
-  .score-num{font-size:42px;font-weight:900;font-family:'JetBrains Mono',monospace;letter-spacing:-2px;color:var(--green-b);line-height:1}
-  .score-sub{font-size:11px;color:var(--muted);font-weight:600}
+  .score-block{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 14px 0;align-self:center}
+  .score-gauge{position:relative;filter:drop-shadow(0 6px 24px rgba(35,224,122,.18))}
+  .score-tier{font-size:13px;font-weight:800;letter-spacing:.3px}
+  .score-sub{font-size:10px;color:var(--faint);font-weight:600;font-family:'JetBrains Mono',monospace;letter-spacing:.3px}
 
   /* WRAP */
   .wrap{max-width:1100px;padding:24px 28px 80px;display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start}
@@ -172,6 +172,27 @@
   function rel(ts){const s=Math.floor(Date.now()/1e3)-ts;if(s<60)return s+"s ago";if(s<3600)return(s/60|0)+"m ago";if(s<86400)return(s/3600|0)+"h ago";if(s<30*86400)return(s/86400|0)+"d ago";return new Date(ts*1e3).toLocaleDateString();}
   function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function fmtN(n){return Number(n||0).toLocaleString();}
+  function pad(a){return "0x000000000000000000000000"+a.toLowerCase().replace(/^0x/,"");}
+
+  // Proven holdings method (from scanner): OpenSea first, on-chain net-holdings fallback.
+  async function ownedTokenIds(wallet){
+    try{
+      const r=await fetch('/api/opensea?path='+encodeURIComponent('/api/v2/chain/abstract/account/'+wallet+'/nfts?limit=200'));
+      const j=await r.json();
+      const ids=(j.nfts||[]).filter(n=>(n.contract||"").toLowerCase()===CARDS.toLowerCase()).map(n=>parseInt(n.identifier||n.token_id||0)).filter(Boolean);
+      if(ids.length)return ids;
+    }catch(_){}
+    try{
+      const [recv,sent]=await Promise.all([
+        rpc("eth_getLogs",[{address:CARDS,topics:[TT,null,pad(wallet)],fromBlock:"0x0",toBlock:"latest"}]),
+        rpc("eth_getLogs",[{address:CARDS,topics:[TT,pad(wallet)],fromBlock:"0x0",toBlock:"latest"}])
+      ]);
+      const net={};
+      (recv||[]).forEach(l=>{const id=BigInt(l.topics[3]).toString();net[id]=(net[id]||0)+1;});
+      (sent||[]).forEach(l=>{const id=BigInt(l.topics[3]).toString();net[id]=(net[id]||0)-1;});
+      return Object.keys(net).filter(id=>net[id]>0).map(Number);
+    }catch(_){return [];}
+  }
 
   const FAC={horizon:{c:"#12a150",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
 
@@ -219,9 +240,28 @@
     return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="${stroke}"/>${arcs}<text x="${cx}" y="${cy-5}" text-anchor="middle" fill="#eaf2ec" font-size="14" font-weight="800" font-family="JetBrains Mono">${label}</text><text x="${cx}" y="${cy+12}" text-anchor="middle" fill="rgba(234,242,236,.4)" font-size="9" font-family="Inter" font-weight="700">CARDS</text></svg>`;
   }
 
-  function svgScoreArc(score,max=2000,size=110){
-    const C=2*Math.PI*42,pct=Math.min(1,score/max),used=pct*C,cx=55,cy=55;
-    return `<svg viewBox="0 0 110 110" width="${size}" height="${size}"><defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#23e07a"/><stop offset="100%" stop-color="#077a39"/></linearGradient></defs><circle cx="${cx}" cy="${cy}" r="42" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="9"/><circle cx="${cx}" cy="${cy}" r="42" fill="none" stroke="url(#sg)" stroke-width="9" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})" stroke-dasharray="${used.toFixed(1)} ${(C-used).toFixed(1)}" style="transition:stroke-dasharray 1.2s ease"/></svg>`;
+  function scoreTier(s){
+    if(s>=1500)return{label:"Elite Operator",c:"#a06bff"};
+    if(s>=800)return{label:"Veteran",c:"#f5c451"};
+    if(s>=300)return{label:"Active",c:"#23e07a"};
+    if(s>=80)return{label:"Emerging",c:"#22d3ee"};
+    return{label:"Newcomer",c:"rgba(234,242,236,.55)"};
+  }
+
+  function svgScoreGauge(score,size=148){
+    const max=2000,r=60,cx=74,cy=74,C=2*Math.PI*r;
+    const pct=Math.min(1,score/max),used=pct*C;
+    const t=scoreTier(score);
+    return `<svg viewBox="0 0 148 148" width="${size}" height="${size}">
+      <defs>
+        <linearGradient id="sg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#23e07a"/><stop offset="100%" stop-color="#0a8f43"/></linearGradient>
+        <filter id="sglow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="9"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="url(#sg)" stroke-width="9" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})" stroke-dasharray="${used.toFixed(1)} ${(C-used).toFixed(1)}" filter="url(#sglow)" style="transition:stroke-dasharray 1.3s cubic-bezier(.2,.7,.2,1)"/>
+      <text x="${cx}" y="${cy-4}" text-anchor="middle" fill="#eaf2ec" font-size="34" font-weight="900" font-family="JetBrains Mono" letter-spacing="-1">${fmtN(score)}</text>
+      <text x="${cx}" y="${cy+15}" text-anchor="middle" fill="rgba(35,224,122,.8)" font-size="9" font-weight="800" font-family="Inter" letter-spacing="2.5">OPERATOR SCORE</text>
+    </svg>`;
   }
 
   function renderHero({addr,idn,mesh,lbEntry,score}){
@@ -253,14 +293,9 @@
         </div>
       </div>
       <div class="score-block">
-        <div class="score-lbl">Operator Score</div>
-        <div style="position:relative;width:110px;height:110px;display:flex;align-items:center;justify-content:center">
-          <div style="position:absolute;inset:0">${svgScoreArc(score.score)}</div>
-          <div style="text-align:center;z-index:1">
-            <div class="score-num">${fmtN(score.score)}</div>
-          </div>
-        </div>
-        <div class="score-sub">Real · Reproducible</div>
+        <div class="score-gauge">${svgScoreGauge(score.score)}</div>
+        <div class="score-tier" style="color:${scoreTier(score.score).c}">${scoreTier(score.score).label}</div>
+        <div class="score-sub">Reproducible · ${score.breakdown.length} factors</div>
       </div>
     `;
   }
@@ -364,13 +399,8 @@
     const lbEntries=meshLBR.status==="fulfilled"&&meshLBR.value?.data?.entries?meshLBR.value.data.entries:[];
     const lbEntry=lbEntries.find(e=>(e.wallet||"").toLowerCase()===addr)||null;
 
-    // Cards via OpenSea
-    let ownedCards=[];
-    try{
-      const r=await fetch('/api/opensea?path='+encodeURIComponent(`/api/v2/chain/abstract/account/${addr}/nfts?limit=200`));
-      const j=await r.json();
-      ownedCards=(j.nfts||[]).filter(n=>n.contract?.toLowerCase()===CARDS.toLowerCase()).map(n=>parseInt(n.identifier||n.token_id||0)).filter(Boolean);
-    }catch(_){}
+    // Cards: OpenSea first, on-chain net-holdings fallback (proven scanner method)
+    let ownedCards=await ownedTokenIds(addr);
 
     // Card stats from rarity index
     let cardStats={};
