@@ -51,7 +51,7 @@
   .hs .hv{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;margin-top:4px;letter-spacing:-.5px}
   .hv.g{color:var(--green-b)}
   .score-block{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 14px 0;align-self:center}
-  .score-gauge{position:relative;filter:drop-shadow(0 6px 24px rgba(35,224,122,.18))}
+  .score-gauge{position:relative;filter:drop-shadow(0 4px 16px rgba(35,224,122,.12))}
   .score-tier{font-size:13px;font-weight:800;letter-spacing:.3px}
   .score-sub{font-size:10px;color:var(--faint);font-weight:600;font-family:'JetBrains Mono',monospace;letter-spacing:.3px}
 
@@ -241,30 +241,29 @@
   }
 
   function scoreTier(s){
-    if(s>=1500)return{label:"Elite Operator",c:"#a06bff"};
-    if(s>=800)return{label:"Veteran",c:"#f5c451"};
-    if(s>=300)return{label:"Active",c:"#23e07a"};
-    if(s>=80)return{label:"Emerging",c:"#22d3ee"};
+    if(s>=8000)return{label:"Elite Operator",c:"#a06bff"};
+    if(s>=3000)return{label:"Veteran",c:"#f5c451"};
+    if(s>=1000)return{label:"Active",c:"#23e07a"};
+    if(s>=250)return{label:"Emerging",c:"#22d3ee"};
     return{label:"Newcomer",c:"rgba(234,242,236,.55)"};
   }
+  function tierFill(s){return s>=8000?.94:s>=3000?.78:s>=1000?.58:s>=250?.38:.2;}
 
-  function svgScoreGauge(score,size=148){
-    const max=2000,r=60,cx=74,cy=74,C=2*Math.PI*r;
-    const pct=Math.min(1,score/max),used=pct*C;
-    const t=scoreTier(score);
-    return `<svg viewBox="0 0 148 148" width="${size}" height="${size}">
-      <defs>
-        <linearGradient id="sg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#23e07a"/><stop offset="100%" stop-color="#0a8f43"/></linearGradient>
-        <filter id="sglow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      </defs>
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="9"/>
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="url(#sg)" stroke-width="9" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})" stroke-dasharray="${used.toFixed(1)} ${(C-used).toFixed(1)}" filter="url(#sglow)" style="transition:stroke-dasharray 1.3s cubic-bezier(.2,.7,.2,1)"/>
-      <text x="${cx}" y="${cy-4}" text-anchor="middle" fill="#eaf2ec" font-size="34" font-weight="900" font-family="JetBrains Mono" letter-spacing="-1">${fmtN(score)}</text>
-      <text x="${cx}" y="${cy+15}" text-anchor="middle" fill="rgba(35,224,122,.8)" font-size="9" font-weight="800" font-family="Inter" letter-spacing="2.5">OPERATOR SCORE</text>
+  function svgScoreGauge(score,fillPct,size=150){
+    const r=62,cx=75,cy=75,C=2*Math.PI*r;
+    const pct=Math.max(.04,Math.min(1,fillPct||0)),used=pct*C;
+    const numStr=fmtN(score);
+    const fs=numStr.length>=6?27:numStr.length>=5?31:36;
+    return `<svg viewBox="0 0 150 150" width="${size}" height="${size}">
+      <defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2bf08a"/><stop offset="55%" stop-color="#12c266"/><stop offset="100%" stop-color="#0a8f43"/></linearGradient></defs>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="7"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="url(#sg)" stroke-width="7" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})" stroke-dasharray="${used.toFixed(1)} ${(C-used).toFixed(1)}" style="transition:stroke-dasharray 1.3s cubic-bezier(.2,.7,.2,1)"/>
+      <text x="${cx}" y="${cy+2}" text-anchor="middle" fill="#fff" font-size="${fs}" font-weight="800" font-family="JetBrains Mono" letter-spacing="-1">${numStr}</text>
+      <text x="${cx}" y="${cy+20}" text-anchor="middle" fill="rgba(35,224,122,.7)" font-size="8.5" font-weight="800" font-family="Inter" letter-spacing="2.2">OPERATOR SCORE</text>
     </svg>`;
   }
 
-  function renderHero({addr,idn,mesh,lbEntry,score}){
+  function renderHero({addr,idn,mesh,lbEntry,score,lbTotal}){
     const fac=FAC[idn.faction]||null;
     const nm=idn.name||sa(addr);
     const joinDate=mesh?.first_claim_at?new Date(mesh.first_claim_at).toLocaleDateString():null;
@@ -293,9 +292,9 @@
         </div>
       </div>
       <div class="score-block">
-        <div class="score-gauge">${svgScoreGauge(score.score)}</div>
+        <div class="score-gauge">${svgScoreGauge(score.score,(lbEntry?(1-(lbEntry.rank-1)/(lbTotal||68)):tierFill(score.score)))}</div>
         <div class="score-tier" style="color:${scoreTier(score.score).c}">${scoreTier(score.score).label}</div>
-        <div class="score-sub">Reproducible · ${score.breakdown.length} factors</div>
+        <div class="score-sub">${lbEntry?("Top "+Math.max(1,Math.round((lbEntry.rank)/(lbTotal||68)*100))+"% · Mesh #"+lbEntry.rank):("Reproducible · "+score.breakdown.length+" factors")}</div>
       </div>
     `;
   }
@@ -410,7 +409,7 @@
 
     const scoreObj=computeScore({cards:ownedCards,cardStats,mesh,lbEntry});
 
-    renderHero({addr,idn,mesh,lbEntry,score:scoreObj});
+    renderHero({addr,idn,mesh,lbEntry,score:scoreObj,lbTotal:lbEntries.length});
     if(idn.name)document.title=esc(idn.name)+" — Operator Profile";
 
     // Render main col
