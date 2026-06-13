@@ -165,7 +165,7 @@
   function rel(ts){const s=Math.floor(Date.now()/1e3)-ts;if(s<60)return s+"s ago";if(s<3600)return(s/60|0)+"m ago";if(s<86400)return(s/3600|0)+"h ago";return(s/86400|0)+"d ago";}
   function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function openX(e,h){e.preventDefault();e.stopPropagation();window.open('https://x.com/'+h,'_blank','noopener');}
-  const FAC={horizon:{c:"#12a150",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
+  const FAC={horizon:{c:"#D1AB58",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
   function facBadge(f){const x=FAC[f];if(!x)return '';return '<span class="fac" style="--fc:'+x.c+'">'+x.n+'</span>';}
   function set(id,t){const e=document.getElementById(id);if(e)e.textContent=t;}
 

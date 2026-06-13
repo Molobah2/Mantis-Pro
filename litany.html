@@ -333,7 +333,7 @@
   // ── identity helpers (names + avatars come from the cached API) ──
   function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   function openX(e,h){e.preventDefault();e.stopPropagation();window.open('https://x.com/'+h,'_blank','noopener');}
-  const FAC={horizon:{c:"#12a150",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
+  const FAC={horizon:{c:"#D1AB58",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
   function facBadge(f){const x=FAC[f];if(!x)return f?('<span class="fac">'+esc(f)+'</span>'):'';return '<span class="fac" style="--fc:'+x.c+'">'+x.n+'</span>';}
   document.getElementById("opsearch").addEventListener("keydown",e=>{if(e.key==="Enter"){const v=e.target.value.trim();location.href=/^0x[a-fA-F0-9]{40}$/.test(v)?"/litany/scanner#"+v:"/litany/scanner";}});
 
