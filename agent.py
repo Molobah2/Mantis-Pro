@@ -115,6 +115,23 @@ def card_image(token_id):
     resp.headers["Cache-Control"] = "public, max-age=604800"
     return resp
 
+@app.route("/api/card-meta/<int:token_id>")
+def card_meta(token_id):
+    from flask import Response
+    if not (1 <= token_id <= 8000):
+        return jsonify({"error": "invalid"}), 404
+    try:
+        uri = _cards().functions.tokenURI(token_id).call()
+        b64_json = uri.split(",", 1)[1] if "," in uri else uri
+        b64_json += "=" * ((4 - len(b64_json) % 4) % 4)
+        meta = json.loads(base64.b64decode(b64_json))
+        meta.pop("image", None)   # strip the giant SVG before sending
+        resp = jsonify(meta)
+        resp.headers["Cache-Control"] = "public, max-age=604800"
+        return resp
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/operator/<address>")
 def operator_profile(address):
     import os

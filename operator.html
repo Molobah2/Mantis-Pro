@@ -135,9 +135,56 @@
   @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
 
   .fstate{padding:30px;text-align:center;color:var(--faint);font-size:12px;font-family:'JetBrains Mono',monospace}
+
+  /* CARD MODAL */
+  .modal-bg{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
+  .modal-bg.open{opacity:1;pointer-events:all}
+  .modal{background:#0e1812;border:1px solid rgba(35,224,122,.2);border-radius:20px;width:100%;max-width:680px;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.6),0 0 0 1px rgba(35,224,122,.08)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
+  .modal-head h2{font-size:16px;font-weight:800;letter-spacing:-.3px}
+  .modal-close{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer;display:grid;place-items:center;font-size:16px;transition:.15s}
+  .modal-close:hover{border-color:var(--line2);color:var(--ink)}
+  .modal-body{display:grid;grid-template-columns:200px 1fr;gap:20px;padding:22px}
+  @media(max-width:560px){.modal-body{grid-template-columns:1fr}}
+  .modal-art{width:200px;height:200px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);object-fit:contain;display:block}
+  .modal-art-ph{width:200px;height:200px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:12px}
+  .modal-meta{display:flex;flex-direction:column;gap:10px}
+  .modal-meta .mm-row{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--panel);border-radius:9px;gap:12px}
+  .modal-meta .mm-k{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--faint)}
+  .modal-meta .mm-v{font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;text-align:right}
+  .modal-traits{padding:0 22px 22px;display:flex;flex-direction:column;gap:8px}
+  .modal-traits h3{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+  .trait-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+  .trait{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .trait .tk{font-size:9.5px;color:var(--faint);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:3px}
+  .trait .tv{font-size:13px;font-weight:700;color:var(--ink)}
+  .modal-foot{padding:14px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
+  .modal-foot a{font-size:12.5px;font-weight:700;padding:8px 16px;border-radius:9px;border:1px solid var(--line);color:var(--muted);transition:.15s}
+  .modal-foot a:hover{border-color:rgba(35,224,122,.4);color:var(--green-b)}
+  .modal-foot a.primary{background:var(--green-b);color:#04140a;border-color:transparent}
+  .modal-foot a.primary:hover{background:#1ff076}
 </style>
 </head>
 <body>
+
+<!-- CARD MODAL -->
+<div class="modal-bg" id="card-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-title">Litany Card</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-art-wrap"><div class="modal-art-ph" id="modal-art-ph">Loading…</div></div>
+      <div class="modal-meta" id="modal-meta"></div>
+    </div>
+    <div class="modal-traits" id="modal-traits" style="display:none">
+      <h3>Traits</h3>
+      <div class="trait-grid" id="modal-trait-grid"></div>
+    </div>
+    <div class="modal-foot" id="modal-foot"></div>
+  </div>
+</div>
 
 <div class="nav">
   <div class="brand"><div class="m">◎</div><div>OPERATOR PROFILE<small>Mantis · Intelligence</small></div></div>
@@ -321,8 +368,7 @@
       {val:tiers.Common,c:"var(--common)",n:"Common"},
     ].filter(d=>d.val>0);
     const grid=ownedCards.slice(0,48).map(id=>{const t=tierOf(cardStats[id]);
-      const osUrl=`https://opensea.io/assets/abstract/${CARDS}/${id}`;
-      return `<div class="citem" onclick="window.open('${osUrl}','_blank')"><img src="/api/card-image/${id}" loading="lazy" onerror="this.style.background='var(--panel2)'"><div class="cid">#${id}</div>${t?`<div class="ctier ${t.c}">${t.n.slice(0,3)}</div>`:""}</div>`;}).join("");
+      return `<div class="citem" onclick="openCard(${id},${JSON.stringify(cardStats[id]||null)})"><img src="/api/card-image/${id}" loading="lazy" onerror="this.style.background='var(--panel2)'"><div class="cid">#${id}</div>${t?`<div class="ctier ${t.c}">${t.n.slice(0,3)}</div>`:""}</div>`;}).join("");
     const bestC=cardStats[bestCard];
     const hasRarity=Object.keys(cardStats).length>0;
     const avgPct=hasRarity&&ownedCards.length?Math.round(ownedCards.map(id=>cardStats[id]?.percentile||0).reduce((a,b)=>a+b,0)/ownedCards.length):null;
@@ -449,6 +495,57 @@
     renderRanks({lbEntry,lbEntries,ownedCards,cardStats});
     renderScore(scoreObj,document.getElementById("score-sb"));
   })();
+
+  // ── CARD MODAL ──────────────────────────────────────────────
+  function closeModal(){document.getElementById("card-modal").classList.remove("open");}
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+
+  async function openCard(tokenId, cardStatData){
+    const modal=document.getElementById("card-modal");
+    const t=tierOf(cardStatData);
+    document.getElementById("modal-title").textContent="Litany Card #"+tokenId;
+    document.getElementById("modal-art-ph").textContent="Loading card…";
+    document.getElementById("modal-art-ph").style.display="flex";
+    document.getElementById("modal-meta").innerHTML="";
+    document.getElementById("modal-traits").style.display="none";
+    document.getElementById("modal-foot").innerHTML="";
+    modal.classList.add("open");
+
+    // Card art
+    const artWrap=document.getElementById("modal-art-wrap");
+    artWrap.innerHTML=`<img class="modal-art" src="/api/card-image/${tokenId}" alt="Card #${tokenId}" onerror="this.outerHTML='<div class=modal-art-ph>Art unavailable</div>'">`;
+
+    // Meta rows
+    const rank=cardStatData?.rank||"—";
+    const pct=cardStatData?.percentile!=null?cardStatData.percentile.toFixed(1)+"th":"—";
+    const score=cardStatData?.score!=null?Number(cardStatData.score).toFixed(2):"—";
+    const tierLabel=t?t.n:"Unknown";
+    const tierColor=t?t.color:"var(--faint)";
+    document.getElementById("modal-meta").innerHTML=`
+      <div class="mm-row"><span class="mm-k">Token ID</span><span class="mm-v">#${tokenId}</span></div>
+      <div class="mm-row"><span class="mm-k">Rarity Rank</span><span class="mm-v">${rank} / 3,021</span></div>
+      <div class="mm-row"><span class="mm-k">Percentile</span><span class="mm-v">${pct}</span></div>
+      <div class="mm-row"><span class="mm-k">Rarity Score</span><span class="mm-v">${score}</span></div>
+      <div class="mm-row"><span class="mm-k">Tier</span><span class="mm-v" style="color:${tierColor}">${tierLabel}</span></div>
+    `;
+
+    // Traits from tokenURI (decoded on-chain metadata)
+    try{
+      const meta=await fetch('/api/card-meta/'+tokenId).then(r=>r.json());
+      if(meta&&meta.attributes&&meta.attributes.length){
+        const grid=meta.attributes.map(a=>`<div class="trait"><div class="tk">${esc(a.trait_type||a.key||"")}</div><div class="tv">${esc(String(a.value||""))}</div></div>`).join("");
+        document.getElementById("modal-trait-grid").innerHTML=grid;
+        document.getElementById("modal-traits").style.display="block";
+      }
+    }catch(_){}
+
+    // Footer links
+    document.getElementById("modal-foot").innerHTML=`
+      <a href="https://abscan.org/token/${CARDS}?a=${tokenId}" target="_blank">Abscan ↗</a>
+      <a href="https://opensea.io/assets/abstract/${CARDS}/${tokenId}" target="_blank">OpenSea ↗</a>
+      <a href="/litany/rarity#${tokenId}" class="primary">Rarity Engine ↗</a>
+    `;
+  }
 </script>
 </body>
 </html>
