@@ -174,18 +174,25 @@
   function fmtN(n){return Number(n||0).toLocaleString();}
   function pad(a){return "0x000000000000000000000000"+a.toLowerCase().replace(/^0x/,"");}
 
-  // Proven holdings method (from scanner): OpenSea first, on-chain net-holdings fallback.
+  // Proven holdings: paginate OpenSea fully, on-chain fallback if zero returned.
   async function ownedTokenIds(wallet){
     try{
-      const r=await fetch('/api/opensea?path='+encodeURIComponent('/api/v2/chain/abstract/account/'+wallet+'/nfts?limit=200'));
-      const j=await r.json();
-      const ids=(j.nfts||[]).filter(n=>(n.contract||"").toLowerCase()===CARDS.toLowerCase()).map(n=>parseInt(n.identifier||n.token_id||0)).filter(Boolean);
+      let ids=[],next=null,pages=0;
+      do{
+        const path='/api/v2/chain/abstract/account/'+wallet+'/nfts?limit=50'+(next?'&next='+encodeURIComponent(next):'');
+        const j=await fetch('/api/opensea?path='+encodeURIComponent(path)).then(r=>r.json());
+        const page=(j.nfts||[]).filter(n=>(n.contract||"").toLowerCase()===CARDS.toLowerCase()).map(n=>parseInt(n.identifier||n.token_id||0)).filter(Boolean);
+        ids=ids.concat(page);
+        next=j.next||null;
+        pages++;
+      }while(next&&pages<10);
       if(ids.length)return ids;
     }catch(_){}
+    // On-chain fallback: compute net holdings from Transfer logs
     try{
       const [recv,sent]=await Promise.all([
         rpc("eth_getLogs",[{address:CARDS,topics:[TT,null,pad(wallet)],fromBlock:"0x0",toBlock:"latest"}]),
-        rpc("eth_getLogs",[{address:CARDS,topics:[TT,pad(wallet)],fromBlock:"0x0",toBlock:"latest"}])
+        rpc("eth_getLogs",[{address:CARDS,topics:[TT,pad(wallet),null],fromBlock:"0x0",toBlock:"latest"}])
       ]);
       const net={};
       (recv||[]).forEach(l=>{const id=BigInt(l.topics[3]).toString();net[id]=(net[id]||0)+1;});
@@ -313,19 +320,21 @@
       {val:tiers.Uncommon,c:"var(--unc)",n:"Uncommon"},
       {val:tiers.Common,c:"var(--common)",n:"Common"},
     ].filter(d=>d.val>0);
-    const grid=ownedCards.slice(0,20).map(id=>{const t=tierOf(cardStats[id]);
-      return `<div class="citem" onclick="window.location='/litany/rarity#${id}'"><img src="/api/card-image/${id}" loading="lazy" onerror="this.style.background='var(--panel2)';this.style.display='flex'"><div class="cid">#${id}</div>${t?`<div class="ctier ${t.c}">${t.n.slice(0,3)}</div>`:""}</div>`;}).join("");
+    const grid=ownedCards.slice(0,48).map(id=>{const t=tierOf(cardStats[id]);
+      const osUrl=`https://opensea.io/assets/abstract/${CARDS}/${id}`;
+      return `<div class="citem" onclick="window.open('${osUrl}','_blank')"><img src="/api/card-image/${id}" loading="lazy" onerror="this.style.background='var(--panel2)'"><div class="cid">#${id}</div>${t?`<div class="ctier ${t.c}">${t.n.slice(0,3)}</div>`:""}</div>`;}).join("");
     const bestC=cardStats[bestCard];
-    const avgPct=ownedCards.length?Math.round(ownedCards.map(id=>cardStats[id]?.percentile||0).reduce((a,b)=>a+b,0)/ownedCards.length):0;
+    const hasRarity=Object.keys(cardStats).length>0;
+    const avgPct=hasRarity&&ownedCards.length?Math.round(ownedCards.map(id=>cardStats[id]?.percentile||0).reduce((a,b)=>a+b,0)/ownedCards.length):null;
     document.getElementById("sec-cards").querySelector(".sb").innerHTML=`
-      <div class="cgrid">${grid}${ownedCards.length>20?`<div style="display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--faint)">+${ownedCards.length-20} more</div>`:""}</div>
+      <div class="cgrid">${grid}${ownedCards.length>48?`<div style="display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);font-weight:600;border:1px dashed var(--line);border-radius:8px;min-height:64px">+${ownedCards.length-48} more</div>`:""}</div>
       <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding-top:14px;border-top:1px solid var(--line)">
         ${svgDonut(donutData)}
         <div class="donut-legend">${donutData.map(d=>`<div class="leg-item"><div class="leg-dot" style="background:${d.c}"></div><span class="leg-label">${d.n}</span><span class="leg-val">${d.val}</span></div>`).join("")}</div>
         <div style="display:flex;flex-direction:column;gap:8px;min-width:140px">
           <div class="stat-box"><div class="sk">Total Cards</div><div class="sv" style="color:var(--green-b)">${ownedCards.length}</div></div>
           <div class="stat-box"><div class="sk">Best Card</div><div class="sv" style="font-size:14px">#${bestCard} ${bestC?`<span style="font-size:10px;color:var(--faint)">top ${(100-bestC.percentile).toFixed(1)}%</span>`:""}</div></div>
-          <div class="stat-box"><div class="sk">Avg Quality</div><div class="sv">${avgPct}th pct</div></div>
+          <div class="stat-box"><div class="sk">Avg Quality</div><div class="sv">${avgPct!==null?avgPct+'th pct':'—'}</div></div>
         </div>
       </div>`;
   }
@@ -401,10 +410,17 @@
     // Cards: OpenSea first, on-chain net-holdings fallback (proven scanner method)
     let ownedCards=await ownedTokenIds(addr);
 
-    // Card stats from rarity index
+    // Card stats: fetch in batches of 100 to cover all cards
     let cardStats={};
     if(ownedCards.length){
-      try{const r=await fetch('/api/card-stats?ids='+ownedCards.slice(0,100).join(','));const j=await r.json();Object.keys(j).forEach(k=>{cardStats[parseInt(k)]=j[k];});}catch(_){}
+      try{
+        const batches=[];
+        for(let i=0;i<ownedCards.length;i+=100)batches.push(ownedCards.slice(i,i+100));
+        await Promise.all(batches.map(async batch=>{
+          const j=await fetch('/api/card-stats?ids='+batch.join(',')).then(r=>r.json());
+          Object.keys(j).forEach(k=>{cardStats[parseInt(k)]=j[k];});
+        }));
+      }catch(_){}
     }
 
     const scoreObj=computeScore({cards:ownedCards,cardStats,mesh,lbEntry});
