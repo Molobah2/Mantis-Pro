@@ -27,13 +27,21 @@
   .head h1 b{color:var(--green)}
   .head p{color:var(--muted);font-size:15px;margin-top:8px;max-width:560px;margin-inline:auto}
 
-  .search{display:flex;gap:10px;max-width:680px;margin:26px auto 0}
+  .search{display:flex;gap:10px;max-width:680px;margin:26px auto 0;position:relative}
   .search input{flex:1;background:#fff;border:1px solid var(--line);border-radius:12px;padding:15px 18px;font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--ink);outline:none;box-shadow:var(--shadow-sm)}
   .search input:focus{border-color:var(--green)}
   .search button{background:var(--green);color:#fff;border:none;border-radius:12px;padding:0 26px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;transition:.2s}
   .search button:hover{background:var(--green-deep)}
   .search button:disabled{opacity:.5;cursor:default}
   .hint{text-align:center;color:var(--faint);font-size:12px;margin-top:10px;font-family:'JetBrains Mono',monospace}
+  .ac-list{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 32px rgba(8,22,14,.12);z-index:100;overflow:hidden;max-height:280px;overflow-y:auto}
+  .ac-item{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;transition:.12s;border-bottom:1px solid var(--line-soft);font-size:13px}
+  .ac-item:last-child{border-bottom:none}
+  .ac-item:hover{background:var(--green-soft)}
+  .ac-name{font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ac-addr{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);flex-shrink:0}
+  .id-avatar{width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--line);flex-shrink:0;background:var(--bg)}
+  .id-addr{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:2px}
 
   .report{margin-top:34px;display:none}
   .report.show{display:block}
@@ -109,6 +117,7 @@
     <div class="search">
       <input id="addr" type="text" placeholder="0x… wallet address or operator name" autocomplete="off" spellcheck="false">
       <button id="go">Analyze</button>
+      <div id="ac-list" class="ac-list" hidden></div>
     </div>
     <div class="hint">Search by wallet address or operator name · reads balanceOf + tokenURI from the verified LitanyCards contract · floor from OpenSea</div>
   </div>
@@ -136,6 +145,49 @@
   function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
   let resolvedName=null;
   const FAC={horizon:"#D1AB58",lens:"#2f6df0",breach:"#e5484d"};
+
+  async function fetchIdentity(w){
+    try{const j=await fetch('/api/identities?addrs='+w).then(r=>r.json());return j[w.toLowerCase()]||null;}catch(_){return null;}
+  }
+
+  function profileHead(wallet,identity,subtitle,rightHTML){
+    const displayName=(identity&&identity.name)||resolvedName||null;
+    const faction=identity&&identity.faction;
+    const facColor=faction?(FAC[faction]||'#8a958d'):null;
+    const facBadge=faction?'<span class="opfac" style="--fc:'+facColor+';margin-left:8px">'+esc(faction)+'</span>':'';
+    return '<div class="profile">'
+      +'<div class="who" style="display:flex;align-items:flex-start;gap:14px">'
+      +'<img class="id-avatar" src="/api/avatar?addr='+wallet+'" alt="">'
+      +'<div>'
+      +'<div class="addr">'+(displayName?esc(displayName):short(wallet))+facBadge+'</div>'
+      +(displayName?'<div class="id-addr">'+short(wallet)+'</div>':'')
+      +'<div class="sub">'+subtitle+'</div>'
+      +'<a href="/operator/'+wallet+'" class="op-link">View Operator Profile →</a>'
+      +'</div></div>'
+      +rightHTML
+      +'</div>';
+  }
+
+  let acTimer=null, acData=[];
+  const acList=document.getElementById('ac-list');
+  function hideAc(){acList.hidden=true;}
+  function showAc(results){
+    if(!results.length){hideAc();return;}
+    acData=results;
+    acList.innerHTML=results.map((r,i)=>{
+      const fc=r.faction?'<span class="opfac" style="--fc:'+(FAC[r.faction]||'#8a958d')+'">'+esc(r.faction)+'</span>':'';
+      return '<div class="ac-item" data-i="'+i+'"><span class="ac-name">'+(r.name?esc(r.name):short(r.address))+'</span>'+fc+'<span class="ac-addr">'+short(r.address)+'</span></div>';
+    }).join('');
+    acList.hidden=false;
+    acList.querySelectorAll('.ac-item').forEach(el=>el.addEventListener('mousedown',e=>{
+      e.preventDefault();
+      const r=acData[+el.dataset.i];
+      resolvedName=r.name||null;
+      addrEl.value=r.address;
+      hideAc();
+      analyze(r.address);
+    }));
+  }
 
   const report=document.getElementById("report"), goBtn=document.getElementById("go"), addrEl=document.getElementById("addr");
 
@@ -196,23 +248,24 @@
     if(!/^0x[a-fA-F0-9]{40}$/.test(raw)){return operatorSearch(raw);}
     const wallet=raw;
     if(!forceAddr)resolvedName=null;
-    goBtn.disabled=true;loading();
+    hideAc();goBtn.disabled=true;loading();
     try{
-      // balance
-      const balHex=await rpc("eth_call",[{to:CARDS,data:"0x70a08231"+wallet.slice(2).toLowerCase().padStart(64,"0")},"latest"]);
+      const [balHex,identity]=await Promise.all([
+        rpc("eth_call",[{to:CARDS,data:"0x70a08231"+wallet.slice(2).toLowerCase().padStart(64,"0")},"latest"]),
+        fetchIdentity(wallet)
+      ]);
+      if(!resolvedName&&identity&&identity.name)resolvedName=identity.name;
       const balance=hi(balHex);
-      if(balance===0){report.className="report show";report.innerHTML=
-        '<div class="profile"><div class="who"><div class="addr">'+(resolvedName?esc(resolvedName):short(wallet))+'</div><div class="sub">No Litany Cards held by this wallet.</div><a href="/operator/'+wallet+'" class="op-link">View Operator Profile →</a></div><div class="big"><div class="n">0</div><div class="l">Cards</div></div></div>';
+      if(balance===0){report.className="report show";
+        report.innerHTML=profileHead(wallet,identity,'No Litany Cards held by this wallet.','<div class="big"><div class="n">0</div><div class="l">Cards</div></div>');
         goBtn.disabled=false;return;}
 
-      // owned ids + market floor (parallel)
-      const [ids, floor] = await Promise.all([
+      const [ids,floor]=await Promise.all([
         ownedTokenIds(wallet),
         (async()=>{try{const c=await osea("/api/v2/chain/abstract/contract/"+CARDS);const slug=c.collection||(c.contract&&c.contract.collection);if(!slug)return null;const s=await osea("/api/v2/collections/"+slug+"/stats");return (s.total&&s.total.floor_price)??null;}catch(_){return null;}})()
       ]);
 
-      let cards=[];
-      let enumNote="";
+      let cards=[],enumNote="";
       if(ids&&ids.length){
         const detail=ids.slice(0,MAX_CARDS_DETAIL);
         cards=await Promise.all(detail.map(cardMeta));
@@ -220,12 +273,12 @@
       }else{
         enumNote="Token-level detail unavailable (set OpenSea key or RPC log range too large). Holdings count is still verified onchain.";
       }
-      render(wallet,balance,cards,floor,enumNote);
+      render(wallet,balance,cards,floor,enumNote,identity);
     }catch(e){fail("Scan failed: "+e.message);}
     finally{goBtn.disabled=false;}
   }
 
-  function render(wallet,balance,cards,floor,enumNote){
+  function render(wallet,balance,cards,floor,enumNote,identity){
     // within-wallet breakdown from real attributes
     const cat={}, numAgg={}, numCnt={};
     cards.forEach(c=>{Object.entries(c.attrs).forEach(([k,v])=>{
@@ -240,11 +293,8 @@
     const floorVal = floor!=null ? (floor*balance) : null;
 
     let h="";
-    // profile
-    const title = resolvedName ? esc(resolvedName) : short(wallet);
-    h+='<div class="profile"><div class="who"><div class="addr">'+title+' <span class="badge b-on" style="margin-left:6px">Verified Onchain</span></div><div class="sub">'+(resolvedName?short(wallet)+' · ':'')+'Litany Card holdings · read from contract</div>'+
-       '<a href="/operator/'+wallet+'" class="op-link">View Operator Profile →</a></div>'+
-       '<div class="big"><div class="n">'+balance+'</div><div class="l">Cards Held</div></div></div>';
+    h+=profileHead(wallet,identity,'Litany Card holdings · read from contract <span class="badge b-on" style="margin-left:4px">Verified Onchain</span>',
+      '<div class="big"><div class="n">'+balance+'</div><div class="l">Cards Held</div></div>');
 
     // collection breakdown
     h+='<div class="sec"><h2>Collection Breakdown <span class="badge b-on">Verified Onchain</span></h2><div class="grid g4">';
@@ -304,7 +354,18 @@
   }
 
   goBtn.addEventListener("click",analyze);
-  addrEl.addEventListener("keydown",e=>{if(e.key==="Enter")analyze();});
+  addrEl.addEventListener("keydown",e=>{if(e.key==="Enter"){hideAc();analyze();}});
+  addrEl.addEventListener('input',()=>{
+    clearTimeout(acTimer);
+    const v=addrEl.value.trim();
+    if(v.length<2||/^0x[0-9a-fA-F]{38,}$/.test(v)){hideAc();return;}
+    acTimer=setTimeout(async()=>{
+      let res=[];
+      try{res=await fetch('/api/operator-search?q='+encodeURIComponent(v)).then(r=>r.json());}catch(_){}
+      showAc(res||[]);
+    },250);
+  });
+  addrEl.addEventListener('blur',()=>setTimeout(hideAc,200));
 
   // auto-run: #hash address OR ?q= name query from dashboard search
   (function(){
