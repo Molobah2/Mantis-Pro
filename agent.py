@@ -330,7 +330,15 @@ def _resolve_portal(addr):
         user = j.get("user") if isinstance(j.get("user"), dict) else j
         username = user.get("username") or user.get("name") or user.get("handle")
         raw_av = user.get("overrideProfilePictureUrl") or user.get("pfp") or user.get("profilePicture") or user.get("image")
-        avatar = raw_av if isinstance(raw_av, str) and raw_av.startswith("http") else None
+        if isinstance(raw_av, str) and raw_av.startswith("http"):
+            avatar = raw_av
+        else:
+            av_obj = user.get("avatar") if isinstance(user.get("avatar"), dict) else None
+            if av_obj and av_obj.get("assetType") == "avatar":
+                s, t, k = av_obj.get("season", 1), av_obj.get("tier", 1), av_obj.get("key", 1)
+                avatar = f"https://abstract-assets.abs.xyz/avatars/{s}-{t}-{k}.png"
+            else:
+                avatar = None
         twitter = user.get("twitter") or user.get("x") or user.get("xHandle")
         if isinstance(twitter, str):
             twitter = twitter.lstrip("@").rstrip("/").split("/")[-1] or None
