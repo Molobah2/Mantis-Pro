@@ -223,7 +223,7 @@ def opensea_proxy():
 # Multi-layer cache: SQLite (persistent) + in-memory hot mirror + cached avatar bytes.
 # Feed payloads are served from cache; a background thread refreshes stale entries.
 _ID_TTL = 48 * 3600        # identity freshness window
-AGW_PROFILE_URL = os.environ.get("AGW_PROFILE_URL", "").strip()
+AGW_PROFILE_URL = os.environ.get("AGW_PROFILE_URL", "https://backend.portal.abs.xyz/api/user/address/{address}").strip()
 _ID_DB = os.path.join(os.path.dirname(__file__), "identities.db")
 _id_lock = threading.Lock()
 _id_mem = {}               # wallet -> row dict (hot mirror)
@@ -329,7 +329,8 @@ def _resolve_portal(addr):
         j = resp.json()
         user = j.get("user") if isinstance(j.get("user"), dict) else j
         username = user.get("username") or user.get("name") or user.get("handle")
-        avatar = user.get("avatar") or user.get("pfp") or user.get("profilePicture") or user.get("image")
+        raw_av = user.get("overrideProfilePictureUrl") or user.get("pfp") or user.get("profilePicture") or user.get("image")
+        avatar = raw_av if isinstance(raw_av, str) and raw_av.startswith("http") else None
         twitter = user.get("twitter") or user.get("x") or user.get("xHandle")
         if isinstance(twitter, str):
             twitter = twitter.lstrip("@").rstrip("/").split("/")[-1] or None
