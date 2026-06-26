@@ -115,18 +115,47 @@ a{color:inherit;text-decoration:none}
 .ach-i{width:28px;height:28px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);display:grid;place-items:center;font-size:14px;cursor:pointer;transition:.15s;title:""}
 .ach-i:hover{border-color:rgba(35,224,122,.45);background:var(--gd);transform:translateY(-2px)}
 
-/* — Score Core — */
-.score-core{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:180px;margin-left:28px}
-.sc-rings-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:170px;height:170px}
-.sc-center{position:absolute;text-align:center;pointer-events:none;z-index:10}
-.sc-num{font-size:42px;font-weight:900;font-family:'JetBrains Mono',monospace;letter-spacing:-2px;color:var(--green);line-height:1;text-shadow:0 0 32px rgba(35,224,122,.5)}
-.sc-tier-lbl{font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;margin-top:4px;color:var(--muted)}
-.sc-pct-lbl{font-size:9px;color:var(--faint);margin-top:2px;font-family:'JetBrains Mono',monospace}
-.sc-bdbtn{background:none;border:1px solid var(--line2);border-radius:7px;padding:5px 13px;font-size:10.5px;font-weight:700;color:var(--muted);cursor:pointer;transition:.13s;font-family:inherit;margin-top:2px}
+/* — Intelligence Core — */
+.score-core{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:220px;margin-left:16px}
+/* ic-wrap is the outer 220×220 bounding box — everything lives inside it */
+.ic-wrap{position:relative;width:220px;height:220px;flex-shrink:0;cursor:default;
+  transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.ic-wrap:hover{transform:scale(1.035)}
+.ic-wrap:hover .ic-svg{filter:drop-shadow(0 0 20px rgba(35,224,122,.28))}
+/* canvas sits slightly outside the SVG bounding box to allow atmospheric glow bleed */
+.ic-canvas{position:absolute;top:-22px;left:-22px;width:264px;height:264px;pointer-events:none;border-radius:50%}
+.ic-svg{position:absolute;inset:0;overflow:visible;transition:filter .35s ease}
+/* text overlay — perfectly centered inside the glass disc */
+.ic-text{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;pointer-events:none;z-index:10}
+.ic-score{font-size:44px;font-weight:900;font-family:'JetBrains Mono',monospace;
+  letter-spacing:-2px;color:var(--green);line-height:1;
+  text-shadow:0 0 28px rgba(35,224,122,.5),0 0 60px rgba(35,224,122,.18);
+  transition:text-shadow .4s ease}
+.ic-class{font-size:8.5px;font-weight:800;letter-spacing:3.5px;text-transform:uppercase;
+  color:var(--muted);margin-top:7px}
+.ic-pct{font-size:8.5px;color:var(--faint);font-family:'JetBrains Mono',monospace;
+  margin-top:4px;letter-spacing:.2px}
+/* SVG layer animations */
+.ic-seg-ccw{transform-origin:110px 110px;animation:ic-ring-spin 30s linear infinite reverse}
+.ic-halo-cw{transform-origin:110px 110px;animation:ic-ring-spin 18s linear infinite}
+@keyframes ic-ring-spin{to{transform:rotate(360deg)}}
+/* Pulse when score lands */
+@keyframes ic-score-pulse{
+  0%{text-shadow:0 0 28px rgba(35,224,122,.5),0 0 60px rgba(35,224,122,.18)}
+  45%{text-shadow:0 0 50px rgba(35,224,122,.9),0 0 100px rgba(35,224,122,.45),0 0 160px rgba(35,224,122,.15)}
+  100%{text-shadow:0 0 28px rgba(35,224,122,.5),0 0 60px rgba(35,224,122,.18)}
+}
+.ic-score.pulse{animation:ic-score-pulse .9s ease-out}
+/* Breakdown toggle */
+.sc-bdbtn{background:none;border:1px solid var(--line2);border-radius:7px;padding:5px 13px;
+  font-size:10.5px;font-weight:700;color:var(--muted);cursor:pointer;transition:.13s;font-family:inherit}
 .sc-bdbtn:hover{border-color:rgba(35,224,122,.4);color:var(--green)}
-.bdpanel{display:none;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:200px;margin-top:4px}
+.bdpanel{display:none;background:var(--bg2);border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;width:220px;margin-top:4px}
 .bdpanel.open{display:block}
-.bdrow{display:flex;justify-content:space-between;font-size:10.5px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.bdrow{display:flex;justify-content:space-between;font-size:10.5px;padding:4px 0;
+  border-bottom:1px solid rgba(255,255,255,.04)}
 .bdrow:last-child{border:none;font-weight:800;padding-top:7px}
 .bdk{color:var(--muted)}.bdv{font-family:'JetBrains Mono',monospace;color:var(--green);font-weight:700}
 
@@ -288,8 +317,6 @@ a{color:inherit;text-decoration:none}
 @keyframes breathe{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.85;transform:scale(1.04)}}
 @keyframes beat{0%,100%{box-shadow:0 0 0 0 rgba(35,224,122,.55)}50%{box-shadow:0 0 0 5px rgba(35,224,122,0)}}
 @keyframes node-pulse{0%,100%{box-shadow:0 0 20px rgba(35,224,122,.35),0 0 0 4px var(--bg2)}50%{box-shadow:0 0 36px rgba(35,224,122,.6),0 0 0 4px var(--bg2)}}
-@keyframes score-spin{to{transform:rotate(360deg)}}
-@keyframes score-spin-r{to{transform:rotate(-360deg)}}
 @keyframes star-pulse{0%,100%{r:4;opacity:.8}50%{r:6;opacity:1}}
 @keyframes fade-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes rowin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -366,11 +393,14 @@ a{color:inherit;text-decoration:none}
       </div>
 
       <div class="score-core">
-        <div class="sc-rings-wrap" id="scwrap">
-          <div class="sc-center">
-            <div class="sc-num" id="scnum">0</div>
-            <div class="sc-tier-lbl" id="sctier">—</div>
-            <div class="sc-pct-lbl" id="scpct"></div>
+        <!-- Intelligence Core — everything lives inside the circle -->
+        <div class="ic-wrap" id="scwrap">
+          <canvas class="ic-canvas" id="ic-canvas" width="264" height="264"></canvas>
+          <svg class="ic-svg" id="ic-svg" viewBox="0 0 220 220" width="220" height="220"></svg>
+          <div class="ic-text">
+            <div class="ic-score" id="scnum">0</div>
+            <div class="ic-class" id="sctier"></div>
+            <div class="ic-pct" id="scpct"></div>
           </div>
         </div>
         <button class="sc-bdbtn" onclick="toggleBd()">Breakdown ⊞</button>
@@ -531,52 +561,121 @@ async function ownedTokenIds(wallet){
   }catch(_){return[];}
 }
 
-// ── SCORE CORE SVG ──
-function scoreCoreHTML(score,fill,facColor){
-  const W=170,cx=85,cy=85;
-  const C1=2*Math.PI*72,C2=2*Math.PI*58,C3=2*Math.PI*44;
-  const f=Math.max(0.04,Math.min(.98,fill));
-  const d1=f*C1,d2=f*C2,d3=f*C3;
-  const col=facColor||'#23e07a';
-  return`<svg viewBox="0 0 ${W} ${W}" width="${W}" height="${W}" style="overflow:visible">
+// ── INTELLIGENCE CORE ──
+function buildIntelCore(containerEl, fill, col){
+  const C = col || '#23e07a';
+  const f = Math.max(0.04, Math.min(0.97, fill));
+  const cx = 110, cy = 110;
+  const R_atm=106,R_seg=94,R_track=80,R_halo=64,R_glass=50;
+  const circ = 2*Math.PI*R_track;
+  const arcD = (f*circ).toFixed(1), arcG = (circ-f*circ).toFixed(1);
+  function h2rgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+  const [r,g,b] = (C[0]==='#'&&C.length===7) ? h2rgb(C) : [35,224,122];
+  const rc = a => `rgba(${r},${g},${b},${a})`;
+
+  const svg = containerEl.querySelector('#ic-svg');
+  if(!svg) return;
+  svg.innerHTML = `
 <defs>
-<linearGradient id="sg1" x1="0" y1="0" x2="1" y2="1">
-  <stop offset="0%" stop-color="${col}" stop-opacity=".9"/>
-  <stop offset="100%" stop-color="${col}" stop-opacity=".4"/>
-</linearGradient>
-<filter id="sglow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-<filter id="ssoft"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="ic-glow" x="-80%" y="-80%" width="260%" height="260%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ic-soft" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ic-atm" x="-100%" y="-100%" width="300%" height="300%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="10"/>
+  </filter>
+  <radialGradient id="ic-sheen" cx="32%" cy="26%" r="68%">
+    <stop offset="0%" stop-color="rgba(255,255,255,.16)"/>
+    <stop offset="100%" stop-color="rgba(255,255,255,.01)"/>
+  </radialGradient>
+  <radialGradient id="ic-depth" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="${C}" stop-opacity=".07"/>
+    <stop offset="100%" stop-color="${C}" stop-opacity="0"/>
+  </radialGradient>
 </defs>
-<!-- Track rings -->
-<circle cx="${cx}" cy="${cy}" r="72" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="6"/>
-<circle cx="${cx}" cy="${cy}" r="58" fill="none" stroke="rgba(255,255,255,.04)" stroke-width="5"/>
-<circle cx="${cx}" cy="${cy}" r="44" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="4"/>
-<!-- Outer fill arc -->
-<circle cx="${cx}" cy="${cy}" r="72" fill="none" stroke="url(#sg1)" stroke-width="6" stroke-linecap="round"
-  transform="rotate(-90 ${cx} ${cy})"
-  stroke-dasharray="${d1.toFixed(1)} ${(C1-d1).toFixed(1)}"
-  filter="url(#sglow)"
-  style="transition:stroke-dasharray 1.6s cubic-bezier(.2,.8,.2,1)"/>
-<!-- Spinning accent ring -->
-<g style="animation:score-spin 8s linear infinite;transform-origin:${cx}px ${cy}px">
-  <circle cx="${cx}" cy="${cy}" r="58" fill="none" stroke="${col}" stroke-width="1"
-    stroke-dasharray="12 100" stroke-linecap="round" opacity=".35"/>
+<!-- L1: Atmospheric halo -->
+<circle cx="${cx}" cy="${cy}" r="${R_atm}" fill="none" stroke="${rc(.15)}" stroke-width="24" filter="url(#ic-atm)"/>
+<!-- L2: Segmented ring CCW -->
+<g class="ic-seg-ccw">
+  <circle cx="${cx}" cy="${cy}" r="${R_seg}" fill="none" stroke="${rc(.26)}" stroke-width="1.5" stroke-dasharray="5 16" stroke-linecap="round"/>
 </g>
-<!-- Counter-spin accent -->
-<g style="animation:score-spin-r 12s linear infinite;transform-origin:${cx}px ${cy}px">
-  <circle cx="${cx}" cy="${cy}" r="44" fill="none" stroke="${col}" stroke-width="1"
-    stroke-dasharray="6 60" stroke-linecap="round" opacity=".2"/>
+<!-- L3: Arc track -->
+<circle cx="${cx}" cy="${cy}" r="${R_track}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
+<!-- L3: Arc glow duplicate -->
+<circle cx="${cx}" cy="${cy}" r="${R_track}" fill="none" stroke="${C}" stroke-width="13"
+  stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+  stroke-dasharray="${arcD} ${arcG}" filter="url(#ic-glow)" opacity=".42"/>
+<!-- L3: Arc primary -->
+<circle cx="${cx}" cy="${cy}" r="${R_track}" fill="none" stroke="${C}" stroke-width="5.5"
+  stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+  stroke-dasharray="${arcD} ${arcG}" filter="url(#ic-soft)"/>
+<!-- L4: Energy halo CW -->
+<g class="ic-halo-cw">
+  <circle cx="${cx}" cy="${cy}" r="${R_halo}" fill="none" stroke="${rc(.2)}" stroke-width="1" stroke-dasharray="3 20" stroke-linecap="round"/>
 </g>
-<!-- Inner fill arc -->
-<circle cx="${cx}" cy="${cy}" r="58" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round"
-  transform="rotate(-90 ${cx} ${cy})"
-  stroke-dasharray="${d2.toFixed(1)} ${(C2-d2).toFixed(1)}"
-  filter="url(#ssoft)"
-  opacity=".45"
-  style="transition:stroke-dasharray 1.8s cubic-bezier(.2,.8,.2,1)"/>
-<!-- Center fill -->
-<circle cx="${cx}" cy="${cy}" r="36" fill="rgba(5,9,7,.85)"/>
-</svg>`;
+<!-- L5: Traveling dot -->
+<circle id="ic-dot" cx="${cx}" cy="${cy-R_track}" r="3.5" fill="${C}" filter="url(#ic-soft)" opacity=".95"/>
+<!-- L6: Inner depth gradient -->
+<circle cx="${cx}" cy="${cy}" r="${R_glass}" fill="url(#ic-depth)"/>
+<!-- L7: Glass disc -->
+<circle cx="${cx}" cy="${cy}" r="${R_glass}" fill="${rc(.04)}" stroke="${rc(.24)}" stroke-width="0.8"/>
+<!-- L7: Glass sheen -->
+<circle cx="${cx}" cy="${cy}" r="${R_glass}" fill="url(#ic-sheen)" opacity=".65"/>
+<!-- L7: Inner rim -->
+<circle cx="${cx}" cy="${cy}" r="${R_glass-4}" fill="none" stroke="${rc(.1)}" stroke-width="0.4"/>`;
+
+  const hoverRef = {on:false};
+  containerEl.addEventListener('mouseenter',()=>{hoverRef.on=true;});
+  containerEl.addEventListener('mouseleave',()=>{hoverRef.on=false;});
+
+  const dot = svg.querySelector('#ic-dot');
+  if(dot) _animateDot(dot, R_track, cx, cy, hoverRef);
+  const canvas = containerEl.querySelector('#ic-canvas');
+  if(canvas) _initCoreCanvas(canvas, r, g, b, hoverRef);
+}
+
+function _animateDot(dot, R, cx, cy, hoverRef){
+  let a = -Math.PI/2;
+  (function tick(){
+    a += hoverRef.on ? 0.02 : 0.008;
+    dot.setAttribute('cx', (cx+Math.cos(a)*R).toFixed(2));
+    dot.setAttribute('cy', (cy+Math.sin(a)*R).toFixed(2));
+    requestAnimationFrame(tick);
+  })();
+}
+
+function _initCoreCanvas(canvas, r, g, b, hoverRef){
+  const ctx = canvas.getContext('2d');
+  const W=264, H=264, cx=132, cy=132;
+  // Particles orbit at R=80 in SVG space; canvas is offset -22px so center=(132,132), R=80 unchanged
+  const pts = Array.from({length:8},(_,i)=>({
+    a:(i/8)*2*Math.PI, spd:0.003+Math.random()*.0025,
+    sz:1.2+Math.random()*1.1, al:0.35+Math.random()*.45,
+    orb:80+(Math.random()-.5)*10
+  }));
+  (function tick(){
+    ctx.clearRect(0,0,W,H);
+    const grd=ctx.createRadialGradient(cx,cy,0,cx,cy,78);
+    grd.addColorStop(0,`rgba(${r},${g},${b},0.05)`);
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grd; ctx.fillRect(0,0,W,H);
+    const spd = hoverRef.on ? 2.8 : 1;
+    pts.forEach(p=>{
+      p.a += p.spd*spd;
+      const px=cx+Math.cos(p.a)*p.orb, py=cy+Math.sin(p.a)*p.orb;
+      ctx.save();
+      ctx.globalAlpha=Math.min(1,p.al*(hoverRef.on?1.55:1));
+      ctx.fillStyle=`rgb(${r},${g},${b})`;
+      ctx.shadowBlur=8; ctx.shadowColor=`rgb(${r},${g},${b})`;
+      ctx.beginPath(); ctx.arc(px,py,p.sz,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    });
+    requestAnimationFrame(tick);
+  })();
 }
 
 // ── CONSTELLATION ──
@@ -686,9 +785,15 @@ function renderHeatmap(activeDays){
 }
 
 // ── COUNTER ANIMATION ──
-function countUp(el,target,dur=1200){
+function countUp(el,target,dur=1400){
   const start=Date.now();
-  const tick=()=>{const elapsed=Date.now()-start,prog=Math.min(1,elapsed/dur),val=Math.round(prog*prog*(3-2*prog)*target);el.textContent=fmtN(val);if(prog<1)requestAnimationFrame(tick);};
+  const tick=()=>{
+    const elapsed=Date.now()-start,prog=Math.min(1,elapsed/dur);
+    const ease=1-Math.pow(1-prog,3);
+    el.textContent=fmtN(Math.round(ease*target));
+    if(prog<1){requestAnimationFrame(tick);}
+    else{el.textContent=fmtN(target);el.classList.add('pulse');setTimeout(()=>el.classList.remove('pulse'),900);}
+  };
   requestAnimationFrame(tick);
 }
 
@@ -805,9 +910,9 @@ let _profAddr="";
   const achs=(mesh?.earned_achievement_ids||[]).map(id=>{const a=ACHEIVEMENTS[id]||{n:id,i:"🏅"};return`<div class="ach-i" title="${esc(a.n)}: ${esc(a.d||'')}">${a.i}</div>`;}).join("");
   document.getElementById("hachs").innerHTML=achs;
 
-  // Score core
+  // Score core — populate SVG/canvas layers; text IDs (#scnum,#sctier,#scpct) are already in the DOM
   const fill=tierFill(scoreObj.score,lbEntry,lbTotal);
-  document.getElementById("scwrap").innerHTML=scoreCoreHTML(scoreObj.score,fill,facColor)+'<div class="sc-center"><div class="sc-num" id="scnum">0</div><div class="sc-tier-lbl" id="sctier"></div><div class="sc-pct-lbl" id="scpct"></div></div>';
+  buildIntelCore(document.getElementById("scwrap"),fill,facColor);
   countUp(document.getElementById("scnum"),scoreObj.score);
   const tierColors={Legend:"var(--purple)",Sovereign:"var(--gold)",Architect:"var(--green)",Pathfinder:"var(--blue)"};
   document.getElementById("sctier").textContent=t.n;
