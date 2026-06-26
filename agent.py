@@ -580,6 +580,134 @@ def litany_mesh_proxy():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
 
+# ── AGGREGATED OPERATOR PROFILE ENDPOINT ─────────────────────────
+# Collapses 6+ browser→Flask→external calls into one parallel server fetch.
+# Server-to-server latency is 10-50ms vs 200-500ms browser-initiated.
+
+_op_prof_cache = {}              # addr -> {"ts": float, "data": dict}
+_OP_PROF_TTL   = 120             # 2-minute profile cache
+
+_os_nft_cache  = {}              # addr -> {"ts": float, "ids": list[int]}
+_OS_NFT_TTL    = 300             # 5-minute NFT ownership cache
+
+_floor_cache   = {"val": 0.0, "ts": 0.0}
+_FLOOR_TTL     = 300             # 5-minute floor price cache
+
+def _server_owned_cards(addr):
+    """Fetch owned Litany card IDs. OpenSea primary, RPC transfer-log fallback."""
+    hit = _os_nft_cache.get(addr)
+    if hit and time.time() - hit["ts"] < _OS_NFT_TTL:
+        return hit["ids"]
+    ids = []
+    key = os.environ.get("OPENSEA_API_KEY")
+    if key:
+        try:
+            import urllib.parse
+            nxt, pg = None, 0
+            while pg < 10:
+                url = f"https://api.opensea.io/api/v2/chain/abstract/account/{addr}/nfts?limit=50"
+                if nxt:
+                    url += "&next=" + urllib.parse.quote(nxt)
+                r = requests.get(url, headers={"X-API-KEY": key, "accept": "application/json"}, timeout=15)
+                j = r.json()
+                for n in (j.get("nfts") or []):
+                    if (n.get("contract") or "").lower() == CARDS_ADDR.lower():
+                        try:
+                            ids.append(int(n.get("identifier") or n.get("token_id") or 0))
+                        except Exception:
+                            pass
+                nxt = j.get("next")
+                pg += 1
+                if not nxt:
+                    break
+            ids = [i for i in ids if i > 0]
+        except Exception as e:
+            print(f"os nft {addr}: {e}")
+    if not ids:
+        try:
+            TT     = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+            padded = "0x000000000000000000000000" + addr[2:].lower()
+            def _rpc_call(payload):
+                return requests.post(RPC_URL, json=payload, timeout=15).json().get("result") or []
+            recv = _rpc_call({"jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[{"address":CARDS_ADDR,"topics":[TT,None,padded],"fromBlock":"0x0","toBlock":"latest"}]})
+            sent = _rpc_call({"jsonrpc":"2.0","id":2,"method":"eth_getLogs","params":[{"address":CARDS_ADDR,"topics":[TT,padded,None],"fromBlock":"0x0","toBlock":"latest"}]})
+            net = {}
+            for lg in recv:
+                k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) + 1
+            for lg in sent:
+                k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) - 1
+            ids = [int(k) for k, v in net.items() if v > 0]
+        except Exception as e:
+            print(f"rpc nft {addr}: {e}")
+    _os_nft_cache[addr] = {"ts": time.time(), "ids": ids}
+    return ids
+
+def _server_floor():
+    """Litany Cards floor price, 5-minute cache."""
+    if time.time() - _floor_cache["ts"] < _FLOOR_TTL:
+        return _floor_cache["val"]
+    key = os.environ.get("OPENSEA_API_KEY")
+    if not key:
+        return 0.0
+    try:
+        r = requests.get("https://api.opensea.io/api/v2/collections/litanycards",
+                         headers={"X-API-KEY": key, "accept": "application/json"}, timeout=10)
+        j = r.json()
+        fl = float(j.get("collection", {}).get("stats", {}).get("floor_price") or j.get("floor_price") or 0)
+        _floor_cache["val"], _floor_cache["ts"] = fl, time.time()
+        return fl
+    except Exception:
+        return _floor_cache["val"]
+
+@app.route("/api/operator-data")
+def operator_data_agg():
+    """Single aggregated payload for the operator profile page.
+    Fans out to identity, mesh wallet, leaderboard, and NFT lookup concurrently.
+    2-min server cache + client should use sessionStorage for instant revisits."""
+    from flask import request as freq
+    from concurrent.futures import ThreadPoolExecutor
+    addr = (freq.args.get("addr") or "").strip().lower()
+    if not (addr.startswith("0x") and len(addr) == 42):
+        return jsonify({"error": "bad address"}), 400
+    hit = _op_prof_cache.get(addr)
+    if hit and time.time() - hit["ts"] < _OP_PROF_TTL:
+        resp = jsonify(hit["data"])
+        resp.headers["Cache-Control"] = "public, max-age=60"
+        return resp
+    # Fan out all upstream calls in parallel — server-to-server is ~10-50ms each
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        f_idn  = ex.submit(resolve_identity, addr, True)
+        f_mesh = ex.submit(_mesh_get, f"/wallet/{addr}")
+        f_lb   = ex.submit(_mesh_leaderboard)
+        f_nfts = ex.submit(_server_owned_cards, addr)
+    identity  = f_idn.result()  or {}
+    mesh_data = f_mesh.result()
+    lb_raw    = f_lb.result()   or {}
+    owned     = f_nfts.result() or []
+    floor     = _server_floor()                          # cheap — hits 5-min cache
+    lb_entries = lb_raw.get("entries", []) if isinstance(lb_raw, dict) else []
+    lb_entry   = next((e for e in lb_entries if (e.get("wallet") or "").lower() == addr), None)
+    fmap       = _mesh_faction_map()
+    idx        = _load_rarity_idx()
+    data = {
+        "identity": {
+            "name":    identity.get("name"),
+            "twitter": identity.get("twitter"),
+            "faction": (fmap.get(addr) or {}).get("faction"),
+        },
+        "mesh":        mesh_data,
+        "lb_entries":  lb_entries,
+        "lb_entry":    lb_entry,
+        "lb_total":    len(lb_entries) or 68,
+        "owned_cards": owned,
+        "card_stats":  {i: idx[i] for i in owned if i in idx},
+        "floor":       floor,
+    }
+    _op_prof_cache[addr] = {"ts": time.time(), "data": data}
+    resp = jsonify(data)
+    resp.headers["Cache-Control"] = "public, max-age=60"
+    return resp
+
 def run_identity_refresh():
     time.sleep(30)
     while True:
