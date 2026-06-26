@@ -536,7 +536,7 @@ tbody tr:hover td{background:rgba(35,224,122,.04)}
     document.getElementById("footprov").textContent="Sources: Abstract RPC · LitanyCards "+short(CARDS)+" · OpenSea · scanned "+new Date().toLocaleTimeString();
   }
 
-  goBtn.addEventListener("click",analyze);
+  goBtn.addEventListener("click",()=>analyze());
   addrEl.addEventListener("keydown",e=>{if(e.key==="Enter"){hideAc();analyze();}});
   addrEl.addEventListener('input',()=>{
     clearTimeout(acTimer);
