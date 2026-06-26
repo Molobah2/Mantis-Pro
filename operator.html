@@ -590,7 +590,7 @@ async function ownedTokenIds(wallet){
       const j=await fetch('/api/opensea?path='+encodeURIComponent(p)).then(r=>r.json());
       ids=ids.concat((j.nfts||[]).filter(n=>(n.contract||"").toLowerCase()===CARDS.toLowerCase()).map(n=>parseInt(n.identifier||n.token_id||0)).filter(Boolean));
       nxt=j.next||null;pg++;
-    }while(nxt&&pg<10);
+    }while(nxt&&pg<200);
     if(ids.length)return ids;
   }catch(_){}
   try{

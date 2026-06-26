@@ -594,17 +594,77 @@ _floor_cache   = {"val": 0.0, "ts": 0.0}
 _FLOOR_TTL     = 300             # 5-minute floor price cache
 
 def _server_owned_cards(addr):
-    """Fetch owned Litany card IDs. OpenSea primary, RPC transfer-log fallback."""
+    """Fetch owned Litany card IDs.
+    RPC Transfer logs are always the primary source (ground truth).
+    OpenSea supplements with unlimited pagination to catch any gaps.
+    Both sources are merged so whale wallets like boredbull (1250+ cards)
+    are never truncated by OpenSea's incomplete Abstract Chain indexing."""
     hit = _os_nft_cache.get(addr)
     if hit and time.time() - hit["ts"] < _OS_NFT_TTL:
         return hit["ids"]
-    ids = []
+
+    TT     = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+    padded = "0x000000000000000000000000" + addr[2:].lower()
+    ids_set = set()
+
+    # ── RPC Transfer log scan (always runs — exact on-chain truth) ─────────────
+    # Tries one wide call first; if the node rejects it (too many results),
+    # falls back to 50k-block chunks fetched in parallel.
+    def _post(payload):
+        resp = requests.post(RPC_URL, json=payload, timeout=15).json()
+        if resp.get("error"):
+            raise ValueError(resp["error"].get("message", "rpc error"))
+        return resp.get("result") or []
+
+    def _net_balance(recv_logs, sent_logs):
+        net = {}
+        for lg in recv_logs:
+            k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) + 1
+        for lg in sent_logs:
+            k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) - 1
+        ids_set.update(int(k) for k, v in net.items() if v > 0)
+
+    try:
+        recv = _post({"jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[
+            {"address":CARDS_ADDR,"topics":[TT,None,padded],"fromBlock":"0x0","toBlock":"latest"}]})
+        sent = _post({"jsonrpc":"2.0","id":2,"method":"eth_getLogs","params":[
+            {"address":CARDS_ADDR,"topics":[TT,padded,None],"fromBlock":"0x0","toBlock":"latest"}]})
+        _net_balance(recv, sent)
+    except Exception as e:
+        print(f"rpc nft wide {addr}: {e} — trying chunked")
+        try:
+            from concurrent.futures import ThreadPoolExecutor as _TPE
+            latest = int(_post({"jsonrpc":"2.0","id":0,"method":"eth_blockNumber","params":[]}) or "0x0", 16)
+            CHUNK  = 50_000
+            ranges = [(max(0, i - CHUNK + 1), i) for i in range(latest, -1, -CHUNK)]
+
+            def _chunk(fb, tb, recv_or_sent):
+                filt = [TT, None, padded] if recv_or_sent == "recv" else [TT, padded, None]
+                return _post({"jsonrpc":"2.0","id":fb,"method":"eth_getLogs","params":[
+                    {"address":CARDS_ADDR,"topics":filt,
+                     "fromBlock":hex(fb),"toBlock":hex(tb)}]})
+
+            with _TPE(max_workers=10) as ex:
+                r_futs = [ex.submit(_chunk, fb, tb, "recv") for fb, tb in ranges]
+                s_futs = [ex.submit(_chunk, fb, tb, "sent") for fb, tb in ranges]
+            all_recv, all_sent = [], []
+            for f in r_futs:
+                try: all_recv.extend(f.result())
+                except: pass
+            for f in s_futs:
+                try: all_sent.extend(f.result())
+                except: pass
+            _net_balance(all_recv, all_sent)
+        except Exception as e2:
+            print(f"rpc nft chunked {addr}: {e2}")
+
+    # ── OpenSea supplement (unlimited pages, merges into ids_set) ─────────────
     key = os.environ.get("OPENSEA_API_KEY")
     if key:
         try:
             import urllib.parse
             nxt, pg = None, 0
-            while pg < 10:
+            while pg < 200:
                 url = f"https://api.opensea.io/api/v2/chain/abstract/account/{addr}/nfts?limit=50"
                 if nxt:
                     url += "&next=" + urllib.parse.quote(nxt)
@@ -612,33 +672,15 @@ def _server_owned_cards(addr):
                 j = r.json()
                 for n in (j.get("nfts") or []):
                     if (n.get("contract") or "").lower() == CARDS_ADDR.lower():
-                        try:
-                            ids.append(int(n.get("identifier") or n.get("token_id") or 0))
-                        except Exception:
-                            pass
-                nxt = j.get("next")
-                pg += 1
+                        try: ids_set.add(int(n.get("identifier") or n.get("token_id") or 0))
+                        except: pass
+                nxt = j.get("next"); pg += 1
                 if not nxt:
                     break
-            ids = [i for i in ids if i > 0]
         except Exception as e:
             print(f"os nft {addr}: {e}")
-    if not ids:
-        try:
-            TT     = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-            padded = "0x000000000000000000000000" + addr[2:].lower()
-            def _rpc_call(payload):
-                return requests.post(RPC_URL, json=payload, timeout=15).json().get("result") or []
-            recv = _rpc_call({"jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[{"address":CARDS_ADDR,"topics":[TT,None,padded],"fromBlock":"0x0","toBlock":"latest"}]})
-            sent = _rpc_call({"jsonrpc":"2.0","id":2,"method":"eth_getLogs","params":[{"address":CARDS_ADDR,"topics":[TT,padded,None],"fromBlock":"0x0","toBlock":"latest"}]})
-            net = {}
-            for lg in recv:
-                k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) + 1
-            for lg in sent:
-                k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) - 1
-            ids = [int(k) for k, v in net.items() if v > 0]
-        except Exception as e:
-            print(f"rpc nft {addr}: {e}")
+
+    ids = sorted(i for i in ids_set if i > 0)
     _os_nft_cache[addr] = {"ts": time.time(), "ids": ids}
     return ids
 
