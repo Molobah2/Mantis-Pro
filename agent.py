@@ -776,6 +776,87 @@ def _server_floor():
     except Exception:
         return _floor_cache["val"]
 
+def _loyalty_data(addr):
+    """Hidden loyalty multiplier: +0.25 per 7 consecutive days without selling a card.
+    Max +5.0. Selling resets the streak and applies a temporary penalty.
+    Result is an internal signal only — never broken out in the UI breakdown."""
+    BURN   = "0x0000000000000000000000000000000000000000"
+    TT     = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+    padded = "0x000000000000000000000000" + addr[2:].lower()
+
+    def _rpc(method, params):
+        return requests.post(RPC_URL,
+            json={"jsonrpc":"2.0","id":1,"method":method,"params":params},
+            timeout=12).json().get("result")
+
+    try:
+        latest_hex = _rpc("eth_blockNumber", []) or "0x0"
+        latest_num = int(latest_hex, 16)
+        latest_blk = _rpc("eth_getBlockByNumber", [latest_hex, False]) or {}
+        latest_ts  = int(latest_blk.get("timestamp", "0x0"), 16)
+        if latest_ts == 0 or latest_num == 0:
+            return 0.0
+
+        # Derive seconds-per-block from a reference block 1 M blocks back
+        ref_n   = max(1, latest_num - 1_000_000)
+        ref_blk = _rpc("eth_getBlockByNumber", [hex(ref_n), False]) or {}
+        ref_ts  = int(ref_blk.get("timestamp", "0x0"), 16)
+        secs_pb = (latest_ts - ref_ts) / max(1, latest_num - ref_n) if ref_ts > 0 else 2.0
+        secs_pb = max(0.5, min(60.0, secs_pb))
+
+        def block_age_days(bn):
+            return (latest_num - bn) * secs_pb / 86400
+
+        # Sent Transfer logs — potential sells
+        sent_raw = _rpc("eth_getLogs", [{
+            "address": CARDS_ADDR,
+            "topics": [TT, padded, None],
+            "fromBlock": "0x0", "toBlock": latest_hex
+        }]) or []
+
+        # Filter: non-burn, non-self transfers = market sells
+        sell_ages = []
+        for lg in sent_raw:
+            to = ("0x" + lg["topics"][2][26:]).lower()
+            if to not in (BURN, addr):
+                sell_ages.append(block_age_days(int(lg["blockNumber"], 16)))
+
+        if not sell_ages:
+            # Never sold — streak starts from first card received
+            recv_raw = _rpc("eth_getLogs", [{
+                "address": CARDS_ADDR,
+                "topics": [TT, None, padded],
+                "fromBlock": "0x0", "toBlock": latest_hex
+            }]) or []
+            if not recv_raw:
+                return 0.0
+            oldest_days = max(block_age_days(int(lg["blockNumber"], 16)) for lg in recv_raw)
+            bonus = min(5.0, (oldest_days / 7) * 0.25)
+            return round(bonus * 4) / 4
+
+        # Has sold — find days since most recent sell (min age = most recent)
+        days_since_sell = min(sell_ages)
+        sells_in_30d    = sum(1 for d in sell_ages if d < 30)
+
+        if sells_in_30d >= 3:
+            penalty_pts, penalty_days = -6, 21
+        elif sells_in_30d == 2:
+            penalty_pts, penalty_days = -4, 14
+        else:
+            penalty_pts, penalty_days = -2, 7
+
+        if days_since_sell < penalty_days:
+            decay = 1 - (days_since_sell / penalty_days)
+            return round(penalty_pts * decay * 4) / 4
+        # Penalty expired — loyalty streak rebuilding
+        recovering = min(5.0, (days_since_sell / 7) * 0.25)
+        return round(recovering * 4) / 4
+
+    except Exception as e:
+        print(f"loyalty {addr}: {e}")
+        return 0.0
+
+
 @app.route("/api/operator-data")
 def operator_data_agg():
     """Single aggregated payload for the operator profile page.
@@ -792,17 +873,19 @@ def operator_data_agg():
         resp.headers["Cache-Control"] = "public, max-age=60"
         return resp
     # Fan out all upstream calls in parallel — server-to-server is ~10-50ms each
-    with ThreadPoolExecutor(max_workers=5) as ex:
+    with ThreadPoolExecutor(max_workers=6) as ex:
         f_idn     = ex.submit(resolve_identity, addr, True)
         f_mesh    = ex.submit(_mesh_get, f"/wallet/{addr}")
         f_lb      = ex.submit(_mesh_leaderboard)
         f_nfts    = ex.submit(_server_owned_cards, addr)
         f_hollows = ex.submit(_hollow_balance, addr)
+        f_loyalty = ex.submit(_loyalty_data, addr)
     identity      = f_idn.result()     or {}
     mesh_data     = f_mesh.result()
     lb_raw        = f_lb.result()      or {}
     owned         = f_nfts.result()    or []
     hollow_count  = f_hollows.result() or 0
+    loyalty_bonus = f_loyalty.result() or 0.0
     floor         = _server_floor()                          # cheap — hits 5-min cache
     genesis       = _genesis_global_stats()                  # cheap — 2-min cache
     lb_entries = lb_raw.get("entries", []) if isinstance(lb_raw, dict) else []
@@ -824,6 +907,7 @@ def operator_data_agg():
         "floor":         floor,
         "hollow_count":  hollow_count,
         "genesis_stats": genesis,
+        "loyalty_bonus": loyalty_bonus,
     }
     _op_prof_cache[addr] = {"ts": time.time(), "data": data}
     resp = jsonify(data)

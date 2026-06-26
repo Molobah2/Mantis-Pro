@@ -165,12 +165,19 @@ a{color:inherit;text-decoration:none}
   font-size:10.5px;font-weight:700;color:var(--muted);cursor:pointer;transition:.13s;font-family:inherit}
 .sc-bdbtn:hover{border-color:rgba(35,224,122,.4);color:var(--green)}
 .bdpanel{display:none;background:var(--bg2);border:1px solid var(--line);border-radius:12px;
-  padding:12px 14px;width:220px;margin-top:4px}
+  padding:14px 16px;width:240px;margin-top:4px}
 .bdpanel.open{display:block}
 .bdrow{display:flex;justify-content:space-between;font-size:10.5px;padding:4px 0;
   border-bottom:1px solid rgba(255,255,255,.04)}
 .bdrow:last-child{border:none;font-weight:800;padding-top:7px}
 .bdk{color:var(--muted)}.bdv{font-family:'JetBrains Mono',monospace;color:var(--green);font-weight:700}
+.bd-pillar{margin-bottom:9px}
+.bd-pillar-hd{display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px}
+.bd-pillar-l{color:var(--text);font-weight:600;letter-spacing:.03em}
+.bd-pillar-v{font-family:'JetBrains Mono',monospace;color:var(--green);font-weight:700;font-size:10.5px}
+.bd-pillar-max{color:var(--faint);font-weight:400}
+.bd-pillar-bar{height:3px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden}
+.bd-pillar-fill{height:100%;background:linear-gradient(90deg,var(--green2),var(--green));border-radius:2px;transition:width .5s ease}
 
 /* ══════════════════════════════════════════
    PULSE BAR
@@ -556,31 +563,115 @@ function pad(a){return"0x000000000000000000000000"+a.toLowerCase().replace(/^0x/
 
 const FAC={horizon:{c:"#D1AB58",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
 const TIERS=[
-  {n:"Wanderer",min:0,i:"🏕"},
-  {n:"Explorer",min:250,i:"🗺"},
-  {n:"Pathfinder",min:1000,i:"🧭"},
-  {n:"Architect",min:3000,i:"⚙"},
-  {n:"Sovereign",min:8000,i:"👑"},
-  {n:"Legend",min:15000,i:"⚡"}
+  {n:"Recruit",   min:0,  i:"◦"},
+  {n:"Operative", min:12, i:"◈"},
+  {n:"Specialist",min:30, i:"◉"},
+  {n:"Architect", min:50, i:"⬡"},
+  {n:"Sovereign", min:68, i:"✦"},
+  {n:"Elite",     min:82, i:"◆"},
+  {n:"Legend",    min:95, i:"⚡"},
 ];
 function scoreTier(s){let t=TIERS[0];for(const x of TIERS){if(s>=x.min)t=x;}return t;}
-function tierFill(s,lbEntry,lbTotal){if(lbEntry&&lbTotal)return Math.max(0.05,1-(lbEntry.rank-1)/lbTotal);const idx=TIERS.findIndex(t=>s<t.min);return idx<=0?0.05:idx>=TIERS.length?0.94:0.12+(idx/TIERS.length)*0.82;}
+function tierFill(s){return Math.max(0.04,Math.min(0.97,s/100));}
 const ACHEIVEMENTS={first_drop_of_day:{n:"First Drop",i:"🌅",d:"First claim of the day"},streak_7:{n:"7-Day Streak",i:"🔥",d:"7 consecutive days"},streak_30:{n:"30-Day Streak",i:"⚡",d:"30 consecutive days"},anchor:{n:"Anchor",i:"⚓",d:"Territory anchor"},explorer:{n:"Explorer",i:"🗺",d:"Explored regions"},first_claim:{n:"Pioneer",i:"🚀",d:"First ever claim"},faction_member:{n:"Faction",i:"⚔",d:"Joined faction"},top_10:{n:"Top 10",i:"🏆",d:"Reached top 10"}};
 function tierOf(c){if(!c)return null;const p=c.percentile||0;if(p>=99)return{n:"Legendary",c:"ct-leg",col:"var(--purple)"};if(p>=95)return{n:"Epic",c:"ct-epic",col:"var(--blue)"};if(p>=85)return{n:"Rare",c:"ct-rare",col:"var(--green2)"};if(p>=60)return{n:"Uncommon",c:"ct-unc",col:"#0a7a3a"};return{n:"Common",c:"ct-com",col:"#3d5244"};}
 
 let _addr="",_scoreObj={score:0,breakdown:[]};
 
-function computeScore({cards,cardStats,mesh,lbEntry,hollowCount}){
-  let s=0,bd=[];
-  const cc=cards.length;const cp=cc*12;s+=cp;bd.push({l:"Cards owned ("+cc+")",v:cp});
-  const vals=cards.map(id=>cardStats[id]?.percentile||0);
-  const best=vals.length?Math.max(...vals):0;
-  const bp=Math.round(best*2.2);s+=bp;bd.push({l:"Best card quality",v:bp});
-  if(vals.length>1){const avg=vals.reduce((a,b)=>a+b,0)/vals.length;const ap=Math.round(avg*.8);s+=ap;bd.push({l:"Portfolio quality",v:ap});}
-  if(mesh){const mc=mesh.total_claims*6;s+=mc;bd.push({l:"Mesh claims ("+mesh.total_claims+")",v:mc});const ac=mesh.anchor_count*35;s+=ac;bd.push({l:"Anchors ("+mesh.anchor_count+")",v:ac});const acp=(mesh.earned_achievement_ids||[]).length*80;s+=acp;bd.push({l:"Achievements",v:acp});}
-  if(lbEntry){const rk=lbEntry.rank;const rb=rk<=10?300:rk<=25?175:rk<=50?75:0;s+=rb;if(rb)bd.push({l:"Mesh rank #"+rk,v:rb});}
-  if(hollowCount>0){const hp=hollowCount*45;s+=hp;bd.push({l:"Hollows ("+hollowCount+")",v:hp});}
-  return{score:Math.round(s),breakdown:bd};
+// ── MASTERY SCORE (0-100) ─────────────────────────────────────────────────────
+// Five pillars: Consistency(30) + Participation(25) + Reputation(20)
+//               + Progression(15) + Contribution(10) = 100 base
+// Hidden loyalty multiplier applied server-side, folded into final score.
+// Designed so that operator behaviour beats asset wealth at every step.
+
+function _mConsistency({mesh,idn}){
+  let p=0;
+  const achs=mesh?.earned_achievement_ids||[];
+  // Streak achievements — sustained daily presence
+  if(achs.includes("streak_30"))p+=15;
+  else if(achs.includes("streak_7"))p+=8;
+  // first_drop_of_day = habitual opener
+  if(achs.includes("first_drop_of_day"))p+=3;
+  // Anchors = persistent territorial stake
+  p+=Math.min(10,(mesh?.anchor_count||0)*2);
+  // Ecosystem age: full 4 pts after 90 days in the Mesh
+  if(mesh?.first_claim_at){
+    const d=(Date.now()-new Date(mesh.first_claim_at).getTime())/86400000;
+    p+=Math.min(4,Math.round(d/90*4));
+  }
+  return Math.min(30,Math.round(p));
+}
+
+function _mParticipation({mesh,lbEntry,lbTotal}){
+  let p=0;
+  const tc=mesh?.total_claims||0;
+  // Log scale: farming hundreds of claims earns no more than consistent engagement
+  if(tc>0)p+=Math.min(18,Math.round(Math.log(tc+1)/Math.log(600)*18));
+  // Leaderboard position: top half earns proportionally, not winner-take-all
+  if(lbEntry&&lbTotal>0)p+=Math.round(((lbTotal-lbEntry.rank+1)/lbTotal)*7);
+  return Math.min(25,Math.round(p));
+}
+
+function _mReputation({mesh,lbEntry,lbTotal,idn}){
+  let p=0;
+  // Rank tier bonuses — still meaningful but hard-capped
+  if(lbEntry){
+    const r=lbEntry.rank;
+    p+=r<=3?10:r<=10?8:r<=25?6:r<=50?4:r<=100?2:1;
+  }
+  // Achievement breadth (not depth) — up to 8 pts
+  p+=Math.min(8,(mesh?.earned_achievement_ids||[]).length*2);
+  // Verified identity signals commitment to the community
+  if(idn?.twitter)p+=1;
+  if(idn?.name&&!idn.name.startsWith("0x"))p+=1;
+  return Math.min(20,Math.round(p));
+}
+
+function _mProgression({cards,cardStats,hollowCount,genesisStats}){
+  let p=0;
+  // Hollow: strongest commitment signal (required card + gas + decision to claim)
+  if(hollowCount>0)p+=Math.min(8,3+hollowCount);
+  // Best card quality — rewards curation, not bulk buying
+  const bestPct=cards.length?Math.max(...cards.map(id=>cardStats[id]?.percentile||0)):0;
+  p+=Math.round(bestPct/100*5);
+  // Early adopter: claimed before 50% of genesis supply was gone
+  if(hollowCount>0){
+    const cap=genesisStats?.genesis_supply_cap||5000;
+    const claimed=genesisStats?.total_genesis_claimed||cap;
+    p+=Math.round(Math.max(0,1-claimed/cap)*2);
+  }
+  return Math.min(15,Math.round(p));
+}
+
+function _mContribution({cards,cardStats}){
+  let p=0;
+  // sqrt scale kills the bulk-buy whale advantage: 1 card→1.5, 16+→6 (hard cap)
+  if(cards.length>0)p+=Math.min(6,Math.round(Math.sqrt(Math.min(cards.length,16))*1.5));
+  // Average portfolio quality — diverse quality > raw count
+  const pcts=cards.map(id=>cardStats[id]?.percentile||0).filter(Boolean);
+  if(pcts.length)p+=Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length/100*4);
+  return Math.min(10,Math.round(p));
+}
+
+function computeMasteryScore({cards,cardStats,mesh,lbEntry,lbTotal,lbEntries,hollowCount,idn,genesisStats,loyaltyBonus}){
+  const consistency  =_mConsistency({mesh,idn});
+  const participation=_mParticipation({mesh,lbEntry,lbTotal});
+  const reputation   =_mReputation({mesh,lbEntry,lbTotal,idn});
+  const progression  =_mProgression({cards,cardStats,hollowCount,genesisStats});
+  const contribution =_mContribution({cards,cardStats});
+  const base=consistency+participation+reputation+progression+contribution;
+  const score=Math.max(0,Math.min(100,Math.round(base+(loyaltyBonus||0))));
+  return{
+    score,
+    pillars:{consistency,participation,reputation,progression,contribution},
+    breakdown:[
+      {l:"Consistency",   v:consistency,   max:30, pct:consistency/30*100},
+      {l:"Participation", v:participation, max:25, pct:participation/25*100},
+      {l:"Reputation",    v:reputation,    max:20, pct:reputation/20*100},
+      {l:"Progression",   v:progression,   max:15, pct:progression/15*100},
+      {l:"Contribution",  v:contribution,  max:10, pct:contribution/10*100},
+    ]
+  };
 }
 
 async function ownedTokenIds(wallet){
@@ -917,10 +1008,11 @@ let _profAddr="";
   if(lbEntry)document.getElementById("ark").textContent="#"+lbEntry.rank;
   else document.getElementById("ark").style.display="none";
 
-  const scoreObj=computeScore({cards:ownedCards,cardStats,mesh,lbEntry,hollowCount});
+  const loyaltyBonus=opData.loyalty_bonus||0;
+  const scoreObj=computeMasteryScore({cards:ownedCards,cardStats,mesh,lbEntry,lbTotal,lbEntries,hollowCount,idn,genesisStats,loyaltyBonus});
   _scoreObj=scoreObj;
   const t=scoreTier(scoreObj.score);
-  const tierColors={Legend:"var(--purple)",Sovereign:"var(--gold)",Architect:"var(--green)",Pathfinder:"var(--blue)"};
+  const tierColors={Legend:"var(--purple)",Elite:"var(--purple)",Sovereign:"var(--gold)",Architect:"var(--green)",Specialist:"var(--green2)"};
   document.getElementById("hnm").innerHTML=esc(nm)+(idn.twitter?`<a class="twitter-link" href="https://x.com/${esc(idn.twitter)}" target="_blank">@${esc(idn.twitter)}</a>`:'');
   document.getElementById("hwa").textContent=addr.slice(0,10)+"…"+addr.slice(-8);
 
@@ -943,12 +1035,12 @@ let _profAddr="";
 
   initAura(document.getElementById('auraCanvas'),(facColor||'#23e07a').replace('#','').match(/../g).reduce((r,h,i)=>{const v=parseInt(h,16);return r+[v,v,v][i]+','},'rgba(').slice(0,-1)+',{a})');
 
-  buildIntelCore(document.getElementById("scwrap"),tierFill(scoreObj.score,lbEntry,lbTotal),facColor);
+  buildIntelCore(document.getElementById("scwrap"),tierFill(scoreObj.score),facColor);
   countUp(document.getElementById("scnum"),scoreObj.score);
   document.getElementById("sctier").textContent=t.n;
   document.getElementById("sctier").style.color=tierColors[t.n]||"var(--muted)";
   if(lbEntry)document.getElementById("scpct").textContent="Top "+Math.max(1,Math.round(lbEntry.rank/lbTotal*100))+"% of operators";
-  document.getElementById("bdpanel").innerHTML=scoreObj.breakdown.map(b=>`<div class="bdrow"><span class="bdk">${esc(b.l)}</span><span class="bdv">+${fmtN(b.v)}</span></div>`).join('')+`<div class="bdrow"><span class="bdk">Total</span><span class="bdv">${fmtN(scoreObj.score)}</span></div>`;
+  document.getElementById("bdpanel").innerHTML=scoreObj.breakdown.map(b=>`<div class="bd-pillar"><div class="bd-pillar-hd"><span class="bd-pillar-l">${esc(b.l)}</span><span class="bd-pillar-v">${b.v}<span class="bd-pillar-max">/${b.max}</span></span></div><div class="bd-pillar-bar"><div class="bd-pillar-fill" style="width:${Math.round(b.pct)}%"></div></div></div>`).join('')+`<div class="bdrow" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="bdk">Mastery Score</span><span class="bdv" style="font-size:15px;font-weight:900">${scoreObj.score}/100</span></div>`;
 
   // Pulse bar
   const achCount=(mesh?.earned_achievement_ids||[]).length;
@@ -962,16 +1054,20 @@ let _profAddr="";
   ].map(s=>`<div class="pb-item"><div class="pb-key"><span class="pb-icon">${s.icon}</span>${s.key}</div><div class="pb-val ${s.val!==null?'real':'empty'}">${s.val!==null?fmtN(s.val):'—'}</div>${s.sub?`<div class="pb-sub ${s.good?'good':''}">${s.sub}</div>`:''}</div>`).join('');
 
   // Constellation radar
-  const community=lbEntry?Math.round(Math.max(5,100-(lbEntry.rank-1)/lbTotal*100)):10;
-  const earlyAdoption=mesh?.classified_at?Math.round(Math.min(100,Math.max(10,100-Math.floor((Date.now()-new Date(mesh.classified_at).getTime())/(1000*86400*7))))):10;
-  const influence=lbEntry?Math.round((community*.5)+Math.min(50,(mesh?.earned_achievement_ids||[]).length*12)):Math.round((mesh?.earned_achievement_ids||[]).length*12);
-  const radarScores=[Math.round(Math.min(100,(mesh?.total_claims||0)/maxClaims*100)),mesh?Math.round(Math.min(100,((mesh.earned_achievement_ids||[]).filter(a=>a.includes("streak")||a==="first_drop_of_day").length/2)*100)):0,Math.round(Math.min(100,ownedCards.length/50*100)),community,Math.max(10,earlyAdoption),Math.min(100,influence)];
-  const radarLabels=["Participation","Consistency","Breadth","Community","Early Adoption","Influence"];
+  const ps=scoreObj.pillars;
+  const radarScores=[
+    Math.round(ps.consistency/30*100),
+    Math.round(ps.participation/25*100),
+    Math.round(ps.reputation/20*100),
+    Math.round(ps.progression/15*100),
+    Math.round(ps.contribution/10*100),
+    scoreObj.score
+  ];
+  const radarLabels=["Consistency","Participation","Reputation","Progression","Contribution","Overall"];
   drawConstellation(document.getElementById('constell-svg'),radarScores,radarLabels,facColor);
   const repLabels=["Newcomer","Developing","Active","Established","Influential","Exemplary"];
-  const repIdx=Math.min(5,Math.floor(radarScores.reduce((a,b)=>a+b,0)/radarScores.length/17));
-  const avgScore=Math.round(radarScores.reduce((a,b)=>a+b,0)/6);
-  document.getElementById("rep-status").innerHTML=`<div class="rep-card"><div><div class="rep-card-label">REPUTATION</div><div class="rep-card-val">${repLabels[repIdx]}</div></div><div class="rep-card-avg">${avgScore}/100 avg</div></div>`;
+  const repIdx=Math.min(5,Math.floor(scoreObj.score/17));
+  document.getElementById("rep-status").innerHTML=`<div class="rep-card"><div><div class="rep-card-label">REPUTATION</div><div class="rep-card-val">${repLabels[repIdx]}</div></div><div class="rep-card-avg">${scoreObj.score}/100</div></div>`;
 
   // Portfolio
   const cardVal=ownedCards.length*(floor||0);
