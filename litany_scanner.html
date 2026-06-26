@@ -2,134 +2,309 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Litany Wallet Scanner — Mantis Pro</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Litany Scanner — Mantis Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#f4f8f5;--panel:#fff;--ink:#08160e;--muted:#5a6c61;--faint:#90a096;
-    --green:#10a050;--green-deep:#077a39;--green-soft:#e9f6ef;--line:#e2ede7;--line-soft:#eef4f0;
-    --awa:#9aa8a0;--mkt:#0bb6c4;
-    --shadow-sm:0 1px 2px rgba(8,22,14,.05);--shadow:0 2px 6px rgba(8,22,14,.04),0 14px 40px rgba(16,160,80,.06);
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;background-image:radial-gradient(1200px circle at 85% -5%,rgba(16,160,80,.07),transparent 50%)}
-  a{color:inherit;text-decoration:none}.mono{font-family:'JetBrains Mono',monospace}
-  .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;background:rgba(255,255,255,.8);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
-  .brand{display:flex;align-items:center;gap:11px;font-weight:800;letter-spacing:-.5px;font-size:17px}
-  .brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--green),var(--green-deep));display:grid;place-items:center;color:#fff;font-size:15px}
-  .brand small{display:block;font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase}
-  .topbar a.home{color:var(--muted);font-weight:600;font-size:13px}
+:root{
+  --bg:#050907;--bg2:#0b1310;--bg3:#0f1a12;
+  --panel:rgba(255,255,255,.028);--panel2:rgba(255,255,255,.05);--panel3:rgba(255,255,255,.08);
+  --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);--line3:rgba(255,255,255,.22);
+  --ink:#eaf2ec;--muted:rgba(234,242,236,.62);--faint:rgba(234,242,236,.35);--faintest:rgba(234,242,236,.14);
+  --green:#23e07a;--green2:#10a050;--gd:rgba(35,224,122,.12);
+  --gold:#D1AB58;--blue:#2f6df0;--red:#e5484d;--purple:#a06bff;
+  --sb:210px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;display:flex}
+a{color:inherit;text-decoration:none}
+::-webkit-scrollbar{width:4px;height:3px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
+::selection{background:rgba(35,224,122,.22)}
 
-  .wrap{max-width:1080px;margin:0 auto;padding:40px 28px 80px}
-  .head{text-align:center;margin-bottom:30px}
-  .head h1{font-size:clamp(28px,4vw,42px);font-weight:900;letter-spacing:-1.4px}
-  .head h1 b{color:var(--green)}
-  .head p{color:var(--muted);font-size:15px;margin-top:8px;max-width:560px;margin-inline:auto}
+/* ── SIDEBAR ── */
+.sb{width:var(--sb);min-width:var(--sb);height:100vh;background:rgba(5,9,7,.97);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
+.sb-logo{padding:18px 16px 0;display:flex;align-items:center;gap:9px}
+.sb-m{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--green),var(--green2));display:grid;place-items:center;color:#021008;font-size:15px;font-weight:900;box-shadow:0 4px 16px rgba(35,224,122,.38);flex-shrink:0}
+.sb-lt{font-weight:900;font-size:12.5px;letter-spacing:-.2px}
+.sb-lt small{display:block;font-size:7.5px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:1px}
+.sb-nav{flex:1;padding:18px 0 0;overflow-y:auto}
+.sb-g{font-size:8px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--faint);padding:0 16px;margin:14px 0 5px}
+.sb-a{display:flex;align-items:center;gap:9px;padding:8px 16px;font-size:12px;font-weight:600;color:var(--muted);transition:.13s;border-left:2px solid transparent;cursor:pointer}
+.sb-a:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+.sb-a.on{color:var(--green);background:rgba(35,224,122,.06);border-left-color:var(--green)}
+.sb-a .i{width:14px;text-align:center;font-size:12px;flex-shrink:0}
+.sb-eco{padding:12px 14px;border-top:1px solid var(--line)}
+.sb-eco-t{font-size:7.5px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--faint);margin-bottom:9px}
+.sb-er{display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:5px}
+.sb-ek{color:var(--faint)}.sb-ev{font-family:'JetBrains Mono',monospace;font-weight:600}
+.sb-ev.live{color:var(--green)}
+.sb-agent{padding:12px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:9px}
+.sb-agent img{width:34px;height:34px;border-radius:9px;border:1px solid var(--line2)}
+.sb-agent .al{font-size:10px;font-weight:800;letter-spacing:.3px}
+.sb-agent .as{font-size:9.5px;color:var(--faint)}
+.odot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:beat 2s infinite;margin-left:auto;flex-shrink:0}
+@keyframes beat{0%,100%{box-shadow:0 0 0 0 rgba(35,224,122,.55)}50%{box-shadow:0 0 0 5px rgba(35,224,122,0)}}
+@keyframes spin-cw{to{transform:rotate(360deg)}}
+@keyframes spin-ccw{to{transform:rotate(-360deg)}}
 
-  .search{display:flex;gap:10px;max-width:680px;margin:26px auto 0;position:relative}
-  .search input{flex:1;background:#fff;border:1px solid var(--line);border-radius:12px;padding:15px 18px;font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--ink);outline:none;box-shadow:var(--shadow-sm)}
-  .search input:focus{border-color:var(--green)}
-  .search button{background:var(--green);color:#fff;border:none;border-radius:12px;padding:0 26px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;transition:.2s}
-  .search button:hover{background:var(--green-deep)}
-  .search button:disabled{opacity:.5;cursor:default}
-  .hint{text-align:center;color:var(--faint);font-size:12px;margin-top:10px;font-family:'JetBrains Mono',monospace}
-  .ac-list{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 32px rgba(8,22,14,.12);z-index:100;overflow:hidden;max-height:280px;overflow-y:auto}
-  .ac-item{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;transition:.12s;border-bottom:1px solid var(--line-soft);font-size:13px}
-  .ac-item:last-child{border-bottom:none}
-  .ac-item:hover{background:var(--green-soft)}
-  .ac-name{font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ac-addr{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);flex-shrink:0}
-  .id-avatar{width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--line);flex-shrink:0;background:var(--bg)}
-  .id-addr{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:2px}
+/* ── MAIN ── */
+.main{flex:1;min-width:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
 
-  .report{margin-top:34px;display:none}
-  .report.show{display:block}
-  .badge{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 9px;border-radius:7px}
-  .badge::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
-  .b-on{color:var(--green);background:rgba(16,160,80,.1)}.b-mkt{color:var(--mkt);background:rgba(11,182,196,.12)}.b-awa{color:var(--awa);background:rgba(154,168,160,.16)}
+/* ── TOPNAV ── */
+.tnav{display:flex;align-items:center;gap:12px;padding:10px 20px;background:rgba(5,9,7,.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--line);flex-shrink:0;position:sticky;top:0;z-index:50}
+.tnav-title{font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--faint)}
+.tnav-title span{color:var(--green)}
+.tnav-pill{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:var(--faint);font-family:'JetBrains Mono',monospace}
+.tnav-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green)}
 
-  .profile{background:linear-gradient(135deg,#fff,#f7fbf8);border:1px solid var(--line);border-radius:20px;padding:28px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
-  .profile .who .addr{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
-  .profile .who .sub{color:var(--muted);font-size:13px;margin-top:4px}
-  .op-link{display:inline-block;margin-top:12px;font-size:13px;font-weight:700;color:#fff;background:var(--green,#10a050);padding:9px 16px;border-radius:10px;text-decoration:none;transition:.15s;box-shadow:0 3px 12px rgba(16,160,80,.25)}
-  .op-link:hover{background:#0c8642;transform:translateY(-1px)}
-  .picker{display:flex;flex-direction:column;gap:8px;margin-top:6px}
-  .pick{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 16px;cursor:pointer;transition:.15s;font-family:inherit}
-  .pick:hover{border-color:var(--green,#10a050);background:#f4faf6;transform:translateX(2px)}
-  .pick .pn{font-weight:700;font-size:15px;color:var(--ink,#0c1410)}
-  .pick .pa{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)}
-  .opfac{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 8px;border-radius:6px;color:#fff;background:var(--fc,#8a958d)}
-  .profile .big{text-align:right}
-  .profile .big .n{font-size:46px;font-weight:900;letter-spacing:-2px;color:var(--green);font-family:'JetBrains Mono',monospace;line-height:1}
-  .profile .big .l{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:4px}
+/* ── CONTENT ── */
+.cnt{padding:32px 32px 80px;flex:1}
 
-  .sec{margin-top:30px}
-  .sec h2{font-size:14px;font-weight:800;letter-spacing:.3px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
-  .grid{display:grid;gap:16px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
-  @media(max-width:860px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g2{grid-template-columns:1fr}}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-sm)}
-  .card .k{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px}
-  .card .v{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px}
-  .card .v.pending{font-size:14px;color:var(--faint);font-weight:600;letter-spacing:0}
-  .card .meth{font-size:10px;color:var(--faint);margin-top:8px;line-height:1.6}
+/* ── SCANNER HERO ── */
+.scan-hero{
+  background:linear-gradient(135deg,rgba(35,224,122,.04),transparent 60%),var(--bg2);
+  border:1px solid var(--line);border-radius:20px;
+  padding:40px 40px 36px;margin-bottom:28px;position:relative;overflow:hidden;
+}
+.scan-hero::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(55% 100% at 90% -10%,rgba(35,224,122,.08),transparent 55%);
+  pointer-events:none
+}
+.scan-hero::after{
+  content:"";position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(35,224,122,.4),transparent)
+}
+.scan-eyebrow{font-size:8px;font-weight:800;letter-spacing:3.5px;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+.scan-title{font-size:clamp(24px,3vw,36px);font-weight:900;letter-spacing:-1.2px;line-height:1.1;margin-bottom:8px}
+.scan-title span{color:var(--green)}
+.scan-sub{font-size:13px;color:var(--muted);max-width:520px;line-height:1.6;margin-bottom:26px}
 
-  .bars{display:flex;flex-direction:column;gap:9px}
-  .barrow{display:flex;align-items:center;gap:12px;font-size:13px}
-  .barrow .lbl{width:120px;font-weight:600}
-  .barrow .track{flex:1;height:8px;background:var(--line-soft);border-radius:5px;overflow:hidden}
-  .barrow .track i{display:block;height:100%;background:linear-gradient(90deg,var(--green),#1fd06b);border-radius:5px}
-  .barrow .ct{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);width:30px;text-align:right}
+/* Command bar */
+.cmd-bar{position:relative;display:flex;gap:10px;max-width:640px}
+.cmd-bar input{
+  flex:1;background:rgba(255,255,255,.04);border:1px solid var(--line2);border-radius:12px;
+  padding:14px 18px 14px 42px;
+  font-family:'JetBrains Mono',monospace;font-size:13.5px;color:var(--ink);outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.cmd-bar input:focus{border-color:rgba(35,224,122,.5);box-shadow:0 0 0 3px rgba(35,224,122,.08),inset 0 0 0 1px rgba(35,224,122,.12)}
+.cmd-bar input::placeholder{color:var(--faint)}
+.cmd-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:14px;pointer-events:none}
+.cmd-btn{
+  background:var(--green);color:#021008;border:none;border-radius:12px;
+  padding:0 26px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;
+  letter-spacing:.3px;transition:.15s;white-space:nowrap;flex-shrink:0
+}
+.cmd-btn:hover{background:#1ff076;transform:translateY(-1px);box-shadow:0 4px 20px rgba(35,224,122,.3)}
+.cmd-btn:disabled{opacity:.4;cursor:default;transform:none;box-shadow:none}
+.scan-hint{margin-top:10px;font-size:10.5px;color:var(--faint);font-family:'JetBrains Mono',monospace;letter-spacing:.2px}
 
-  table{width:100%;border-collapse:collapse}
-  .table-card{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow-sm)}
-  thead th{text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:800;padding:12px 16px;border-bottom:1px solid var(--line)}
-  tbody td{padding:12px 16px;font-size:13px;border-bottom:1px solid var(--line-soft)}
-  tbody tr:last-child td{border-bottom:none}tbody tr:hover{background:var(--green-soft)}
-  .pill{font-size:11px;padding:3px 8px;border-radius:6px;background:var(--green-soft);color:var(--green-deep);border:1px solid var(--line)}
-  .lnk{font-family:'JetBrains Mono',monospace;color:var(--green-deep)}
+/* Autocomplete */
+.ac-list{
+  position:absolute;top:calc(100% + 6px);left:0;right:calc(0px + 148px);
+  background:var(--bg2);border:1px solid var(--line2);border-radius:12px;
+  box-shadow:0 16px 48px rgba(0,0,0,.5);z-index:100;overflow:hidden;max-height:280px;overflow-y:auto
+}
+.ac-item{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;transition:.12s;border-bottom:1px solid var(--line);font-size:13px}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover{background:rgba(35,224,122,.06)}
+.ac-name{font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-addr{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);flex-shrink:0}
 
-  .panel{background:linear-gradient(135deg,#0a1a10,#0d2417);color:#eafff2;border-radius:18px;padding:26px 28px;box-shadow:var(--shadow)}
-  .panel .pl{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#5fd99a;margin-bottom:12px}
-  .panel p{font-size:15px;line-height:1.7;color:#cdf0db}
-  .panel p b{color:#fff}
+/* ── REPORT AREA ── */
+.report{display:none}.report.show{display:block}
 
-  .state{text-align:center;padding:50px 20px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px}
-  .state.err{color:#c0392b}
-  .spinner{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--green);border-radius:50%;margin:0 auto 16px;animation:spin .8s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
+/* States */
+.state{text-align:center;padding:60px 20px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px}
+.state.err{color:var(--red)}
+.spinner{
+  width:32px;height:32px;margin:0 auto 18px;
+  border:2px solid var(--line2);border-top-color:var(--green);
+  border-radius:50%;animation:sc-spin .7s linear infinite;
+}
+@keyframes sc-spin{to{transform:rotate(360deg)}}
 
-  footer{max-width:1080px;margin:30px auto 0;padding:24px 28px 50px;border-top:1px solid var(--line);font-size:11px;color:var(--faint);line-height:1.9}
-  footer a{color:var(--green-deep);font-weight:600}.footer .pl{font-family:'JetBrains Mono',monospace}
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;padding:3px 9px;border-radius:6px}
+.badge::before{content:"";width:4px;height:4px;border-radius:50%;background:currentColor;flex-shrink:0}
+.b-on{color:var(--green);background:rgba(35,224,122,.1);border:1px solid rgba(35,224,122,.2)}
+.b-mkt{color:#0bb6c4;background:rgba(11,182,196,.1);border:1px solid rgba(11,182,196,.2)}
+.b-awa{color:var(--faint);background:rgba(255,255,255,.05);border:1px solid var(--line)}
+
+/* Faction badge */
+.opfac{font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:2px 8px;border-radius:6px;color:#fff;background:var(--fc,rgba(255,255,255,.12));border:1px solid rgba(255,255,255,.15)}
+
+/* ── PROFILE HEADER ── */
+.profile{
+  background:linear-gradient(135deg,rgba(35,224,122,.04),transparent 60%),var(--bg2);
+  border:1px solid var(--line);border-radius:16px;padding:24px 26px;
+  display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  position:relative;overflow:hidden;margin-bottom:22px;
+}
+.profile::after{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(35,224,122,.3),transparent)}
+.profile .who{display:flex;align-items:flex-start;gap:14px}
+.id-avatar{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid rgba(35,224,122,.3);flex-shrink:0;background:var(--bg3)}
+.id-name{font-size:20px;font-weight:900;letter-spacing:-.6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.id-addr{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);margin-top:3px;letter-spacing:.3px}
+.id-sub{font-size:12px;color:var(--muted);margin-top:5px}
+.op-link{
+  display:inline-flex;align-items:center;gap:6px;margin-top:12px;
+  font-size:11.5px;font-weight:800;letter-spacing:.3px;
+  color:#021008;background:var(--green);padding:7px 14px;
+  border-radius:9px;text-decoration:none;transition:.15s;
+}
+.op-link:hover{background:#1ff076;transform:translateY(-1px);box-shadow:0 4px 16px rgba(35,224,122,.3)}
+.profile-big{text-align:right;flex-shrink:0}
+.profile-big .n{font-size:52px;font-weight:900;letter-spacing:-2px;color:var(--green);font-family:'JetBrains Mono',monospace;line-height:1;text-shadow:0 0 32px rgba(35,224,122,.3)}
+.profile-big .l{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:4px}
+
+/* Operator picker */
+.picker-wrap{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:22px}
+.picker-hd{font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--faint);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.picker{display:flex;flex-direction:column;gap:8px}
+.pick{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:11px;
+  padding:13px 16px;cursor:pointer;transition:.15s;font-family:inherit;color:var(--ink)
+}
+.pick:hover{border-color:rgba(35,224,122,.35);background:rgba(35,224,122,.05);transform:translateX(3px)}
+.pick .pn{font-weight:700;font-size:14px}
+.pick .pa{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint)}
+
+/* ── GRID / SECTIONS ── */
+.sec{margin-bottom:20px}
+.sec-hd{font-size:10px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;color:var(--faint);margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:900px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g2{grid-template-columns:1fr}}
+
+/* Stat cards */
+.scard{
+  background:var(--bg2);border:1px solid var(--line);border-radius:14px;
+  padding:18px 20px;transition:.15s;
+}
+.scard:hover{border-color:var(--line2);background:var(--bg3)}
+.scard .k{font-size:10px;color:var(--faint);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px}
+.scard .v{font-size:28px;font-weight:900;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;color:var(--ink)}
+.scard .v.na{font-size:12px;color:var(--faint);font-weight:600;letter-spacing:0}
+.scard .m{font-size:10px;color:var(--faint);margin-top:8px;line-height:1.6}
+
+/* Distribution bars */
+.bars{display:flex;flex-direction:column;gap:10px}
+.barrow{display:flex;align-items:center;gap:12px;font-size:12px}
+.barrow .lbl{width:110px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.barrow .track{flex:1;height:5px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden}
+.barrow .track i{display:block;height:100%;background:linear-gradient(90deg,var(--green),rgba(35,224,122,.6));border-radius:3px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.barrow .ct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);width:28px;text-align:right;flex-shrink:0}
+.dcard{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:20px}
+
+/* Intelligence summary panel */
+.intel-panel{
+  background:linear-gradient(135deg,rgba(35,224,122,.06),rgba(35,224,122,.02));
+  border:1px solid rgba(35,224,122,.18);border-radius:14px;padding:22px 24px;
+  position:relative;overflow:hidden;
+}
+.intel-panel::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 100% at 0% 0%,rgba(35,224,122,.08),transparent 55%);pointer-events:none}
+.intel-panel .pl{font-size:8.5px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;color:var(--green);margin-bottom:12px;opacity:.8}
+.intel-panel p{font-size:14px;line-height:1.75;color:var(--muted)}
+.intel-panel p b{color:var(--ink);font-weight:700}
+
+/* Card table */
+.table-wrap{background:var(--bg2);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);font-weight:800;padding:12px 16px;border-bottom:1px solid var(--line)}
+tbody td{padding:11px 16px;font-size:12.5px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--muted);transition:background .12s}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:rgba(35,224,122,.04)}
+.pill{font-size:10.5px;padding:2px 8px;border-radius:6px;background:rgba(35,224,122,.08);color:var(--green);border:1px solid rgba(35,224,122,.15);font-weight:600}
+.lnk{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);opacity:.7;transition:.13s}
+.lnk:hover{opacity:1}
+.mono{font-family:'JetBrains Mono',monospace;color:var(--faint);font-size:11.5px}
+
+/* Locked cards */
+.locked-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:900px){.locked-grid{grid-template-columns:1fr}}
+.lcard{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:18px 20px;opacity:.7}
+.lcard .k{font-size:10px;color:var(--faint);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px}
+.lcard .v{font-size:12px;color:var(--faint);font-weight:600;font-family:'JetBrains Mono',monospace}
+.lcard .m{font-size:10px;color:var(--faintest);margin-top:8px;line-height:1.6}
+
+/* Footer */
+.foot{padding:20px 32px 40px;border-top:1px solid var(--line);font-size:10.5px;color:var(--faint);line-height:1.9}
+.foot a{color:var(--green);font-weight:700;opacity:.8}
+.foot a:hover{opacity:1}
+.foot-src{font-family:'JetBrains Mono',monospace;font-size:10px;margin-bottom:6px}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="brand"><span class="logo">◇</span><div>LITANY<small>Wallet Scanner</small></div></div>
-  <a class="home" href="/litany">← Dashboard</a>
+<!-- SIDEBAR -->
+<div class="sb">
+  <div class="sb-logo">
+    <div class="sb-m">≋</div>
+    <div class="sb-lt">MANTIS PRO<small>Intelligence Terminal</small></div>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-g">Platform</div>
+    <a class="sb-a" href="/activity"><span class="i">⚡</span> Activity Explorer</a>
+    <a class="sb-a" href="/litany"><span class="i">▤</span> Dashboard</a>
+    <a class="sb-a on" href="/litany/scanner"><span class="i">⌕</span> Scanner</a>
+    <a class="sb-a" href="/litany/rarity"><span class="i">★</span> Rarity Engine</a>
+    <div class="sb-g">Quick Links</div>
+    <a class="sb-a" href="/operator/0x40fafac283f5eda53bc572c0bc02caebca96036e"><span class="i">⊞</span> MantisPro</a>
+  </nav>
+  <div class="sb-eco">
+    <div class="sb-eco-t">Ecosystem</div>
+    <div class="sb-er"><span class="sb-ek">Abstract Chain</span><span class="sb-ev live">⬤ Live</span></div>
+    <div class="sb-er"><span class="sb-ek">Block Height</span><span class="sb-ev" id="sb-blk">—</span></div>
+    <div class="sb-er"><span class="sb-ek">LitanyCards</span><span class="sb-ev" id="sb-supply">—</span></div>
+  </div>
+  <div class="sb-agent">
+    <img src="/api/avatar?addr=0x40fafac283f5eda53bc572c0bc02caebca96036e" alt="Agent">
+    <div><div class="al">MANTIS AGENT</div><div class="as">#857</div></div>
+    <div class="odot"></div>
+  </div>
 </div>
 
-<div class="wrap">
-  <div class="head">
-    <h1>Litany <b>Intelligence</b> Scanner</h1>
-    <p>Paste a wallet to read a verified intelligence report on its Litany Card holdings — every value traceable to onchain data or OpenSea.</p>
-    <div class="search">
-      <input id="addr" type="text" placeholder="0x… wallet address or operator name" autocomplete="off" spellcheck="false">
-      <button id="go">Analyze</button>
-      <div id="ac-list" class="ac-list" hidden></div>
-    </div>
-    <div class="hint">Search by wallet address or operator name · reads balanceOf + tokenURI from the verified LitanyCards contract · floor from OpenSea</div>
+<!-- MAIN -->
+<div class="main">
+  <!-- TOPNAV -->
+  <div class="tnav">
+    <div class="tnav-title">LITANY <span>INTELLIGENCE</span> SCANNER</div>
+    <div class="tnav-pill"><div class="tnav-dot"></div>LIVE</div>
   </div>
 
-  <div id="report" class="report"></div>
-</div>
+  <div class="cnt">
 
-<footer>
-  <div class="pl" id="footprov">Sources: Abstract RPC · LitanyCards 0xd44a…03eB · OpenSea</div>
-  <div style="margin-top:8px">Every value is read from onchain data or OpenSea. Rankings and scores that require the full-collection index render as <b>Verification unavailable</b> with their methodology — never estimated.</div>
-  <div style="margin-top:8px">Community tool by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Mantis Pro · Not an official Litany product.</div>
-</footer>
+    <!-- HERO / SEARCH -->
+    <div class="scan-hero">
+      <div class="scan-eyebrow">Litany Intelligence · Wallet Analysis</div>
+      <div class="scan-title">Scan any <span>wallet</span></div>
+      <div class="scan-sub">Paste a wallet address or search by operator name to read a verified intelligence report on its Litany Card holdings — every value traceable to onchain data or OpenSea.</div>
+      <div class="cmd-bar" id="cmd-bar-wrap">
+        <span class="cmd-icon">⌕</span>
+        <input id="addr" type="text" placeholder="0x… wallet address or operator name" autocomplete="off" spellcheck="false">
+        <button id="go" class="cmd-btn">Analyze</button>
+        <div id="ac-list" class="ac-list" hidden></div>
+      </div>
+      <div class="scan-hint">Search by wallet address or operator name · reads balanceOf + tokenURI from the verified LitanyCards contract · floor from OpenSea</div>
+    </div>
+
+    <!-- REPORT -->
+    <div id="report" class="report"></div>
+
+  </div>
+
+  <div class="foot">
+    <div class="foot-src" id="footprov">Sources: Abstract RPC · LitanyCards 0xd44a…03eB · OpenSea</div>
+    <div>Every value is read from onchain data or OpenSea. Rankings and scores that require the full-collection index render as <b>Verification unavailable</b> with their methodology — never estimated.</div>
+    <div style="margin-top:6px">Community tool by <a href="https://x.com/newguy_gn" target="_blank">@newguy_gn</a> · Mantis Pro · Not an official Litany product.</div>
+  </div>
+</div>
 
 <script>
   const RPC="/api/abstract-rpc", OS="/api/opensea?path=", CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB";
@@ -153,16 +328,16 @@
   function profileHead(wallet,identity,subtitle,rightHTML){
     const displayName=(identity&&identity.name)||resolvedName||null;
     const faction=identity&&identity.faction;
-    const facColor=faction?(FAC[faction]||'#8a958d'):null;
-    const facBadge=faction?'<span class="opfac" style="--fc:'+facColor+';margin-left:8px">'+esc(faction)+'</span>':'';
+    const facColor=faction?(FAC[faction]||'rgba(255,255,255,.12)'):null;
+    const facBadge=faction?'<span class="opfac" style="--fc:'+facColor+'">'+esc(faction)+'</span>':'';
     return '<div class="profile">'
-      +'<div class="who" style="display:flex;align-items:flex-start;gap:14px">'
+      +'<div class="who">'
       +'<img class="id-avatar" src="/api/avatar?addr='+wallet+'" alt="">'
       +'<div>'
-      +'<div class="addr">'+(displayName?esc(displayName):short(wallet))+facBadge+'</div>'
+      +'<div class="id-name">'+(displayName?esc(displayName):short(wallet))+facBadge+'</div>'
       +(displayName?'<div class="id-addr">'+short(wallet)+'</div>':'')
-      +'<div class="sub">'+subtitle+'</div>'
-      +'<a href="/operator/'+wallet+'" class="op-link">View Operator Profile →</a>'
+      +'<div class="id-sub">'+subtitle+'</div>'
+      +'<a href="/operator/'+wallet+'" class="op-link">View Operator Profile ↗</a>'
       +'</div></div>'
       +rightHTML
       +'</div>';
@@ -175,7 +350,7 @@
     if(!results.length){hideAc();return;}
     acData=results;
     acList.innerHTML=results.map((r,i)=>{
-      const fc=r.faction?'<span class="opfac" style="--fc:'+(FAC[r.faction]||'#8a958d')+'">'+esc(r.faction)+'</span>':'';
+      const fc=r.faction?'<span class="opfac" style="--fc:'+(FAC[r.faction]||'rgba(255,255,255,.12)')+'">'+esc(r.faction)+'</span>':'';
       return '<div class="ac-item" data-i="'+i+'"><span class="ac-name">'+(r.name?esc(r.name):short(r.address))+'</span>'+fc+'<span class="ac-addr">'+short(r.address)+'</span></div>';
     }).join('');
     acList.hidden=false;
@@ -192,16 +367,14 @@
   const report=document.getElementById("report"), goBtn=document.getElementById("go"), addrEl=document.getElementById("addr");
 
   function loading(){report.className="report show";report.innerHTML='<div class="state"><div class="spinner"></div>Reading onchain holdings…</div>';}
-  function fail(m){report.className="report show";report.innerHTML='<div class="state err">⚠ '+m+'</div>';}
+  function fail(m){report.className="report show";report.innerHTML='<div class="state err">⚠ '+esc(m)+'</div>';}
 
   async function ownedTokenIds(wallet){
-    // try OpenSea account NFTs first
     try{
       const j=await osea("/api/v2/chain/abstract/account/"+wallet+"/nfts?limit=200");
       const ids=(j.nfts||[]).filter(n=>(n.contract||"").toLowerCase()===CARDS.toLowerCase()).map(n=>n.identifier);
       if(ids.length)return ids;
     }catch(_){}
-    // fallback: onchain log scan
     try{
       const [recv,sent]=await Promise.all([
         rpc("eth_getLogs",[{address:CARDS,topics:[TT,null,pad(wallet)],fromBlock:"0x0",toBlock:"latest"}]),
@@ -235,8 +408,8 @@
     if(!res||!res.length){fail('No operator found matching "'+esc(q)+'". Names come from the Litany leaderboard — try a full wallet address instead.');return;}
     if(res.length===1){resolvedName=res[0].name||null;addrEl.value=res[0].address;return analyze(res[0].address);}
     report.className="report show";
-    report.innerHTML='<div class="sec"><h2>Select operator <span class="badge b-on">'+res.length+' matches</span></h2><div class="picker">'+res.map(r=>{
-      const fc=r.faction?'<span class="opfac" style="--fc:'+(FAC[r.faction]||'#8a958d')+'">'+esc(r.faction)+'</span>':'';
+    report.innerHTML='<div class="picker-wrap"><div class="picker-hd">Select operator <span class="badge b-on">'+res.length+' matches</span></div><div class="picker">'+res.map(r=>{
+      const fc=r.faction?'<span class="opfac" style="--fc:'+(FAC[r.faction]||'rgba(255,255,255,.12)')+'">'+esc(r.faction)+'</span>':'';
       const nm=r.name?esc(r.name):short(r.address);
       return '<button class="pick" data-a="'+r.address+'" data-n="'+(r.name?esc(r.name):'')+'"><span class="pn">'+nm+'</span>'+fc+'<span class="pa">'+short(r.address)+'</span></button>';
     }).join('')+'</div></div>';
@@ -256,15 +429,15 @@
       ]);
       if(!resolvedName&&identity&&identity.name)resolvedName=identity.name;
       const balance=hi(balHex);
-      if(balance===0){report.className="report show";
-        report.innerHTML=profileHead(wallet,identity,'No Litany Cards held by this wallet.','<div class="big"><div class="n">0</div><div class="l">Cards</div></div>');
-        goBtn.disabled=false;return;}
-
+      if(balance===0){
+        report.className="report show";
+        report.innerHTML=profileHead(wallet,identity,'No Litany Cards held by this wallet.','<div class="profile-big"><div class="n">0</div><div class="l">Cards</div></div>');
+        goBtn.disabled=false;return;
+      }
       const [ids,floor]=await Promise.all([
         ownedTokenIds(wallet),
         (async()=>{try{const c=await osea("/api/v2/chain/abstract/contract/"+CARDS);const slug=c.collection||(c.contract&&c.contract.collection);if(!slug)return null;const s=await osea("/api/v2/collections/"+slug+"/stats");return (s.total&&s.total.floor_price)??null;}catch(_){return null;}})()
       ]);
-
       let cards=[],enumNote="";
       if(ids&&ids.length){
         const detail=ids.slice(0,MAX_CARDS_DETAIL);
@@ -279,65 +452,73 @@
   }
 
   function render(wallet,balance,cards,floor,enumNote,identity){
-    // within-wallet breakdown from real attributes
     const cat={}, numAgg={}, numCnt={};
     cards.forEach(c=>{Object.entries(c.attrs).forEach(([k,v])=>{
       if(typeof v==="number"||(/^\d+(\.\d+)?$/.test(String(v)))){numAgg[k]=(numAgg[k]||0)+Number(v);numCnt[k]=(numCnt[k]||0)+1;}
       else{cat[k]=cat[k]||{};cat[k][v]=(cat[k][v]||0)+1;}
     });});
-    // pick a primary categorical (Class if present, else first)
     const classKey=Object.keys(cat).find(k=>/class/i.test(k))||Object.keys(cat)[0];
     const classDist=classKey?cat[classKey]:{};
     const topClass=Object.entries(classDist).sort((a,b)=>b[1]-a[1])[0];
-
-    const floorVal = floor!=null ? (floor*balance) : null;
+    const floorVal=floor!=null?(floor*balance):null;
 
     let h="";
-    h+=profileHead(wallet,identity,'Litany Card holdings · read from contract <span class="badge b-on" style="margin-left:4px">Verified Onchain</span>',
-      '<div class="big"><div class="n">'+balance+'</div><div class="l">Cards Held</div></div>');
 
-    // collection breakdown
-    h+='<div class="sec"><h2>Collection Breakdown <span class="badge b-on">Verified Onchain</span></h2><div class="grid g4">';
-    h+='<div class="card"><div class="k">Cards Held</div><div class="v">'+balance+'</div></div>';
-    h+='<div class="card"><div class="k">'+(classKey||"Categories")+'</div><div class="v">'+(Object.keys(classDist).length||"—")+'</div><div class="meth">distinct values in wallet</div></div>';
-    h+='<div class="card"><div class="k">Portfolio Floor Value</div><div class="v '+(floorVal==null?'pending':'')+'">'+(floorVal!=null?(floorVal.toFixed(3)+" Ξ"):"Verification unavailable")+'</div><div class="meth">'+(floorVal!=null?'floor × held · OpenSea':'requires OpenSea floor')+'</div></div>';
-    h+='<div class="card"><div class="k">Cards Analyzed</div><div class="v">'+cards.length+'</div>'+(enumNote?'<div class="meth">'+enumNote+'</div>':'')+'</div>';
-    h+='</div>';
+    // Profile header
+    h+=profileHead(wallet,identity,
+      'Litany Card holdings &nbsp;<span class="badge b-on">Verified Onchain</span>',
+      '<div class="profile-big"><div class="n">'+balance+'</div><div class="l">Cards Held</div></div>');
 
-    // distributions + stat averages
+    // Collection breakdown
+    h+='<div class="sec"><div class="sec-hd">Collection Breakdown <span class="badge b-on">Verified Onchain</span></div>';
+    h+='<div class="grid g4">';
+    h+='<div class="scard"><div class="k">Cards Held</div><div class="v">'+balance+'</div></div>';
+    h+='<div class="scard"><div class="k">'+(classKey||"Categories")+'</div><div class="v">'+(Object.keys(classDist).length||"—")+'</div><div class="m">distinct values in wallet</div></div>';
+    h+='<div class="scard"><div class="k">Portfolio Floor Value</div><div class="v '+(floorVal==null?'na':'')+'">'+(floorVal!=null?(floorVal.toFixed(3)+" Ξ"):"Verification unavailable")+'</div><div class="m">'+(floorVal!=null?'floor × held · OpenSea':'requires OpenSea floor')+'</div></div>';
+    h+='<div class="scard"><div class="k">Cards Analyzed</div><div class="v">'+cards.length+'</div>'+(enumNote?'<div class="m">'+esc(enumNote)+'</div>':'')+'</div>';
+    h+='</div></div>';
+
+    // Distributions
     if(classKey&&Object.keys(classDist).length){
-      h+='<div class="grid g2" style="margin-top:16px"><div class="card"><div class="k">'+classKey+' distribution (this wallet)</div><div class="bars" style="margin-top:12px">';
+      h+='<div class="sec"><div class="grid g2">';
+      h+='<div class="dcard"><div class="sec-hd">'+esc(classKey)+' Distribution</div><div class="bars">';
       const max=Math.max(...Object.values(classDist));
-      Object.entries(classDist).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{h+='<div class="barrow"><span class="lbl">'+k+'</span><span class="track"><i style="width:'+(v/max*100)+'%"></i></span><span class="ct">'+v+'</span></div>';});
+      Object.entries(classDist).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
+        h+='<div class="barrow"><span class="lbl">'+esc(k)+'</span><span class="track"><i style="width:'+(v/max*100)+'%"></i></span><span class="ct">'+v+'</span></div>';
+      });
       h+='</div></div>';
-      // numeric averages
       const numKeys=Object.keys(numAgg);
-      h+='<div class="card"><div class="k">Average stats (this wallet)</div><div class="bars" style="margin-top:12px">';
-      if(numKeys.length){numKeys.forEach(k=>{const avg=numAgg[k]/numCnt[k];h+='<div class="barrow"><span class="lbl">'+k+'</span><span class="track"><i style="width:'+Math.min(100,avg)+'%"></i></span><span class="ct">'+avg.toFixed(0)+'</span></div>';});}
-      else h+='<div class="meth">No numeric attributes in card metadata.</div>';
-      h+='</div></div></div>';
+      h+='<div class="dcard"><div class="sec-hd">Average Stats (This Wallet)</div><div class="bars">';
+      if(numKeys.length){numKeys.forEach(k=>{const avg=numAgg[k]/numCnt[k];h+='<div class="barrow"><span class="lbl">'+esc(k)+'</span><span class="track"><i style="width:'+Math.min(100,avg)+'%"></i></span><span class="ct">'+avg.toFixed(0)+'</span></div>';});}
+      else h+='<div class="m" style="font-size:11px;color:var(--faint)">No numeric attributes in card metadata.</div>';
+      h+='</div></div>';
+      h+='</div></div>';
     }
 
-    // intelligence panel (only observed data)
+    // Intelligence summary
     let summary="This wallet holds <b>"+balance+"</b> Litany Card"+(balance===1?"":"s")+".";
-    if(topClass)summary+=" Its holdings are led by <b>"+topClass[0]+"</b> ("+topClass[1]+" of "+cards.length+" analyzed).";
+    if(topClass)summary+=" Holdings are led by <b>"+esc(topClass[0])+"</b> ("+topClass[1]+" of "+cards.length+" analyzed).";
     const numKeys=Object.keys(numAgg);
-    if(numKeys.length){summary+=" Average "+numKeys.slice(0,3).map(k=>"<b>"+k.toLowerCase()+"</b> "+(numAgg[k]/numCnt[k]).toFixed(0)).join(", ")+".";}
+    if(numKeys.length){summary+=" Average "+numKeys.slice(0,3).map(k=>"<b>"+esc(k.toLowerCase())+"</b> "+(numAgg[k]/numCnt[k]).toFixed(0)).join(", ")+".";}
     if(floorVal!=null)summary+=" Floor-based portfolio value is <b>"+floorVal.toFixed(3)+" Ξ</b> (OpenSea).";
-    h+='<div class="sec"><div class="panel"><div class="pl">Intelligence Summary · observed data only</div><p>'+summary+'</p></div></div>';
+    h+='<div class="sec"><div class="intel-panel"><div class="pl">Intelligence Summary · Observed Data Only</div><p>'+summary+'</p></div></div>';
 
-    // per-card list
+    // Card table
     if(cards.length){
-      h+='<div class="sec"><h2>Card Intelligence <span class="badge b-on">Verified Onchain</span></h2><div class="table-card"><table><thead><tr><th>Token</th><th>Name</th>';
       const cols=Object.keys(cards[0].attrs).slice(0,4);
-      cols.forEach(c=>h+='<th>'+c+'</th>');
+      h+='<div class="sec"><div class="sec-hd">Card Intelligence <span class="badge b-on">Verified Onchain</span></div>';
+      h+='<div class="table-wrap"><table><thead><tr><th>Token</th><th>Name</th>';
+      cols.forEach(c=>h+='<th>'+esc(c)+'</th>');
       h+='<th>Verify</th></tr></thead><tbody>';
-      cards.forEach(c=>{h+='<tr><td class="mono">#'+c.tokenId+'</td><td>'+(c.name||"—")+'</td>';cols.forEach(k=>h+='<td><span class="pill">'+(c.attrs[k]!=null?c.attrs[k]:"—")+'</span></td>');h+='<td><a class="lnk" href="https://abscan.org/token/'+CARDS+'?a='+c.tokenId+'" target="_blank">abscan ↗</a></td></tr>';});
+      cards.forEach(c=>{
+        h+='<tr><td class="mono">#'+c.tokenId+'</td><td style="color:var(--ink);font-weight:600">'+esc(c.name||"—")+'</td>';
+        cols.forEach(k=>h+='<td><span class="pill">'+(c.attrs[k]!=null?esc(String(c.attrs[k])):"—")+'</span></td>');
+        h+='<td><a class="lnk" href="https://abscan.org/token/'+CARDS+'?a='+c.tokenId+'" target="_blank">abscan ↗</a></td></tr>';
+      });
       h+='</tbody></table></div></div>';
     }
 
-    // honest unavailable intelligence (requires full-collection index / protocol)
-    h+='<div class="sec"><h2>Ranking &amp; Protocol Intelligence <span class="badge b-awa">Indexer / Protocol Required</span></h2><div class="grid g3">';
+    // Locked intelligence
     const locked=[
       ["Global Rarity Rank","ranks card traits against all 8,000 — needs full-collection index"],
       ["Portfolio Power Score","weighted score vs all holders — needs collection-wide data"],
@@ -346,7 +527,9 @@
       ["Hidden Gem Detector","comparable sales + global rarity"],
       ["Protocol Participation","Arena / Faction / Hollow / Firmware — not yet deployed"]
     ];
-    locked.forEach(([t,m])=>{h+='<div class="card"><div class="k">'+t+'</div><div class="v pending">Verification unavailable</div><div class="meth">'+m+'</div></div>';});
+    h+='<div class="sec"><div class="sec-hd">Ranking & Protocol Intelligence <span class="badge b-awa">Indexer / Protocol Required</span></div>';
+    h+='<div class="locked-grid">';
+    locked.forEach(([t,m])=>{h+='<div class="lcard"><div class="k">'+t+'</div><div class="v">Verification unavailable</div><div class="m">'+m+'</div></div>';});
     h+='</div></div>';
 
     report.className="report show";report.innerHTML=h;
@@ -367,7 +550,19 @@
   });
   addrEl.addEventListener('blur',()=>setTimeout(hideAc,200));
 
-  // auto-run: #hash address OR ?q= name query from dashboard search
+  // Sidebar live data
+  (async()=>{
+    try{
+      const blk=await fetch('/api/abstract-rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:99,method:'eth_blockNumber',params:[]})}).then(r=>r.json());
+      document.getElementById('sb-blk').textContent='#'+parseInt(blk.result,16).toLocaleString();
+    }catch(_){}
+    try{
+      const bal=await fetch('/api/abstract-rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:100,method:'eth_call',params:[{to:'0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB',data:'0x18160ddd'},'latest']})}).then(r=>r.json());
+      document.getElementById('sb-supply').textContent=parseInt(bal.result,16).toLocaleString();
+    }catch(_){}
+  })();
+
+  // auto-run from hash or ?q=
   (function(){
     const h=(location.hash||"").replace(/^#/,"").trim();
     if(/^0x[a-fA-F0-9]{40}$/.test(h)){addrEl.value=h;analyze();return;}
@@ -375,6 +570,5 @@
     if(q){addrEl.value=q;analyze();}
   })();
 </script>
-
 </body>
 </html>
