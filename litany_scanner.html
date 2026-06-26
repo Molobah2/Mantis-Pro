@@ -307,7 +307,7 @@ tbody tr:hover td{background:rgba(35,224,122,.04)}
 </div>
 
 <script>
-  const RPC="/api/abstract-rpc", OS="/api/opensea?path=", CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB";
+  const RPC="/api/abstract-rpc", OS="/api/opensea?path=", CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB", HOLLOWS_NFT="0xf315f88969982d10eafFB93249C00d5BA47C2A28";
   const TT="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
   const MAX_CARDS_DETAIL=24;
   let rid=1;
@@ -370,21 +370,24 @@ tbody tr:hover td{background:rgba(35,224,122,.04)}
   function fail(m){report.className="report show";report.innerHTML='<div class="state err">⚠ '+esc(m)+'</div>';}
 
   async function ownedTokenIds(wallet){
-    try{
-      const j=await osea("/api/v2/chain/abstract/account/"+wallet+"/nfts?limit=200");
-      const ids=(j.nfts||[]).filter(n=>(n.contract||"").toLowerCase()===CARDS.toLowerCase()).map(n=>n.identifier);
-      if(ids.length)return ids;
-    }catch(_){}
+    // RPC Transfer logs are always the ground truth — OpenSea on Abstract is incomplete for large holders
+    const idsSet=new Set();
     try{
       const [recv,sent]=await Promise.all([
         rpc("eth_getLogs",[{address:CARDS,topics:[TT,null,pad(wallet)],fromBlock:"0x0",toBlock:"latest"}]),
-        rpc("eth_getLogs",[{address:CARDS,topics:[TT,pad(wallet)],fromBlock:"0x0",toBlock:"latest"}])
+        rpc("eth_getLogs",[{address:CARDS,topics:[TT,pad(wallet),null],fromBlock:"0x0",toBlock:"latest"}])
       ]);
       const net={};
-      recv.forEach(l=>{const id=BigInt(l.topics[3]).toString();net[id]=(net[id]||0)+1;});
-      sent.forEach(l=>{const id=BigInt(l.topics[3]).toString();net[id]=(net[id]||0)-1;});
-      return Object.keys(net).filter(id=>net[id]>0);
-    }catch(_){return null;}
+      (recv||[]).forEach(l=>{const id=BigInt(l.topics[3]).toString();net[id]=(net[id]||0)+1;});
+      (sent||[]).forEach(l=>{const id=BigInt(l.topics[3]).toString();net[id]=(net[id]||0)-1;});
+      Object.keys(net).filter(id=>net[id]>0).forEach(id=>idsSet.add(id));
+    }catch(_){}
+    // OpenSea supplements (catches any gaps)
+    try{
+      const j=await osea("/api/v2/chain/abstract/account/"+wallet+"/nfts?limit=200");
+      (j.nfts||[]).filter(n=>(n.contract||"").toLowerCase()===CARDS.toLowerCase()).forEach(n=>idsSet.add(String(n.identifier)));
+    }catch(_){}
+    return idsSet.size?[...idsSet]:null;
   }
 
   async function cardMeta(tokenId){
@@ -423,15 +426,18 @@ tbody tr:hover td{background:rgba(35,224,122,.04)}
     if(!forceAddr)resolvedName=null;
     hideAc();goBtn.disabled=true;loading();
     try{
-      const [balHex,identity]=await Promise.all([
-        rpc("eth_call",[{to:CARDS,data:"0x70a08231"+wallet.slice(2).toLowerCase().padStart(64,"0")},"latest"]),
+      const balData="0x70a08231"+wallet.slice(2).toLowerCase().padStart(64,"0");
+      const [balHex,hollowBalHex,identity]=await Promise.all([
+        rpc("eth_call",[{to:CARDS,data:balData},"latest"]),
+        rpc("eth_call",[{to:HOLLOWS_NFT,data:balData},"latest"]).catch(()=>"0x0"),
         fetchIdentity(wallet)
       ]);
       if(!resolvedName&&identity&&identity.name)resolvedName=identity.name;
       const balance=hi(balHex);
-      if(balance===0){
+      const hollowBalance=hi(hollowBalHex||"0x0");
+      if(balance===0&&hollowBalance===0){
         report.className="report show";
-        report.innerHTML=profileHead(wallet,identity,'No Litany Cards held by this wallet.','<div class="profile-big"><div class="n">0</div><div class="l">Cards</div></div>');
+        report.innerHTML=profileHead(wallet,identity,'No Litany Cards or Hollows held by this wallet.','<div class="profile-big"><div class="n">0</div><div class="l">Cards</div></div>');
         goBtn.disabled=false;return;
       }
       const [ids,floor]=await Promise.all([
@@ -443,15 +449,15 @@ tbody tr:hover td{background:rgba(35,224,122,.04)}
         const detail=ids.slice(0,MAX_CARDS_DETAIL);
         cards=await Promise.all(detail.map(cardMeta));
         if(ids.length>MAX_CARDS_DETAIL)enumNote="Showing first "+MAX_CARDS_DETAIL+" of "+ids.length+" cards.";
-      }else{
-        enumNote="Token-level detail unavailable (set OpenSea key or RPC log range too large). Holdings count is still verified onchain.";
+      }else if(balance>0){
+        enumNote="Token-level detail unavailable (RPC log range may be too large). Holdings count is still verified onchain.";
       }
-      render(wallet,balance,cards,floor,enumNote,identity);
+      render(wallet,balance,hollowBalance,cards,floor,enumNote,identity);
     }catch(e){fail("Scan failed: "+e.message);}
     finally{goBtn.disabled=false;}
   }
 
-  function render(wallet,balance,cards,floor,enumNote,identity){
+  function render(wallet,balance,hollowBalance,cards,floor,enumNote,identity){
     const cat={}, numAgg={}, numCnt={};
     cards.forEach(c=>{Object.entries(c.attrs).forEach(([k,v])=>{
       if(typeof v==="number"||(/^\d+(\.\d+)?$/.test(String(v)))){numAgg[k]=(numAgg[k]||0)+Number(v);numCnt[k]=(numCnt[k]||0)+1;}
@@ -467,13 +473,13 @@ tbody tr:hover td{background:rgba(35,224,122,.04)}
     // Profile header
     h+=profileHead(wallet,identity,
       'Litany Card holdings &nbsp;<span class="badge b-on">Verified Onchain</span>',
-      '<div class="profile-big"><div class="n">'+balance+'</div><div class="l">Cards Held</div></div>');
+      '<div class="profile-big"><div class="n">'+balance+'</div><div class="l">Cards Held</div>'+(hollowBalance?'<div class="n" style="font-size:22px;margin-top:6px">'+hollowBalance+'</div><div class="l">Hollows</div>':'')+'</div>');
 
     // Collection breakdown
     h+='<div class="sec"><div class="sec-hd">Collection Breakdown <span class="badge b-on">Verified Onchain</span></div>';
     h+='<div class="grid g4">';
     h+='<div class="scard"><div class="k">Cards Held</div><div class="v">'+balance+'</div></div>';
-    h+='<div class="scard"><div class="k">'+(classKey||"Categories")+'</div><div class="v">'+(Object.keys(classDist).length||"—")+'</div><div class="m">distinct values in wallet</div></div>';
+    h+='<div class="scard"><div class="k">Hollows</div><div class="v '+(hollowBalance?'':'na')+'">'+( hollowBalance||"None claimed")+'</div><div class="m">'+(hollowBalance?'Genesis Hollows — 0xf315…2A28':'claim at litany.gg/hollows')+'</div></div>';
     h+='<div class="scard"><div class="k">Portfolio Floor Value</div><div class="v '+(floorVal==null?'na':'')+'">'+(floorVal!=null?(floorVal.toFixed(3)+" Ξ"):"Verification unavailable")+'</div><div class="m">'+(floorVal!=null?'floor × held · OpenSea':'requires OpenSea floor')+'</div></div>';
     h+='<div class="scard"><div class="k">Cards Analyzed</div><div class="v">'+cards.length+'</div>'+(enumNote?'<div class="m">'+esc(enumNote)+'</div>':'')+'</div>';
     h+='</div></div>';
@@ -525,7 +531,7 @@ tbody tr:hover td{background:rgba(35,224,122,.04)}
       ["Collection Leaderboard Rank","peer comparison across every holder — needs holder index"],
       ["Trait Scarcity & Percentile","trait counts across the whole collection"],
       ["Hidden Gem Detector","comparable sales + global rarity"],
-      ["Protocol Participation","Arena / Faction / Hollow / Firmware — not yet deployed"]
+      ["Protocol Participation","Mesh claims, anchors, Homestead — needs Litany API session"]
     ];
     h+='<div class="sec"><div class="sec-hd">Ranking & Protocol Intelligence <span class="badge b-awa">Indexer / Protocol Required</span></div>';
     h+='<div class="locked-grid">';
@@ -533,7 +539,7 @@ tbody tr:hover td{background:rgba(35,224,122,.04)}
     h+='</div></div>';
 
     report.className="report show";report.innerHTML=h;
-    document.getElementById("footprov").textContent="Sources: Abstract RPC · LitanyCards "+short(CARDS)+" · OpenSea · scanned "+new Date().toLocaleTimeString();
+    document.getElementById("footprov").textContent="Sources: Abstract RPC · LitanyCards "+short(CARDS)+" · Hollow NFT "+short(HOLLOWS_NFT)+" · OpenSea · scanned "+new Date().toLocaleTimeString();
   }
 
   goBtn.addEventListener("click",()=>analyze());

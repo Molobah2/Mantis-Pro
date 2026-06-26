@@ -437,8 +437,83 @@ def _mesh_faction_map():
                 out[w] = {"faction": e.get("faction"), "claims": e.get("value"), "rank": e.get("rank")}
     return out
 
+# ── LITANY PROTOCOL CONTRACTS (Abstract mainnet, chainId 2741) ───
+CARDS_ADDR        = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"  # LitanyCards ERC-721
+HOLLOW_NFT_ADDR   = "0xf315f88969982d10eafFB93249C00d5BA47C2A28"  # Hollow ERC-721 (live)
+GENESIS_CLAIM_ADDR= "0x9cC639C9855cF9e959C47A7bDF1c3C14468A270f"  # Genesis claim gate
+
+_HOLLOW_NFT_ABI = [
+    {"name": "balanceOf",  "type": "function", "stateMutability": "view",
+     "inputs": [{"name": "owner", "type": "address"}],
+     "outputs": [{"name": "", "type": "uint256"}]},
+    {"name": "tokenURI",   "type": "function", "stateMutability": "view",
+     "inputs": [{"name": "tokenId", "type": "uint256"}],
+     "outputs": [{"name": "", "type": "string"}]},
+    {"name": "getPublicGeneData", "type": "function", "stateMutability": "view",
+     "inputs": [{"name": "hollowId", "type": "uint256"}],
+     "outputs": [{"name": "", "type": "uint256"}]},
+]
+_GENESIS_CLAIM_ABI = [
+    {"name": "claimsOpen",          "type": "function", "stateMutability": "view",
+     "inputs": [], "outputs": [{"name": "", "type": "bool"}]},
+    {"name": "totalGenesisClaimed", "type": "function", "stateMutability": "view",
+     "inputs": [], "outputs": [{"name": "", "type": "uint256"}]},
+    {"name": "GENESIS_SUPPLY_CAP",  "type": "function", "stateMutability": "view",
+     "inputs": [], "outputs": [{"name": "", "type": "uint256"}]},
+    {"name": "litanyClaimed",       "type": "function", "stateMutability": "view",
+     "inputs": [{"name": "cardId", "type": "uint256"}],
+     "outputs": [{"name": "", "type": "bool"}]},
+    {"name": "cardToHollow",        "type": "function", "stateMutability": "view",
+     "inputs": [{"name": "cardId", "type": "uint256"}],
+     "outputs": [{"name": "", "type": "uint256"}]},
+]
+_hollow_contract = None
+_genesis_contract = None
+
+def _hollows():
+    global _hollow_contract
+    if _hollow_contract is None:
+        _hollow_contract = w3.eth.contract(
+            address=Web3.to_checksum_address(HOLLOW_NFT_ADDR), abi=_HOLLOW_NFT_ABI)
+    return _hollow_contract
+
+def _genesis():
+    global _genesis_contract
+    if _genesis_contract is None:
+        _genesis_contract = w3.eth.contract(
+            address=Web3.to_checksum_address(GENESIS_CLAIM_ADDR), abi=_GENESIS_CLAIM_ABI)
+    return _genesis_contract
+
+def _hollow_balance(addr):
+    """balanceOf on the Hollow NFT contract — single eth_call, very fast."""
+    try:
+        return _hollows().functions.balanceOf(Web3.to_checksum_address(addr)).call()
+    except Exception as e:
+        print(f"hollow balance {addr}: {e}")
+        return 0
+
+_genesis_stats_cache = {"data": None, "ts": 0.0}
+_GENESIS_STATS_TTL  = 120  # 2-minute cache (global stat, rarely changes fast)
+
+def _genesis_global_stats():
+    """totalGenesisClaimed + claimsOpen — 2-min cache."""
+    if time.time() - _genesis_stats_cache["ts"] < _GENESIS_STATS_TTL and _genesis_stats_cache["data"]:
+        return _genesis_stats_cache["data"]
+    try:
+        c = _genesis()
+        data = {
+            "total_claimed": c.functions.totalGenesisClaimed().call(),
+            "supply_cap":    c.functions.GENESIS_SUPPLY_CAP().call(),
+            "claims_open":   c.functions.claimsOpen().call(),
+        }
+    except Exception as e:
+        print(f"genesis stats: {e}")
+        data = {"total_claimed": 0, "supply_cap": 5000, "claims_open": False}
+    _genesis_stats_cache["data"] = data
+    _genesis_stats_cache["ts"]   = time.time()
+    return data
+
 # ── LITANY CARD IMAGE CACHE (real on-chain SVG via tokenURI) ─────
-CARDS_ADDR = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"
 _CARD_ABI = [{"name": "tokenURI", "type": "function", "stateMutability": "view",
               "inputs": [{"name": "tokenId", "type": "uint256"}],
               "outputs": [{"name": "", "type": "string"}]}]
@@ -717,16 +792,19 @@ def operator_data_agg():
         resp.headers["Cache-Control"] = "public, max-age=60"
         return resp
     # Fan out all upstream calls in parallel — server-to-server is ~10-50ms each
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        f_idn  = ex.submit(resolve_identity, addr, True)
-        f_mesh = ex.submit(_mesh_get, f"/wallet/{addr}")
-        f_lb   = ex.submit(_mesh_leaderboard)
-        f_nfts = ex.submit(_server_owned_cards, addr)
-    identity  = f_idn.result()  or {}
-    mesh_data = f_mesh.result()
-    lb_raw    = f_lb.result()   or {}
-    owned     = f_nfts.result() or []
-    floor     = _server_floor()                          # cheap — hits 5-min cache
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        f_idn     = ex.submit(resolve_identity, addr, True)
+        f_mesh    = ex.submit(_mesh_get, f"/wallet/{addr}")
+        f_lb      = ex.submit(_mesh_leaderboard)
+        f_nfts    = ex.submit(_server_owned_cards, addr)
+        f_hollows = ex.submit(_hollow_balance, addr)
+    identity      = f_idn.result()     or {}
+    mesh_data     = f_mesh.result()
+    lb_raw        = f_lb.result()      or {}
+    owned         = f_nfts.result()    or []
+    hollow_count  = f_hollows.result() or 0
+    floor         = _server_floor()                          # cheap — hits 5-min cache
+    genesis       = _genesis_global_stats()                  # cheap — 2-min cache
     lb_entries = lb_raw.get("entries", []) if isinstance(lb_raw, dict) else []
     lb_entry   = next((e for e in lb_entries if (e.get("wallet") or "").lower() == addr), None)
     fmap       = _mesh_faction_map()
@@ -737,15 +815,25 @@ def operator_data_agg():
             "twitter": identity.get("twitter"),
             "faction": (fmap.get(addr) or {}).get("faction"),
         },
-        "mesh":        mesh_data,
-        "lb_entries":  lb_entries,
-        "lb_entry":    lb_entry,
-        "lb_total":    len(lb_entries) or 68,
-        "owned_cards": owned,
-        "card_stats":  {i: idx[i] for i in owned if i in idx},
-        "floor":       floor,
+        "mesh":          mesh_data,
+        "lb_entries":    lb_entries,
+        "lb_entry":      lb_entry,
+        "lb_total":      len(lb_entries) or 68,
+        "owned_cards":   owned,
+        "card_stats":    {i: idx[i] for i in owned if i in idx},
+        "floor":         floor,
+        "hollow_count":  hollow_count,
+        "genesis_stats": genesis,
     }
     _op_prof_cache[addr] = {"ts": time.time(), "data": data}
+    resp = jsonify(data)
+    resp.headers["Cache-Control"] = "public, max-age=60"
+    return resp
+
+@app.route("/api/hollow-global")
+def hollow_global():
+    """Global Hollows genesis stats — totalGenesisClaimed, supply cap, claims open."""
+    data = _genesis_global_stats()
     resp = jsonify(data)
     resp.headers["Cache-Control"] = "public, max-age=60"
     return resp

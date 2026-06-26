@@ -544,7 +544,7 @@ a{color:inherit;text-decoration:none}
 </div>
 
 <script>
-const CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB",RPC="/api/abstract-rpc";
+const CARDS="0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB",HOLLOWS_NFT="0xf315f88969982d10eafFB93249C00d5BA47C2A28",GENESIS_CLAIM="0x9cC639C9855cF9e959C47A7bDF1c3C14468A270f",RPC="/api/abstract-rpc";
 const TT="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",ZERO="0x0000000000000000000000000000000000000000";
 let rid=1;
 async function rpc(m,p){const r=await fetch(RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:rid++,method:m,params:p})});const j=await r.json();if(j.error)throw new Error(j.error.message);return j.result;}
@@ -570,7 +570,7 @@ function tierOf(c){if(!c)return null;const p=c.percentile||0;if(p>=99)return{n:"
 
 let _addr="",_scoreObj={score:0,breakdown:[]};
 
-function computeScore({cards,cardStats,mesh,lbEntry}){
+function computeScore({cards,cardStats,mesh,lbEntry,hollowCount}){
   let s=0,bd=[];
   const cc=cards.length;const cp=cc*12;s+=cp;bd.push({l:"Cards owned ("+cc+")",v:cp});
   const vals=cards.map(id=>cardStats[id]?.percentile||0);
@@ -579,6 +579,7 @@ function computeScore({cards,cardStats,mesh,lbEntry}){
   if(vals.length>1){const avg=vals.reduce((a,b)=>a+b,0)/vals.length;const ap=Math.round(avg*.8);s+=ap;bd.push({l:"Portfolio quality",v:ap});}
   if(mesh){const mc=mesh.total_claims*6;s+=mc;bd.push({l:"Mesh claims ("+mesh.total_claims+")",v:mc});const ac=mesh.anchor_count*35;s+=ac;bd.push({l:"Anchors ("+mesh.anchor_count+")",v:ac});const acp=(mesh.earned_achievement_ids||[]).length*80;s+=acp;bd.push({l:"Achievements",v:acp});}
   if(lbEntry){const rk=lbEntry.rank;const rb=rk<=10?300:rk<=25?175:rk<=50?75:0;s+=rb;if(rb)bd.push({l:"Mesh rank #"+rk,v:rb});}
+  if(hollowCount>0){const hp=hollowCount*45;s+=hp;bd.push({l:"Hollows ("+hollowCount+")",v:hp});}
   return{score:Math.round(s),breakdown:bd};
 }
 
@@ -896,6 +897,8 @@ let _profAddr="";
   const ownedCards=opData.owned_cards||[];
   const cardStats=opData.card_stats||{};
   const floor=opData.floor||0;
+  const hollowCount=opData.hollow_count||0;
+  const genesisStats=opData.genesis_stats||{};
 
   const sbOps=document.getElementById("sb-ops");if(sbOps)sbOps.textContent=lbTotal;
 
@@ -914,7 +917,7 @@ let _profAddr="";
   if(lbEntry)document.getElementById("ark").textContent="#"+lbEntry.rank;
   else document.getElementById("ark").style.display="none";
 
-  const scoreObj=computeScore({cards:ownedCards,cardStats,mesh,lbEntry});
+  const scoreObj=computeScore({cards:ownedCards,cardStats,mesh,lbEntry,hollowCount});
   _scoreObj=scoreObj;
   const t=scoreTier(scoreObj.score);
   const tierColors={Legend:"var(--purple)",Sovereign:"var(--gold)",Architect:"var(--green)",Pathfinder:"var(--blue)"};
@@ -954,7 +957,7 @@ let _profAddr="";
     {icon:"⬡",key:"MESH CLAIMS",val:mesh?.total_claims??null,sub:lbEntry?"Rank #"+lbEntry.rank:null,good:(mesh?.total_claims||0)>0},
     {icon:"⚓",key:"ANCHORS",val:mesh?.anchor_count??null,sub:mesh?.anchor_count?"Territory markers":null,good:(mesh?.anchor_count||0)>0},
     {icon:"🏅",key:"ACHIEVEMENTS",val:achCount||null,sub:achCount?"Earned":null,good:achCount>0},
-    {icon:"🜂",key:"HOLLOWS",val:null,sub:"Awaiting",good:false},
+    {icon:"🜂",key:"HOLLOWS",val:hollowCount||null,sub:hollowCount?"Genesis claimed":(genesisStats.claims_open?"Claim open":"Not claimed"),good:hollowCount>0},
     {icon:"👥",key:"REFERRALS",val:null,sub:"Awaiting",good:false},
   ].map(s=>`<div class="pb-item"><div class="pb-key"><span class="pb-icon">${s.icon}</span>${s.key}</div><div class="pb-val ${s.val!==null?'real':'empty'}">${s.val!==null?fmtN(s.val):'—'}</div>${s.sub?`<div class="pb-sub ${s.good?'good':''}">${s.sub}</div>`:''}</div>`).join('');
 
