@@ -599,45 +599,51 @@ async def run_battle(sector_key: str = "surge") -> dict:
 
             try:
                 # ── auth phase ──────────────────────────────────────────────
-                log("Navigating to demo landing...")
-                await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
-                log("goto complete — sleeping 6s for SPA boot...")
-                await asyncio.sleep(6)   # asyncio.sleep, not page.wait_for_timeout
-                log("Sleep done — reading page...")
+                # Go straight to dashboard — our wagmi seed + window.ethereum
+                # should make the app treat us as connected.
+                log("Navigating to demo dashboard...")
+                await page.goto(DASHBOARD_URL, wait_until="domcontentloaded", timeout=30000)
+                log(f"URL after goto: {page.url}")
+                log("Sleeping 8s for React hydration...")
+                await asyncio.sleep(8)
 
                 if _crashed.is_set():
-                    raise RuntimeError("Page crashed during SPA boot")
+                    raise RuntimeError("Page crashed during hydration")
 
                 content = await _body_text(page)
-                log(f"Page snippet: {content[:400].strip()!r}")
+                log(f"Dashboard text (full): {content[:800].strip()!r}")
+                log(f"Current URL: {page.url}")
                 log(f"Authed: {await _is_authed(page)}")
 
-                # Dump all localStorage keys so we can identify the right auth key
+                # Read localStorage to diagnose what the app actually stores
                 try:
                     ls = await asyncio.wait_for(
-                        page.evaluate(
-                            "Object.entries(localStorage).map(([k,v]) => k + '=' + v.slice(0,80))"
-                        ),
-                        timeout=4.0,
+                        page.evaluate("""
+                            Object.entries(localStorage)
+                                .map(([k,v]) => k + '=' + String(v).slice(0,120))
+                                .join(' | ')
+                        """),
+                        timeout=5.0,
                     )
-                    log(f"localStorage: {ls}")
+                    log(f"localStorage: {ls[:600]}")
                 except Exception as e:
-                    log(f"localStorage read failed: {e}")
+                    log(f"localStorage err: {e}")
 
                 try:
                     ns = await context.storage_state()
                     _state_put("storage_state", json.dumps(ns))
-                    log("Auth state saved")
+                    log("State saved")
                 except Exception:
                     pass
 
                 # ── navigate to sector prep ─────────────────────────────────
                 log(f"Navigating to {sector['name']}...")
                 await page.goto(sector["url"], wait_until="domcontentloaded", timeout=30000)
+                log(f"Prep URL: {page.url}")
                 await asyncio.sleep(8)
 
                 prep_content = await _body_text(page)
-                log(f"Prep page: {prep_content[:500].strip()!r}")
+                log(f"Prep page: {prep_content[:600].strip()!r}")
 
                 try:
                     for btn in await page.query_selector_all("button"):
