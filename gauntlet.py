@@ -468,18 +468,30 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     "--disable-background-timer-throttling",
                     "--disable-renderer-backgrounding",
                     "--disable-features=TranslateUI,VizDisplayCompositor",
-                    "--js-flags=--max-old-space-size=256",
+                    # Removed --js-flags memory cap — it caused hard V8 OOM crashes
+                    # because wagmi+rainbowkit alone need >256 MB of compiled heap.
                 ],
             )
             log("Browser launched")
             context = await browser.new_context(**ctx_kwargs)
 
+            # Block media/font assets (as before) + the RainbowKit wallet-UI chunk.
+            # We inject our own window.ethereum so the RainbowKit UI is unnecessary.
+            # Blocking it saves ~280 KB of JS compilation and ~50 MB of V8 heap.
+            RAINBOWKIT_CHUNK = re.compile(
+                r"/chunks/0v449np~zp91v\.js", re.I
+            )
             await context.route(
                 re.compile(
                     r"\.(png|jpg|jpeg|gif|webp|mp4|webm|ogg|mp3|wav|woff2?|ttf|otf)(\?.*)?$",
                     re.I,
                 ),
                 lambda route: route.abort(),
+            )
+            await context.route(
+                RAINBOWKIT_CHUNK,
+                lambda route: route.fulfill(status=200, body="/* blocked */",
+                                            content_type="application/javascript"),
             )
 
             await context.add_init_script(_provider_js(GAUNTLET_ADDR))
