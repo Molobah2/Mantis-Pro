@@ -810,17 +810,34 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     pass
 
                 # ── select hollow(s) ───────────────────────────────────────
-                # Strategy 1: click any element containing our seeded hollow name
-                # Strategy 2: fall back to clicking any hollow-looking card on page
+                def _selection_confirmed(body: str) -> bool:
+                    u = body.upper()
+                    return ("(1 SELECTED)" in u or "(1/" in u or
+                            "1 SELECTED" in u or "1/1 SLOT" in u)
+
                 async def _select_hollow(name: str) -> bool:
+                    """Sort all name-matching elements by text length (shortest =
+                    most specific DOM node) and click each until selection confirmed."""
                     try:
-                        els = await page.query_selector_all("button, div, span, p, li, td")
+                        els = await page.query_selector_all(
+                            "button, div, span, p, li, td, tr, label"
+                        )
+                        matches = []
                         for el in els:
                             try:
-                                txt = await asyncio.wait_for(el.inner_text(), timeout=0.5)
+                                txt = (await asyncio.wait_for(
+                                    el.inner_text(), timeout=0.3)).strip()
                                 if name.lower() in txt.lower():
-                                    await el.click()
-                                    await asyncio.sleep(1)
+                                    matches.append((len(txt), el))
+                            except Exception:
+                                continue
+                        matches.sort(key=lambda x: x[0])
+                        for _, el in matches[:6]:
+                            try:
+                                await el.click()
+                                await asyncio.sleep(1.5)
+                                body = await _body_text(page)
+                                if _selection_confirmed(body):
                                     return True
                             except Exception:
                                 continue
@@ -828,125 +845,103 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         log(f"select_hollow error: {e}")
                     return False
 
-                async def _select_any_hollow() -> bool:
-                    """Click the first selectable hollow card on the prep page."""
-                    try:
-                        # Look for hollow cards by common identifiers in demo UI
-                        for selector in [
-                            "[class*='hollow']", "[class*='Hollow']",
-                            "[data-hollow]", "[class*='card']",
-                        ]:
-                            cards = await page.query_selector_all(selector)
-                            if cards:
-                                await cards[0].click()
-                                await asyncio.sleep(1)
-                                log(f"Clicked hollow card via selector '{selector}'")
-                                return True
-                        # Broader fallback: any element whose text looks like a hollow name
-                        for el in await page.query_selector_all("button, div[role='button']"):
-                            try:
-                                txt = await asyncio.wait_for(el.inner_text(), timeout=0.3)
-                                if txt.strip() and len(txt.strip()) < 30 and txt.isupper():
-                                    await el.click()
-                                    await asyncio.sleep(1)
-                                    log(f"Clicked uppercase element: {txt.strip()!r}")
-                                    return True
-                            except Exception:
-                                continue
-                    except Exception as e:
-                        log(f"select_any_hollow error: {e}")
-                    return False
-
-                # First try our seeded hollow name, then sector boss names, then any
+                # Try seeded hollow name first, then sector names
                 hollow_names = ["Mantis"] + sector["hollows"]
                 selected_any = False
                 for hollow in hollow_names:
                     if await _select_hollow(hollow):
                         hollow_used = hollow
-                        log(f"Selected {hollow}")
-                        await asyncio.sleep(0.5)
+                        log(f"Selected {hollow} (confirmed)")
                         selected_any = True
                         break
-                if not selected_any:
-                    log("Named hollow not found — trying any hollow card")
-                    if await _select_any_hollow():
-                        selected_any = True
 
                 if not selected_any:
-                    log("WARNING: could not select any hollow — sector entry may fail")
+                    # Last resort: look for hollow-like class names
+                    log("Named hollow not confirmed — trying CSS selectors")
+                    for sel in ["[class*='hollow']", "[class*='card']", "[class*='unit']"]:
+                        cards = await page.query_selector_all(sel)
+                        if cards:
+                            await cards[0].click()
+                            await asyncio.sleep(1.5)
+                            body = await _body_text(page)
+                            if _selection_confirmed(body):
+                                selected_any = True
+                                log(f"CSS-selected hollow via {sel}")
+                                break
+
+                if not selected_any:
+                    log("WARNING: hollow selection unconfirmed — proceeding anyway")
                 _set_run_state(hollow=hollow_used)
 
                 # ── enter sector ───────────────────────────────────────────
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await asyncio.sleep(1)
 
-                if not await _click_kw(page, f"ENTER {sector['enter_kw']}"):
-                    await _click_kw(page, "ENTER")
-
-                log("Entered sector")
-                await asyncio.sleep(5)
-
-                # ── stage loop ─────────────────────────────────────────────
-                for stage in range(1, sector["stages"] + 1):
-                    _set_run_state(stage=stage)
-                    log(f"Stage {stage}/{sector['stages']}...")
-
-                    if "results" in page.url:
-                        log("Already on results page")
-                        result = "win"
+                # Build enter-button keyword list from sector name + fallbacks
+                entered = False
+                enter_kws = [
+                    f"ENTER {sector['name'].upper()}",   # e.g. ENTER SURGE SECTOR
+                    f"ENTER {sector['enter_kw']}",        # e.g. ENTER SECTOR
+                    "ENTER DRIFT", "ENTER SECTOR", "▸ ENTER", "ENTER",
+                ]
+                for kw in enter_kws:
+                    if await _click_kw(page, kw):
+                        log(f"Entered sector via '{kw}'")
+                        entered = True
                         break
+                if not entered:
+                    log("WARNING: enter button not found — proceeding")
 
-                    await _click_kw(page, "BEGIN STAGE")
-                    await asyncio.sleep(10)
+                # ── wait for battle / auto-battle to resolve ────────────────
+                # Combat is autonomous: after entering the sector the game
+                # simulates all stages and shows results. We watch for URL
+                # changes and text signals, clicking any "BEGIN STAGE" /
+                # "CONTINUE" prompts if the game requires manual advances.
+                for tick in range(20):
+                    await asyncio.sleep(5)
+                    url = page.url
+                    txt = await _body_text(page)
+                    u   = txt.upper()
+                    _set_run_state(stage=tick)
+                    log(f"Tick {tick}: url={url.split('/')[-1]!r} snippet={txt[:80].strip()!r}")
 
-                    if ("crawl" not in page.url and "battle" not in page.url
-                            and "results" not in page.url):
-                        log(f"Page left crawl: {page.url}")
-                        await page.goto(DASHBOARD_URL)
-                        break
-
-                    content = await _body_text(page)
-
-                    if "results" in page.url or "CRAWL COMPLETE" in content.upper():
-                        log("Crawl complete!")
-                        stages_won = stage
+                    if "CRAWL COMPLETE" in u or ("results" in url):
+                        log("CRAWL COMPLETE / results page")
+                        stages_won = sector["stages"]
                         result     = "win"
                         await _click_kw(page, "VIEW RESULTS")
                         await asyncio.sleep(3)
                         break
 
-                    elif "VICTORY" in content.upper():
-                        stages_won = stage
-                        log(f"Stage {stage} VICTORY")
-                        await _click_kw(page, "CONTINUE")
+                    if "VICTORY" in u:
+                        stages_won += 1
+                        log(f"VICTORY — stages_won={stages_won}")
+                        if stages_won >= sector["stages"]:
+                            result = "win"
+                            break
+                        for adv in ["CONTINUE", "NEXT STAGE", "PROCEED"]:
+                            if await _click_kw(page, adv):
+                                break
                         await asyncio.sleep(3)
+                        continue
 
-                        if "results" in page.url:
-                            result = "win"
-                            break
-
-                        c2 = await _body_text(page)
-                        if "CRAWL COMPLETE" in c2.upper():
-                            result = "win"
-                            await _click_kw(page, "VIEW RESULTS")
-                            await asyncio.sleep(3)
-                            break
-
-                        if stage == sector["stages"]:
-                            result = "win"
-                        else:
-                            await asyncio.sleep(2)
-                            await page.evaluate("window.scrollTo(0,0)")
-                            await asyncio.sleep(0.5)
-                            await page.evaluate("window.scrollTo(0,document.body.scrollHeight)")
-                            await asyncio.sleep(0.5)
-                            await _click_kw(page, "NEXT STAGE")
-                            await asyncio.sleep(5)
-
-                    elif "DEFEAT" in content.upper():
-                        log(f"Stage {stage} DEFEAT")
+                    if "DEFEAT" in u:
+                        log("DEFEAT")
                         result = "defeat"
                         break
+
+                    # Click stage advance buttons if present
+                    for btn_kw in ["BEGIN STAGE", "BEGIN CRAWL", "START STAGE"]:
+                        if btn_kw in u:
+                            await _click_kw(page, btn_kw)
+                            log(f"Clicked {btn_kw}")
+                            break
+
+                    # Still on prep after many ticks = entry failed / no hollow
+                    if "prep" in url and tick >= 4:
+                        log(f"Still on prep at tick {tick} — retrying enter")
+                        await _click_kw(page, "ENTER")
+                        await asyncio.sleep(2)
 
                 # ── extract PEARL ─────────────────────────────────────────
                 await asyncio.sleep(3)
