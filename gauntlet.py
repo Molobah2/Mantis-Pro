@@ -398,12 +398,21 @@ async def _maybe_connect_wallet(page) -> bool:
     return False
 
 async def _is_authed(page) -> bool:
-    """True if we appear logged in (dashboard/game content visible)."""
+    """True if we appear logged in — requires game-specific content not on guest landing."""
     try:
         url  = page.url
         text = await _body_text(page)
-        auth_signals = ["DASHBOARD", "PEARL", "GAUNTLET", "CRAWL", "HOLLOW", "SECTOR", "YOUR HOLLOWS"]
-        return any(k in text.upper() for k in auth_signals) or "demo/dashboard" in url
+        t    = text.upper()
+        # Guest landing shows "HOLLOW GAUNTLET" / "CRAWL. FIGHT." marketing copy.
+        # Authed dashboard shows balance info + hollow roster.
+        authed = (
+            "demo/dashboard" in url
+            or "YOUR HOLLOWS" in t
+            or ("PEARL" in t and "DASHBOARD" in t)
+            or ("ETH" in t and "BALANCE" in t)
+            or "SELECT HOLLOW" in t
+        )
+        return authed
     except Exception:
         return False
 
@@ -475,23 +484,12 @@ async def run_battle(sector_key: str = "surge") -> dict:
             log("Browser launched")
             context = await browser.new_context(**ctx_kwargs)
 
-            # Block media/font assets (as before) + the RainbowKit wallet-UI chunk.
-            # We inject our own window.ethereum so the RainbowKit UI is unnecessary.
-            # Blocking it saves ~280 KB of JS compilation and ~50 MB of V8 heap.
-            RAINBOWKIT_CHUNK = re.compile(
-                r"/chunks/0v449np~zp91v\.js", re.I
-            )
             await context.route(
                 re.compile(
                     r"\.(png|jpg|jpeg|gif|webp|mp4|webm|ogg|mp3|wav|woff2?|ttf|otf)(\?.*)?$",
                     re.I,
                 ),
                 lambda route: route.abort(),
-            )
-            await context.route(
-                RAINBOWKIT_CHUNK,
-                lambda route: route.fulfill(status=200, body="/* blocked */",
-                                            content_type="application/javascript"),
             )
 
             await context.add_init_script(_provider_js(GAUNTLET_ADDR))
@@ -551,19 +549,38 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     raise RuntimeError("Page crashed during SPA boot")
 
                 content = await _body_text(page)
-                log(f"Page snippet: {content[:300].strip()!r}")
+                log(f"Page snippet: {content[:400].strip()!r}")
 
-                # If landing shows a connect prompt, click it to trigger wallet auth.
-                # Our injected window.ethereum responds to eth_requestAccounts instantly.
+                # If not authed, find and click the connect button then handle modal.
                 if not await _is_authed(page):
-                    log("Not authed — clicking connect...")
-                    for kw in ["CONNECT WALLET", "CONNECT", "GET STARTED", "SIGN IN"]:
-                        if kw in content.upper():
-                            await _click_kw(page, kw)
-                            await asyncio.sleep(4)
+                    log("Not authed — attempting wallet connect...")
+                    # Try clicking common connect triggers
+                    connected = False
+                    for kw in ["CONNECT WALLET", "CONNECT", "GET STARTED", "SIGN IN", "LOGIN"]:
+                        if await _click_kw(page, kw):
+                            log(f"Clicked '{kw}' — waiting for modal...")
+                            await asyncio.sleep(3)
+                            connected = True
                             break
+
+                    if connected:
+                        # If a wallet-select modal appeared, choose MetaMask/Injected
+                        modal = await _body_text(page)
+                        log(f"After connect click: {modal[:200].strip()!r}")
+                        for kw in ["METAMASK", "INJECTED", "BROWSER WALLET", "DETECTED"]:
+                            if kw in modal.upper():
+                                await _click_kw(page, kw)
+                                await asyncio.sleep(3)
+                                break
+                        # Handle any sign message prompt
+                        after = await _body_text(page)
+                        if "SIGN" in after.upper():
+                            await _click_kw(page, "SIGN")
+                            await asyncio.sleep(3)
+
+                    await asyncio.sleep(3)
                     c2 = await _body_text(page)
-                    log(f"Post-connect snippet: {c2[:200].strip()!r}")
+                    log(f"Post-connect snippet: {c2[:300].strip()!r}")
 
                 try:
                     ns = await context.storage_state()
@@ -575,10 +592,10 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 # ── navigate to sector prep ─────────────────────────────────
                 log(f"Navigating to {sector['name']}...")
                 await page.goto(sector["url"], wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(5)
+                await asyncio.sleep(8)
 
                 prep_content = await _body_text(page)
-                log(f"Prep page: {prep_content[:300].strip()!r}")
+                log(f"Prep page: {prep_content[:500].strip()!r}")
 
                 try:
                     for btn in await page.query_selector_all("button"):
