@@ -943,40 +943,43 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         result = "defeat"
                         break
 
-                    # Click stage-advance buttons via JS so we find ANY element
-                    # (div, span, etc.) not just <button>/<a>. The click is dispatched
-                    # as a bubbling MouseEvent so parent React handlers fire.
-                    _click_js = """(kw) => {
-                        const els = Array.from(document.querySelectorAll('*'));
-                        for (const el of els) {
-                            const t = (el.innerText || '').trim();
-                            if (t.includes(kw) && t.length < 80) {
-                                el.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
-                                return el.tagName + ':' + t.slice(0,40);
-                            }
-                        }
-                        return null;
-                    }"""
+                    # Click stage-advance / advance buttons via ElementHandle.click()
+                    # (CDP-level mouse event — trusted, triggers React synthetic handlers).
+                    # dispatchEvent(MouseEvent) is untrusted and React may ignore it.
+                    async def _click_any(keyword: str) -> bool:
+                        """Click first element (any tag) whose innerText contains keyword."""
+                        try:
+                            handles = await page.query_selector_all(
+                                "button, div, span, a, p, li"
+                            )
+                            for h in handles:
+                                try:
+                                    t = (await asyncio.wait_for(
+                                        h.inner_text(), timeout=0.3)).strip()
+                                    if keyword.upper() in t.upper() and len(t) < 100:
+                                        await h.click()
+                                        log(f"Clicked [{keyword}] via handle: {t[:50]!r}")
+                                        return True
+                                except Exception:
+                                    continue
+                        except Exception as ex:
+                            log(f"_click_any({keyword!r}) err: {ex}")
+                        return False
+
                     for btn_kw in ["BEGIN STAGE", "BEGIN CRAWL", "START STAGE"]:
                         if btn_kw in u:
-                            try:
-                                clicked = await page.evaluate(_click_js, btn_kw)
-                                log(f"{btn_kw} JS click → {clicked}")
-                                await asyncio.sleep(2)
-                                if js_errors:
-                                    log(f"JS after click: {' | '.join(js_errors[-3:])}")
-                                    js_errors.clear()
-                            except Exception as ex:
-                                log(f"{btn_kw} click error: {ex}")
+                            ok = await _click_any(btn_kw)
+                            if not ok:
+                                log(f"{btn_kw} in body but click failed")
+                            await asyncio.sleep(2)
+                            if js_errors:
+                                log(f"JS after click: {' | '.join(js_errors[-3:])}")
+                                js_errors.clear()
                             break
 
                     for adv_kw in ["CONTINUE", "NEXT STAGE", "PROCEED", "VIEW RESULTS"]:
                         if adv_kw in u:
-                            try:
-                                await page.evaluate(_click_js, adv_kw)
-                                log(f"Advance-clicked {adv_kw}")
-                            except Exception:
-                                pass
+                            await _click_any(adv_kw)
                             break
 
                     # Still on prep after many ticks = entry failed / no hollow
