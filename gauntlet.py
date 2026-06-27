@@ -448,15 +448,40 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
                     "--disable-software-rasterizer",
+                    "--disable-webgl",
+                    "--disable-webgl2",
+                    "--disable-3d-apis",
+                    "--disable-accelerated-2d-canvas",
+                    "--disable-accelerated-video-decode",
                     "--disable-extensions",
                     "--disable-background-networking",
                     "--disable-background-timer-throttling",
                     "--disable-renderer-backgrounding",
                     "--disable-features=TranslateUI,VizDisplayCompositor",
+                    "--js-flags=--max-old-space-size=256",
                 ],
             )
             context = await browser.new_context(**ctx_kwargs)
+
+            # Block heavy assets before any page loads to keep memory low
+            await context.route(
+                re.compile(
+                    r"\.(png|jpg|jpeg|gif|webp|mp4|webm|ogg|mp3|wav|woff2?|ttf|otf)(\?.*)?$",
+                    re.I,
+                ),
+                lambda route: route.abort(),
+            )
+
             await context.add_init_script(_provider_js(GAUNTLET_ADDR))
+            # Kill animations so the page stays lightweight
+            await context.add_init_script("""
+                const s = document.createElement('style');
+                s.textContent = `*, *::before, *::after {
+                    animation-duration: 0.001s !important;
+                    transition-duration: 0.001s !important;
+                }`;
+                document.addEventListener('DOMContentLoaded', () => document.head.appendChild(s));
+            """)
 
             # Auto-inject signing bridge into any popup the site opens
             async def _setup_page(p):
@@ -470,27 +495,29 @@ async def run_battle(sector_key: str = "surge") -> dict:
             page = await context.new_page()
             await _setup_page(page)
 
-            # Intercept network for API discovery (logged, not acted on)
+            # Log /api/ calls for diagnostics
             intercepted = []
             page.on("request", lambda req: intercepted.append(req.url)
                     if "/api/" in req.url else None)
 
             try:
                 # ── auth phase ──────────────────────────────────────────────
-                # Navigate to landing and wait for the SPA to boot and
-                # auto-call eth_requestAccounts via the injected provider.
-                # Do NOT click "Connect" buttons — they open AGW popups that
-                # kill the page context. The injected window.ethereum responds
-                # automatically when the dApp calls request({method:'eth_requestAccounts'}).
+                # Navigate to landing and let the SPA auto-call
+                # eth_requestAccounts via the injected window.ethereum.
+                # Heavy assets are blocked; animations disabled.
                 log("Navigating to demo landing...")
                 await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
-                log("Waiting for SPA + wallet auto-connect...")
-                await page.wait_for_timeout(12000)
+                log("Waiting for SPA boot...")
+                await page.wait_for_timeout(6000)
 
-                content = await page.inner_text("body")
-                log(f"Page text snippet: {content[:200].strip()!r}")
+                try:
+                    content = await page.inner_text("body")
+                    log(f"Page snippet: {content[:300].strip()!r}")
+                except Exception as e:
+                    log(f"Could not read page body: {e}")
+                    raise
 
-                # Save whatever auth state we have (cookies/localStorage)
+                # Save whatever session state we have
                 try:
                     ns = await context.storage_state()
                     _state_put("storage_state", json.dumps(ns))
