@@ -599,43 +599,48 @@ async def run_battle(sector_key: str = "surge") -> dict:
 
             try:
                 # ── auth phase ──────────────────────────────────────────────
-                # Go straight to dashboard — our wagmi seed + window.ethereum
-                # should make the app treat us as connected.
-                log("Navigating to demo dashboard...")
-                await page.goto(DASHBOARD_URL, wait_until="domcontentloaded", timeout=30000)
-                log(f"URL after goto: {page.url}")
-                log("Sleeping 8s for React hydration...")
-                await asyncio.sleep(8)
+                # Navigate to /demo first (SSR content renders immediately).
+                # The wagmi seed + window.ethereum make the app see us as
+                # connected. After hydration (~10s) it should redirect to
+                # /demo/dashboard. We then wait there for full render (~20s).
+                log("Navigating to demo landing...")
+                await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
+                log("Waiting 12s for hydration + auto-redirect...")
+                await asyncio.sleep(12)
 
                 if _crashed.is_set():
                     raise RuntimeError("Page crashed during hydration")
 
+                log(f"URL after landing wait: {page.url}")
+                content = await _body_text(page)
+                log(f"Landing text: {content[:300].strip()!r}")
+
+                # If still on landing (not redirected), go to dashboard directly
+                if "dashboard" not in page.url:
+                    log("No auto-redirect — navigating to dashboard directly...")
+                    await page.goto(DASHBOARD_URL, wait_until="domcontentloaded", timeout=30000)
+                    log("Waiting 20s for React hydration on dashboard...")
+                    await asyncio.sleep(20)
+
+                if _crashed.is_set():
+                    raise RuntimeError("Page crashed on dashboard")
+
                 content = await _body_text(page)
                 log(f"Dashboard text: {content[:600].strip()!r}")
-                log(f"Current URL: {page.url}")
+                log(f"URL: {page.url}")
                 log(f"Authed: {await _is_authed(page)}")
 
-                # Get full HTML to see what's on page even if innerText is empty
-                try:
-                    html_snippet = await asyncio.wait_for(
-                        page.evaluate("document.body ? document.body.innerHTML.slice(0,800) : ''"),
-                        timeout=5.0,
-                    )
-                    log(f"Body HTML: {html_snippet!r}")
-                except Exception as e:
-                    log(f"HTML err: {e}")
-
-                # Read ALL localStorage keys to find demo state key
+                # Capture all localStorage keys for diagnostics
                 try:
                     ls = await asyncio.wait_for(
                         page.evaluate("""
                             Object.entries(localStorage)
-                                .map(([k,v]) => k + '=' + String(v).slice(0,150))
+                                .map(([k,v]) => k + '=' + String(v).slice(0,120))
                                 .join(' || ')
                         """),
                         timeout=5.0,
                     )
-                    log(f"localStorage: {ls[:800]}")
+                    log(f"localStorage: {ls[:600]}")
                 except Exception as e:
                     log(f"localStorage err: {e}")
 
@@ -792,7 +797,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     pass
 
     try:
-        await asyncio.wait_for(_run(), timeout=90.0)
+        await asyncio.wait_for(_run(), timeout=150.0)
     except asyncio.TimeoutError:
         log("Battle timed out after 90s — browser likely hung")
         result = "error"
