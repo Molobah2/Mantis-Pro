@@ -1,4 +1,4 @@
-"""
+﻿"""
 Litany demo gauntlet runner for Mantis Pro.
 Runs headless Playwright battles in Railway (cloud).
 Auth state (cookies + localStorage) persisted in SQLite between runs.
@@ -332,8 +332,8 @@ def _provider_js(address: str) -> str:
 
 def _wagmi_seed_js(address: str) -> str:
     """
-    Pre-seed wagmi v2's zustand-persist 'store' key so it auto-reconnects
-    on page load without the user clicking the (blocked) RainbowKit button.
+    Pre-seed wagmi v2 localStorage state AND the litany demo game state
+    (with a valid hollow) so the app sees us as connected with a ready team.
     """
     addr = address.lower()
     return f"""
@@ -341,6 +341,7 @@ def _wagmi_seed_js(address: str) -> str:
     const ADDR     = '{addr}';
     const CHAIN_ID = 2741;
     const UID      = 'injected';
+    const NOW      = Date.now();
 
     // wagmi v2 persists connection state at localStorage['store']
     const wagmiState = {{
@@ -359,11 +360,58 @@ def _wagmi_seed_js(address: str) -> str:
         }},
         version: 2
     }};
-
     try {{ localStorage.setItem('store', JSON.stringify(wagmiState)); }}
     catch(e) {{ console.warn('[Mantis] wagmi seed failed', e); }}
 
-    // After the page boots, fire connection events so wagmi picks up our provider
+    // Seed the Litany demo game state with a hollow pre-equipped.
+    // Key: "litany_demo_" + address (lower-case), version must be 3.
+    const hollow = {{
+        id: 1, name: 'Mantis', type1: 0, type2: 0,
+        level: 1, xp: 0,
+        currentHP: 120, maxHP: 120,
+        bonusHP: 5, bonusATK: 3, bonusDEF: 3, bonusSPD: 3,
+        execPart: null, wardPart: null, fluxPart: null, kernelPart: null,
+        execRecessive: null, wardRecessive: null,
+        fluxRecessive: null, kernelRecessive: null,
+        execMinorRecessive: null, wardMinorRecessive: null,
+        fluxMinorRecessive: null, kernelMinorRecessive: null,
+        lastHPUpdate: NOW, synthCount: 0,
+        isAlive: true, lastCrawlAt: 0, crawlsSinceRest: 0,
+        flavorText: 'Forged in the Protocol.'
+    }};
+    const demoState = {{
+        version: 3,
+        walletAddress: ADDR,
+        createdAt: NOW, lastPlayedAt: NOW,
+        demoETH: 0.19, demoPEARL: 0,
+        hollows: [hollow],
+        nextHollowId: 2,
+        firmwareAssignments: {{}}, consumables: {{}},
+        dailySeed: 1, driftCompletedToday: false,
+        sectorRunsToday: {{}}, deepProgress: null,
+        pendingCompilations: [],
+        totalCrawlsCompleted: 0, totalKOs: 0,
+        deepestDeepStage: 0, totalSyntheses: 0,
+        crawlHistory: [],
+        tutorial: {{
+            boughtFirstHollow: true, assignedFirstFirmware: false,
+            completedFirstCrawl: false, completedFirstSynthesis: false
+        }},
+        marketPurchasedIds: [],
+        streaks: {{}}, dailyQuests: [], dailyQuestSeed: '',
+        achievements: {{}},
+        achievementCounters: {{
+            totalKOs: 0, hollowsBred: 0,
+            hollowsPurchased: 1, driftClears: 0
+        }},
+        exchange: {{}}, tradeHistory: [],
+        weeklyBoss: null, gauntletBest: 0, gauntletHistory: []
+    }};
+    try {{
+        localStorage.setItem('litany_demo_' + ADDR, JSON.stringify(demoState));
+    }} catch(e) {{ console.warn('[Mantis] demo state seed failed', e); }}
+
+    // Fire connection events so wagmi re-reads our injected provider
     window.addEventListener('load', function() {{
         setTimeout(function() {{
             try {{
@@ -540,12 +588,71 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 ),
                 lambda route: route.abort(),
             )
-            # Block RainbowKit UI chunk — 280 KB / ~80 MB compiled heap, causes crash.
-            # Auth is handled instead by pre-seeding wagmi's localStorage state.
+            # Replace the 280KB RainbowKit chunk with a proper Turbopack-format stub.
+            # Correct format: .push([scriptRef, id1,id2,...idN, factory])
+            # factory calls e.s(["name",0,value], moduleId) for each module.
+            # All 24 module IDs from the original chunk are registered here.
+            # 110163 (viem http) is NOT in the original chunk — left unblocked.
+            _rk_stub = (
+                "(function(){"
+                "var _R=globalThis.React;"
+                "function _pt(p){return _R?_R.createElement(_R.Fragment,null,p&&p.children):p&&p.children||null;}"
+                "function _noop(){}"
+                "function _hook(){return{data:undefined,isLoading:false,error:null};}"
+                f"var _A='{GAUNTLET_ADDR}',_CID=2741,_UID='injected';"
+                "function _cfg(opts){"
+                "var _map=new Map([[_UID,{accounts:[_A],chainId:_CID,connector:{id:_UID,name:'MetaMask',type:'injected',uid:_UID}}]]);"
+                "var _st={connections:_map,chainId:_CID,current:_UID,status:'connected'};"
+                "return{chains:(opts&&opts.chains)||[],connectors:[],"
+                "storage:{getItem:function(){return null;},setItem:_noop,removeItem:_noop},"
+                "ssr:false,"
+                "_internal:{ssr:false,"
+                "connectors:{setup:function(){return{id:_UID,type:'injected',uid:_UID,name:'MetaMask',emitter:{on:_noop,off:_noop,emit:_noop}};},"
+                "getState:function(){return[];},setState:_noop,subscribe:function(){return _noop;}},"
+                "events:{conn:{onConnect:_noop,onDisconnect:_noop},change:_noop,disconnect:_noop},"
+                "chains:{getState:function(){return _st;},subscribe:function(){return _noop;}}},"
+                "getState:function(){return _st;},"
+                "setState:function(fn){if(typeof fn==='function')_st=fn(_st);},"
+                "subscribe:function(l){return _noop;},"
+                "getClient:function(){return{request:async function(){return null;},chain:{id:_CID}};},"
+                "reconnect:_noop};}"
+                "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["
+                "null,"
+                "103111,289600,485738,196943,885157,151794,356327,"
+                "160518,557073,373403,712369,700510,249994,985369,"
+                "174960,979454,377349,604140,689862,794702,200057,"
+                "627152,518714,722652,"
+                "function(e){"
+                "e.s(['darkTheme',0,function(){return{};}],103111);"
+                "e.s(['lightTheme',0,function(){return{};}],289600);"
+                "e.s(['midnightTheme',0,function(){return{};}],485738);"
+                "e.s(['createMapValueFn',0,function(){return function(){return null;};}],196943);"
+                "e.s(['createSprinkles',0,function(){return function(){return{};};}],885157);"
+                "e.s(['useAccountEffect',0,_noop],151794);"
+                "e.s(['default',0,_noop],356327);"
+                "e.s(['useBalance',0,_hook],160518);"
+                "e.s(['normalize',0,function(v){return v;}],557073);"
+                "e.s(['useEnsAvatar',0,_hook],373403);"
+                "e.s(['useEnsName',0,_hook],712369);"
+                "e.s(['usePublicClient',0,function(){return undefined;}],700510);"
+                "e.s(['useDisconnect',0,function(){return{disconnect:_noop};}],249994);"
+                "e.s(['RemoveScroll',0,_pt],985369);"
+                "e.s(['assignInlineVars',0,function(){return{};}],174960);"
+                "e.s(['useConnect',0,function(){return{connect:_noop,connectors:[],status:'disconnected'};}],979454);"
+                "e.s(['ProviderNotFoundError',0,function ProvNotFound(){},'SwitchChainNotSupportedError',0,function SwitchNotSupported(){}],377349);"
+                "e.s(['useSwitchChain',0,function(){return{switchChain:_noop};}],604140);"
+                "e.s(['createConnector',0,function(fn){return fn;}],689862);"
+                "e.s(['injected',0,function(){return{id:'injected',type:'injected'};}],794702);"
+                "e.s(['createConfig',0,_cfg],200057);"
+                "e.s(['walletConnect',0,function(){return{id:'walletConnect'};}],627152);"
+                "e.s(['metaMask',0,function(){return{id:'metaMask'};}],518714);"
+                "e.s(['RainbowKitProvider',0,_pt],722652);"
+                "}]);})();"
+            )
             await context.route(
                 re.compile(r"/chunks/0v449np~zp91v\.js", re.I),
                 lambda route: route.fulfill(
-                    status=200, body="/* rainbowkit blocked */",
+                    status=200, body=_rk_stub,
                     content_type="application/javascript"
                 ),
             )
@@ -655,10 +762,30 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 log(f"Navigating to {sector['name']}...")
                 await page.goto(sector["url"], wait_until="domcontentloaded", timeout=30000)
                 log(f"Prep URL: {page.url}")
-                await asyncio.sleep(8)
+                # Wait for React to hydrate — dashboard stub allows real React mount now
+                await asyncio.sleep(20)
+
+                if _crashed.is_set():
+                    raise RuntimeError("Page crashed on prep page")
 
                 prep_content = await _body_text(page)
-                log(f"Prep page: {prep_content[:600].strip()!r}")
+                log(f"Prep page: {prep_content[:800].strip()!r}")
+
+                # Also log localStorage demo state to confirm our hollow seed was read
+                try:
+                    demo_ls = await asyncio.wait_for(
+                        page.evaluate(f"localStorage.getItem('litany_demo_{GAUNTLET_ADDR}')"),
+                        timeout=5.0,
+                    )
+                    if demo_ls:
+                        import json as _j
+                        ds = _j.loads(demo_ls)
+                        log(f"Demo state: {len(ds.get('hollows',[]))} hollow(s), "
+                            f"demoETH={ds.get('demoETH')}, ver={ds.get('version')}")
+                    else:
+                        log("Demo state: not found in localStorage")
+                except Exception as e:
+                    log(f"Demo state read err: {e}")
 
                 try:
                     for btn in await page.query_selector_all("button"):
@@ -669,7 +796,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 except Exception:
                     pass
 
-                # ── select hollow(s) — use query_selector_all (instant, no locator timeout)
+                # ── select hollow(s) ───────────────────────────────────────
+                # Strategy 1: click any element containing our seeded hollow name
+                # Strategy 2: fall back to clicking any hollow-looking card on page
                 async def _select_hollow(name: str) -> bool:
                     try:
                         els = await page.query_selector_all("button, div, span, p, li, td")
@@ -686,14 +815,52 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         log(f"select_hollow error: {e}")
                     return False
 
-                for hollow in sector["hollows"]:
+                async def _select_any_hollow() -> bool:
+                    """Click the first selectable hollow card on the prep page."""
+                    try:
+                        # Look for hollow cards by common identifiers in demo UI
+                        for selector in [
+                            "[class*='hollow']", "[class*='Hollow']",
+                            "[data-hollow]", "[class*='card']",
+                        ]:
+                            cards = await page.query_selector_all(selector)
+                            if cards:
+                                await cards[0].click()
+                                await asyncio.sleep(1)
+                                log(f"Clicked hollow card via selector '{selector}'")
+                                return True
+                        # Broader fallback: any element whose text looks like a hollow name
+                        for el in await page.query_selector_all("button, div[role='button']"):
+                            try:
+                                txt = await asyncio.wait_for(el.inner_text(), timeout=0.3)
+                                if txt.strip() and len(txt.strip()) < 30 and txt.isupper():
+                                    await el.click()
+                                    await asyncio.sleep(1)
+                                    log(f"Clicked uppercase element: {txt.strip()!r}")
+                                    return True
+                            except Exception:
+                                continue
+                    except Exception as e:
+                        log(f"select_any_hollow error: {e}")
+                    return False
+
+                # First try our seeded hollow name, then sector boss names, then any
+                hollow_names = ["Mantis"] + sector["hollows"]
+                selected_any = False
+                for hollow in hollow_names:
                     if await _select_hollow(hollow):
                         hollow_used = hollow
                         log(f"Selected {hollow}")
-                        await asyncio.sleep(1)
-                    else:
-                        log(f"Could not select {hollow}")
+                        await asyncio.sleep(0.5)
+                        selected_any = True
+                        break
+                if not selected_any:
+                    log("Named hollow not found — trying any hollow card")
+                    if await _select_any_hollow():
+                        selected_any = True
 
+                if not selected_any:
+                    log("WARNING: could not select any hollow — sector entry may fail")
                 _set_run_state(hollow=hollow_used)
 
                 # ── enter sector ───────────────────────────────────────────
