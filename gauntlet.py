@@ -832,123 +832,46 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 except Exception:
                     pass
 
-                # ── select hollow(s) ───────────────────────────────────────
-                # MUST be confirmed before clicking ENTER — game blocks entry with 0 selected.
-                log(f"Prep page full text:\n{prep_content[:1000].strip()}")
+                # ── helpers (proven pattern from working_battle.py) ────────
+                log(f"Prep page:\n{prep_content[:800].strip()}")
 
-                def _selection_confirmed(body: str) -> bool:
-                    u = body.upper()
-                    return ("(1 SELECTED)" in u or "(1/" in u or
-                            "1 SELECTED" in u or "1/1 SLOT" in u)
-
-                async def _select_hollow(name: str) -> bool:
-                    """Sort all name-matching elements by text length (shortest =
-                    most specific DOM node) and click each until selection confirmed."""
+                async def _gbt(text: str, timeout_ms: int = 5000) -> bool:
+                    """Click via page.get_by_text — proven to find any element by text."""
                     try:
-                        els = await page.query_selector_all(
-                            "button, div, span, p, li, td, tr, label"
+                        await page.get_by_text(text, exact=False).first.click(
+                            timeout=timeout_ms
                         )
-                        matches = []  # (length, text, element)
-                        for el in els:
-                            try:
-                                txt = (await asyncio.wait_for(
-                                    el.inner_text(), timeout=0.3)).strip()
-                                if name.lower() in txt.lower():
-                                    matches.append((len(txt), txt, el))
-                            except Exception:
-                                continue
-                        matches.sort(key=lambda x: x[0])
-                        log(f"_select_hollow({name!r}): {len(matches)} candidates: "
-                            f"{[t[:40] for _,t,_ in matches[:4]]}")
-                        for _, txt, el in matches[:6]:
-                            try:
-                                await el.click()
-                                await asyncio.sleep(1.5)
-                                body = await _body_text(page)
-                                if _selection_confirmed(body):
-                                    return True
-                            except Exception:
-                                continue
-                    except Exception as e:
-                        log(f"select_hollow error: {e}")
-                    return False
+                        log(f"gbt_click({text!r}) OK")
+                        return True
+                    except Exception as ex:
+                        log(f"gbt_click({text!r}) failed: {ex}")
+                        return False
 
-                # Up to 3 selection rounds.
-                # Tries: seeded hollow name → sector hollows → CSS card selectors.
-                # ENTER is only clicked once confirmed.
-                hollow_names = ["Mantis"] + sector["hollows"]
-                selected_any = False
-                for _attempt in range(3):
-                    for hollow in hollow_names:
-                        if await _select_hollow(hollow):
-                            hollow_used = hollow
-                            log(f"Selected {hollow!r} (confirmed) on attempt {_attempt+1}")
-                            selected_any = True
-                            break
-                    if selected_any:
+                # ── select hollow ──────────────────────────────────────────
+                for hollow in ["Mantis"] + sector["hollows"]:
+                    try:
+                        await page.get_by_text(hollow, exact=False).first.click(timeout=3000)
+                        log(f"Hollow clicked: {hollow!r}")
+                        hollow_used = hollow
+                        await asyncio.sleep(2)
+                        body = await _body_text(page)
+                        log(f"After hollow click: {body[200:500]!r}")
                         break
-                    # CSS fallback before next attempt
-                    for sel in ["[class*='hollow']", "[class*='card']", "[class*='unit']"]:
-                        cards = await page.query_selector_all(sel)
-                        if cards:
-                            await cards[0].click()
-                            await asyncio.sleep(1.5)
-                            body = await _body_text(page)
-                            if _selection_confirmed(body):
-                                selected_any = True
-                                log(f"CSS-selected hollow via {sel} on attempt {_attempt+1}")
-                                break
-                    if selected_any:
-                        break
-                    log(f"Selection attempt {_attempt+1} failed — retrying after 2s")
-                    await asyncio.sleep(2)
-
-                if not selected_any:
-                    # Log current body to diagnose what went wrong
-                    body_now = await _body_text(page)
-                    log(f"HOLLOW SELECTION FAILED after 3 attempts. Body: {body_now[:400]!r}")
-                    raise RuntimeError("Hollow selection failed — cannot enter sector")
-
+                    except Exception as ex:
+                        log(f"Hollow {hollow!r} not found: {ex}")
                 _set_run_state(hollow=hollow_used)
 
                 # ── enter sector ───────────────────────────────────────────
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await asyncio.sleep(1)
 
-                # Click ANY element (div/button/a) by text — CDP-level, trusted.
-                # Used for all UI interactions where the element tag is unknown.
-                async def _click_any(keyword: str) -> bool:
-                    try:
-                        handles = await page.query_selector_all(
-                            "button, div, span, a, p, li"
-                        )
-                        for h in handles:
-                            try:
-                                t = (await asyncio.wait_for(
-                                    h.inner_text(), timeout=0.3)).strip()
-                                if keyword.upper() in t.upper() and len(t) < 120:
-                                    await h.click()
-                                    log(f"_click_any({keyword!r}): clicked {t[:60]!r}")
-                                    return True
-                            except Exception:
-                                continue
-                    except Exception as ex:
-                        log(f"_click_any({keyword!r}) err: {ex}")
-                    return False
-
-                # Click ENTER — only reached if hollow selection confirmed above.
-                # `_click_any` covers div-buttons that `_click_kw` (button/a only) misses.
-                enter_kws = [
-                    f"ENTER {sector['name'].upper()}",   # e.g. ENTER SURGE SECTOR
-                    f"ENTER {sector['enter_kw']}",
-                    "ENTER DRIFT", "ENTER SECTOR", "▸ ENTER", "ENTER",
-                ]
-                for kw in enter_kws:
-                    if await _click_any(kw):
-                        log(f"Clicked enter via '{kw}' — waiting for battle page...")
+                entered = False
+                for kw in [sector["name"], "ENTER SURGE SECTOR",
+                            "ENTER SECTOR", "ENTER DRIFT", "ENTER"]:
+                    if await _gbt(kw, timeout_ms=3000):
+                        entered = True
                         break
-                else:
-                    log("WARNING: enter button not found")
+                log(f"Enter clicked: {entered} — waiting for battle page...")
 
                 # Wait up to 15s for URL to become '/battle'
                 for _ in range(15):
@@ -961,72 +884,69 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     log(f"Not on battle after 15s. URL={page.url!r} body={body_now[:300]!r}")
                     raise RuntimeError("Never navigated to battle page after ENTER")
 
-                # ── wait for battle / auto-battle to resolve ────────────────
-                # The demo resolves ALL stages at once after clicking BEGIN STAGE.
-                # After battle: "STAGE 3/3 STAGE CLEARED ... ▸ CRAWL COMPLETE — VIEW RESULTS"
-                # Then: CRAWL REPORT with "NET GAINS +ETH +PEARL +XP"
-                for tick in range(30):
-                    await asyncio.sleep(5)
+                # ── battle loop (mirrors working_battle.py) ─────────────────
+                _WIN_KWS  = ("CRAWL COMPLETE", "STAGE CLEAR", "SECTOR COMPLETE",
+                             "STAGE COMPLETE", "YOU WIN", "HOLLOWS WIN")
+                _LOSE_KWS = ("DEFEAT", "GAME OVER", "YOU LOSE")
+
+                for stage in range(1, sector["stages"] + 2):
+                    log(f"Stage {stage}...")
+
+                    await _gbt("BEGIN STAGE", timeout_ms=5000)
+                    log("BEGIN STAGE clicked — waiting 10s for battle to resolve...")
+                    await asyncio.sleep(10)
 
                     if _crashed.is_set():
-                        log(f"Page crashed at tick {tick}")
+                        log("Page crashed during battle")
                         result = "error"
                         break
 
-                    url = page.url
                     txt = await _body_text(page)
                     u   = txt.upper()
-                    _set_run_state(stage=tick)
-                    log(f"Tick {tick}: url={url.split('/')[-1]!r}")
-                    log(f"  body: {txt[:600].strip()!r}")
+                    log(f"  After battle: {txt[100:500].strip()!r}")
+                    _set_run_state(stage=stage)
 
-                    _WIN_KWS  = ("CRAWL COMPLETE", "SECTOR COMPLETE", "GAUNTLET COMPLETE",
-                                 "STAGE COMPLETE", "STAGE CLEAR", "CRAWL CLEAR",
-                                 "BATTLE COMPLETE", "YOU WIN", "HOLLOWS WIN")
-                    _LOSE_KWS = ("DEFEAT", "GAME OVER", "HOLLOWS LOST", "YOU LOSE",
-                                 "ALL HOLLOWS DOWN")
-
-                    if any(k in u for k in _WIN_KWS) or "results" in url:
-                        log(f"WIN detected: url={url.split('/')[-1]!r}")
+                    if any(k in u for k in _WIN_KWS):
+                        log("WIN detected — clicking VIEW RESULTS")
                         stages_won = sector["stages"]
-                        result     = "win"
-                        # Button is "▸ CRAWL COMPLETE — VIEW RESULTS" (div, not <button>)
-                        await _click_any("VIEW RESULTS")
+                        result = "win"
+                        await asyncio.sleep(2)
+                        await _gbt("VIEW RESULTS", timeout_ms=5000)
                         await asyncio.sleep(5)
                         break
 
                     if "VICTORY" in u:
                         stages_won += 1
-                        log(f"VICTORY — stages_won={stages_won}")
-                        if stages_won >= sector["stages"]:
-                            result = "win"
-                            break
-                        for adv in ["CONTINUE", "NEXT STAGE", "PROCEED"]:
-                            if await _click_kw(page, adv):
-                                break
+                        log(f"VICTORY stage {stage} — stages_won={stages_won}")
+                        await _gbt("CONTINUE", timeout_ms=3000)
                         await asyncio.sleep(3)
+                        txt2 = await _body_text(page)
+                        if any(k in txt2.upper() for k in _WIN_KWS):
+                            result = "win"
+                            stages_won = sector["stages"]
+                            await _gbt("VIEW RESULTS", timeout_ms=5000)
+                            await asyncio.sleep(5)
+                            break
+                        if stage < sector["stages"]:
+                            await asyncio.sleep(3)
+                            await page.evaluate("window.scrollTo(0,0)")
+                            await asyncio.sleep(1)
+                            await page.evaluate("window.scrollTo(0,document.body.scrollHeight)")
+                            await asyncio.sleep(1)
+                            await _gbt("NEXT STAGE", timeout_ms=3000)
+                            await asyncio.sleep(5)
+                        else:
+                            result = "win"
+                            stages_won = sector["stages"]
+                            await _gbt("VIEW RESULTS", timeout_ms=5000)
+                            await asyncio.sleep(5)
+                            break
                         continue
 
                     if any(k in u for k in _LOSE_KWS):
                         log("DEFEAT")
                         result = "defeat"
                         break
-
-                    for btn_kw in ["BEGIN STAGE", "BEGIN CRAWL", "START STAGE"]:
-                        if btn_kw in u:
-                            ok = await _click_any(btn_kw)
-                            if not ok:
-                                log(f"{btn_kw} in body but click failed")
-                            await asyncio.sleep(2)
-                            if js_errors:
-                                log(f"JS after click: {' | '.join(js_errors[-3:])}")
-                                js_errors.clear()
-                            break
-
-                    for adv_kw in ["CONTINUE", "NEXT STAGE", "PROCEED", "VIEW RESULTS"]:
-                        if adv_kw in u:
-                            await _click_any(adv_kw)
-                            break
 
                     # Still on prep after many ticks = entry failed / no hollow
                     if "prep" in url and tick >= 4:
@@ -1043,8 +963,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 pearl = await _extract_pearl(page)
                 log(f"PEARL earned: {pearl}")
 
-                # "▸ RETURN TO DASHBOARD" is a div-button
-                await _click_any("RETURN TO DASHBOARD")
+                if not await _gbt("RETURN TO DASHBOARD", timeout_ms=5000):
+                    await page.goto(DASHBOARD_URL)
                 await asyncio.sleep(3)
 
                 try:
@@ -1095,5 +1015,5 @@ if __name__ == "__main__":
     import sys
     sector = sys.argv[1] if len(sys.argv) > 1 else "surge"
     print(f"Running gauntlet: sector={sector!r}  headless={HEADLESS}")
-    result = asyncio.run(play_sector(sector))
+    result = asyncio.run(run_battle(sector))
     print(f"\nResult: {result}")
