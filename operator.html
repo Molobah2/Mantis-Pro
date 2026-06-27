@@ -180,6 +180,92 @@ a{color:inherit;text-decoration:none}
 .bd-pillar-fill{height:100%;background:linear-gradient(90deg,var(--green2),var(--green));border-radius:2px;transition:width .5s ease}
 
 /* ══════════════════════════════════════════
+   SCORE INTELLIGENCE PANEL
+══════════════════════════════════════════ */
+#sip-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;
+  opacity:0;pointer-events:none;transition:opacity .22s ease;backdrop-filter:blur(3px)}
+#sip-ov.open{opacity:1;pointer-events:all}
+#sip{position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);
+  background:var(--bg2);border-left:1px solid var(--line);z-index:901;
+  transform:translateX(100%);transition:transform .3s cubic-bezier(.22,1,.36,1);
+  display:flex;flex-direction:column;overflow:hidden;will-change:transform}
+#sip.open{transform:translateX(0)}
+.sip-hd{padding:18px 18px 14px;flex-shrink:0;border-bottom:1px solid var(--line);background:rgba(0,0,0,.15)}
+.sip-hd-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sip-hd-meta{display:flex;align-items:center;gap:12px}
+.sip-pi{width:42px;height:42px;background:rgba(35,224,122,.1);border:1px solid rgba(35,224,122,.22);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.sip-pn{font-size:14px;font-weight:800;letter-spacing:.05em;color:var(--text);margin-bottom:3px}
+.sip-ps{font-size:11px;color:var(--faint)}
+.sip-sn{font-size:24px;font-weight:900;color:var(--green);font-family:'JetBrains Mono',monospace;line-height:1}
+.sip-sm{color:var(--faint);font-size:11px}
+.sip-x{width:30px;height:30px;background:rgba(255,255,255,.05);border:1px solid var(--line);
+  border-radius:7px;color:var(--muted);font-size:17px;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;transition:.14s;line-height:1;flex-shrink:0}
+.sip-x:hover{background:rgba(255,255,255,.1);color:var(--green);border-color:rgba(35,224,122,.3)}
+.sip-hd-bar{height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden}
+.sip-hd-fill{height:100%;background:linear-gradient(90deg,var(--green2),var(--green));
+  border-radius:2px;transition:width .55s cubic-bezier(.22,1,.36,1)}
+.sip-nav{display:flex;gap:3px;padding:9px 12px;border-bottom:1px solid var(--line);
+  background:rgba(0,0,0,.1);flex-shrink:0;overflow-x:auto}
+.sip-nav::-webkit-scrollbar{display:none}
+.sip-ntab{font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:5px 10px;
+  border-radius:6px;border:1px solid transparent;cursor:pointer;white-space:nowrap;
+  color:var(--faint);background:transparent;transition:.14s;font-family:inherit}
+.sip-ntab.act,.sip-ntab:hover{background:rgba(35,224,122,.1);
+  border-color:rgba(35,224,122,.25);color:var(--green)}
+.sip-body{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:18px}
+.sip-body::-webkit-scrollbar{width:3px}
+.sip-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
+.sip-sec{display:flex;flex-direction:column;gap:7px}
+.sip-sec-l{font-size:8.5px;font-weight:800;letter-spacing:.12em;color:var(--faint);
+  text-transform:uppercase;margin-bottom:3px}
+/* Items */
+.sip-item{display:flex;align-items:flex-start;gap:9px;padding:10px 11px;
+  border-radius:9px;transition:.14s}
+.sip-item-y{background:rgba(35,224,122,.05);border:1px solid rgba(35,224,122,.12)}
+.sip-item-n{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06)}
+.sip-item:hover{filter:brightness(1.15)}
+.sip-ck{width:19px;height:19px;border-radius:5px;display:flex;align-items:center;
+  justify-content:center;font-size:9px;font-weight:900;flex-shrink:0;margin-top:1px}
+.sip-item-y .sip-ck{background:rgba(35,224,122,.18);color:var(--green)}
+.sip-item-n .sip-ck{background:rgba(255,255,255,.05);color:var(--faint)}
+.sip-ib{flex:1;min-width:0}
+.sip-inm{font-size:11.5px;font-weight:700;color:var(--text);margin-bottom:3px;line-height:1.3}
+.sip-item-n .sip-inm{color:var(--muted)}
+.sip-id{font-size:10.5px;color:var(--muted);line-height:1.55}
+.sip-prog{margin-top:7px}
+.sip-pbar{height:2px;background:rgba(255,255,255,.06);border-radius:1px;overflow:hidden;margin-bottom:3px}
+.sip-pfill{height:100%;background:var(--green);border-radius:1px;transition:width .5s ease}
+.sip-pmeta{font-size:9px;color:var(--faint);display:flex;justify-content:space-between}
+.sip-ipts{font-size:12px;font-weight:800;font-family:'JetBrains Mono',monospace;
+  white-space:nowrap;flex-shrink:0;line-height:1;padding-top:1px}
+.sip-item-y .sip-ipts{color:var(--green)}
+.sip-item-n .sip-ipts{color:rgba(255,255,255,.12)}
+/* Story */
+.sip-story{font-size:11.5px;color:var(--muted);line-height:1.72;
+  background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);
+  border-left:2px solid rgba(35,224,122,.3);border-radius:0 8px 8px 0;
+  padding:11px 13px}
+/* Actions */
+.sip-act{display:flex;align-items:center;gap:9px;padding:9px 11px;
+  border-radius:8px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);
+  cursor:default;transition:.14s}
+.sip-act:hover{background:rgba(35,224,122,.06);border-color:rgba(35,224,122,.18)}
+.sip-act-i{font-size:13px;flex-shrink:0}
+.sip-act-t{flex:1;font-size:11px;color:var(--text);line-height:1.5}
+.sip-act-pts{font-size:10px;font-weight:800;color:var(--green);
+  font-family:'JetBrains Mono',monospace;white-space:nowrap;
+  background:rgba(35,224,122,.1);border-radius:4px;padding:2px 6px}
+/* Total row */
+.sip-total{display:flex;justify-content:space-between;align-items:center;
+  padding:10px 12px;border-radius:8px;background:rgba(35,224,122,.05);
+  border:1px solid rgba(35,224,122,.18)}
+.sip-total-l{font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted)}
+.sip-total-v{font-size:18px;font-weight:900;color:var(--green);
+  font-family:'JetBrains Mono',monospace}
+
+/* ══════════════════════════════════════════
    PULSE BAR
 ══════════════════════════════════════════ */
 .pulsebar{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid var(--line);flex-shrink:0}
@@ -540,6 +626,26 @@ a{color:inherit;text-decoration:none}
   </div>
 </div>
 
+<!-- SCORE INTELLIGENCE PANEL -->
+<div id="sip-ov" onclick="closeSIP()"></div>
+<aside id="sip" aria-label="Score Intelligence">
+  <div class="sip-hd">
+    <div class="sip-hd-row">
+      <div class="sip-hd-meta">
+        <div class="sip-pi" id="sip-pi">◉</div>
+        <div>
+          <div class="sip-pn" id="sip-pn">Consistency</div>
+          <div class="sip-ps"><span class="sip-sn" id="sip-sn">0</span><span class="sip-sm"> / <span id="sip-smx">30</span></span></div>
+        </div>
+      </div>
+      <button class="sip-x" onclick="closeSIP()">×</button>
+    </div>
+    <div class="sip-hd-bar"><div class="sip-hd-fill" id="sip-hf"></div></div>
+  </div>
+  <nav class="sip-nav" id="sip-nav"></nav>
+  <div class="sip-body" id="sip-body"></div>
+</aside>
+
 <!-- CARD MODAL -->
 <div class="mbg" id="cmodal" onclick="if(event.target===this)closeMod()">
   <div class="mbox">
@@ -576,7 +682,14 @@ function tierFill(s){return Math.max(0.04,Math.min(0.97,s/100));}
 const ACHEIVEMENTS={first_drop_of_day:{n:"First Drop",i:"🌅",d:"First claim of the day"},streak_7:{n:"7-Day Streak",i:"🔥",d:"7 consecutive days"},streak_30:{n:"30-Day Streak",i:"⚡",d:"30 consecutive days"},anchor:{n:"Anchor",i:"⚓",d:"Territory anchor"},explorer:{n:"Explorer",i:"🗺",d:"Explored regions"},first_claim:{n:"Pioneer",i:"🚀",d:"First ever claim"},faction_member:{n:"Faction",i:"⚔",d:"Joined faction"},top_10:{n:"Top 10",i:"🏆",d:"Reached top 10"}};
 function tierOf(c){if(!c)return null;const p=c.percentile||0;if(p>=99)return{n:"Legendary",c:"ct-leg",col:"var(--purple)"};if(p>=95)return{n:"Epic",c:"ct-epic",col:"var(--blue)"};if(p>=85)return{n:"Rare",c:"ct-rare",col:"var(--green2)"};if(p>=60)return{n:"Uncommon",c:"ct-unc",col:"#0a7a3a"};return{n:"Common",c:"ct-com",col:"#3d5244"};}
 
-let _addr="",_scoreObj={score:0,breakdown:[]};
+let _addr="",_scoreObj={score:0,breakdown:[]},_sipData=null;
+const SIP_PILLARS=[
+  {key:'consistency',  n:'Consistency',  i:'◉', max:30},
+  {key:'participation',n:'Participation',i:'◈', max:25},
+  {key:'reputation',   n:'Reputation',   i:'✦', max:20},
+  {key:'progression',  n:'Progression',  i:'⬡', max:15},
+  {key:'contribution', n:'Contribution', i:'◆', max:10},
+];
 
 // ── MASTERY SCORE (0-100) ─────────────────────────────────────────────────────
 // Five pillars: Consistency(30) + Participation(25) + Reputation(20)
@@ -1011,6 +1124,7 @@ let _profAddr="";
   const loyaltyBonus=opData.loyalty_bonus||0;
   const scoreObj=computeMasteryScore({cards:ownedCards,cardStats,mesh,lbEntry,lbTotal,lbEntries,hollowCount,idn,genesisStats,loyaltyBonus});
   _scoreObj=scoreObj;
+  _sipData={mesh,lbEntry,lbTotal,cards:ownedCards,cardStats,hollowCount,idn,genesisStats,scoreObj};
   const t=scoreTier(scoreObj.score);
   const tierColors={Legend:"var(--purple)",Elite:"var(--purple)",Sovereign:"var(--gold)",Architect:"var(--green)",Specialist:"var(--green2)"};
   document.getElementById("hnm").innerHTML=esc(nm)+(idn.twitter?`<a class="twitter-link" href="https://x.com/${esc(idn.twitter)}" target="_blank">@${esc(idn.twitter)}</a>`:'');
@@ -1040,7 +1154,7 @@ let _profAddr="";
   document.getElementById("sctier").textContent=t.n;
   document.getElementById("sctier").style.color=tierColors[t.n]||"var(--muted)";
   if(lbEntry)document.getElementById("scpct").textContent="Top "+Math.max(1,Math.round(lbEntry.rank/lbTotal*100))+"% of operators";
-  document.getElementById("bdpanel").innerHTML=scoreObj.breakdown.map(b=>`<div class="bd-pillar"><div class="bd-pillar-hd"><span class="bd-pillar-l">${esc(b.l)}</span><span class="bd-pillar-v">${b.v}<span class="bd-pillar-max">/${b.max}</span></span></div><div class="bd-pillar-bar"><div class="bd-pillar-fill" style="width:${Math.round(b.pct)}%"></div></div></div>`).join('')+`<div class="bdrow" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="bdk">Mastery Score</span><span class="bdv" style="font-size:15px;font-weight:900">${scoreObj.score}/100</span></div>`;
+  document.getElementById("bdpanel").innerHTML=scoreObj.breakdown.map(b=>`<div class="bd-pillar" onclick="openSIP('${b.l.toLowerCase()}')" title="Click for full ${b.l} breakdown" style="cursor:pointer;border-radius:7px;padding:3px 4px;margin:-3px -4px;transition:.12s" onmouseenter="this.style.background='rgba(35,224,122,.06)'" onmouseleave="this.style.background=''"><div class="bd-pillar-hd"><span class="bd-pillar-l">${esc(b.l)}</span><span class="bd-pillar-v">${b.v}<span class="bd-pillar-max">/${b.max}</span></span></div><div class="bd-pillar-bar"><div class="bd-pillar-fill" style="width:${Math.round(b.pct)}%"></div></div></div>`).join('')+`<div class="bdrow" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="bdk">Mastery Score</span><span class="bdv" style="font-size:15px;font-weight:900">${scoreObj.score}/100</span></div><div style="font-size:9px;color:var(--faint);text-align:center;margin-top:8px;letter-spacing:.04em">TAP ANY PILLAR FOR FULL BREAKDOWN</div>`;
 
   // Pulse bar
   const achCount=(mesh?.earned_achievement_ids||[]).length;
@@ -1168,7 +1282,233 @@ function shareProfile(){if(navigator.share)navigator.share({title:'Operator Prof
 function toggleBd(){document.getElementById("bdpanel").classList.toggle("open");}
 
 function closeMod(){document.getElementById("cmodal").classList.remove("open");}
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMod();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeMod();closeSIP();}});
+
+// ── SCORE INTELLIGENCE PANEL ────────────────────────────────────────────────
+function _sipItems(key,d){
+  const {mesh,lbEntry,lbTotal,cards,cardStats,hollowCount,idn,genesisStats}=d;
+  const achs=mesh?.earned_achievement_ids||[];
+
+  if(key==='consistency'){
+    const has30=achs.includes('streak_30'),has7=achs.includes('streak_7');
+    const hasFDD=achs.includes('first_drop_of_day');
+    const anchors=mesh?.anchor_count||0;
+    const age=mesh?.first_claim_at?(Date.now()-new Date(mesh.first_claim_at).getTime())/86400000:0;
+    const agePts=Math.min(4,Math.round(age/90*4));
+    const anchorPts=Math.min(10,anchors*2);
+    return[
+      {label:has30?'30-Day Mesh Streak':has7?'7-Day Mesh Streak':'Daily Mesh Streak',
+       desc:has30?'Claimed Mesh for 30+ consecutive days — maximum streak consistency.'
+         :has7?'7-day streak active. 23 more consecutive days unlocks the full 15-pt bonus.'
+         :'Claim Mesh every day. 7 consecutive days earns +8 pts; 30 days earns +15 pts.',
+       earned:has7||has30,earnedPts:has30?15:has7?8:0,maxPts:15,
+       prog:null,
+       impact:has30?0:has7?7:15,
+       action:has30?null:has7?'Maintain your daily streak for 23 more days → +7 pts'
+         :'Claim Mesh daily for 7 consecutive days → +8 pts'},
+      {label:'Daily Opener',
+       desc:hasFDD?'Achieved: you\'ve been the first wallet to claim Mesh on a UTC day.'
+         :'Be the first wallet to claim Mesh on any UTC day to earn this bonus.',
+       earned:hasFDD,earnedPts:hasFDD?3:0,maxPts:3,prog:null,
+       impact:hasFDD?0:3,
+       action:hasFDD?null:'Be first to claim Mesh before midnight UTC → +3 pts'},
+      {label:'Active Anchors ('+anchors+' / 5)',
+       desc:anchors>=5?'Maximum anchors reached — full territorial presence.'
+         :'Each anchor earns +2 pts up to 5 anchors. You have '+anchors+' — add '+(5-anchors)+' more.',
+       earned:anchors>0,earnedPts:anchorPts,maxPts:10,
+       prog:anchors<5?{cur:anchors,tgt:5,unit:'anchors'}:null,
+       impact:Math.max(0,10-anchorPts),
+       action:anchors>=5?null:'Create '+(5-anchors)+' more anchor'+(5-anchors!==1?'s':'')+' → +'+(10-anchorPts)+' pts'},
+      {label:'Ecosystem Tenure ('+Math.floor(age)+' days)',
+       desc:age>=90?'Veteran operator — 90+ days in the Litany ecosystem.'
+         :'Active for '+Math.floor(age)+' days. Full tenure bonus (4 pts) unlocks at 90 days.',
+       earned:age>0,earnedPts:agePts,maxPts:4,
+       prog:age>0&&age<90?{cur:Math.floor(age),tgt:90,unit:'days active'}:null,
+       impact:Math.max(0,4-agePts),
+       action:age>=90?null:'Stay active for '+Math.ceil(90-age)+' more days → +'+(4-agePts)+' pts'},
+    ];
+  }
+
+  if(key==='participation'){
+    const tc=mesh?.total_claims||0;
+    const claimPts=Math.min(18,Math.round(Math.log(tc+1)/Math.log(600)*18));
+    const rankPts=lbEntry&&lbTotal>0?Math.round(((lbTotal-lbEntry.rank+1)/lbTotal)*7):0;
+    const milestones=[1,5,10,30,100,300,600];
+    const nxtM=milestones.find(m=>m>tc)||null;
+    const nxtMPts=nxtM?Math.round(Math.log(nxtM+1)/Math.log(600)*18)-claimPts:0;
+    const rankTgt=lbEntry?(lbEntry.rank>3?3:null):null;
+    return[
+      {label:'Mesh Claims ('+tc.toLocaleString()+')',
+       desc:tc===0?'No claims yet. Claims use a log scale — the first sessions are the most impactful.'
+         :tc>=600?tc.toLocaleString()+' claims — you\'ve reached the log-scale cap. Claims score maximised.'
+         :tc.toLocaleString()+' claims. Each session adds points on a logarithmic curve that prevents farming.',
+       earned:tc>0,earnedPts:claimPts,maxPts:18,
+       prog:tc>0&&tc<600?{cur:tc,tgt:nxtM||600,unit:'claims'}:null,
+       impact:tc>=600?0:18-claimPts,
+       action:tc>=600?null:nxtM?'Reach '+nxtM+' total claims → +'+nxtMPts+' pts':'Claim Mesh daily to increase your claims score'},
+      {label:'Leaderboard Position ('+(lbEntry?'#'+lbEntry.rank:'Unranked')+')',
+       desc:!lbEntry?'Not yet on the Mesh leaderboard. Any rank earns proportional participation points.'
+         :lbEntry.rank<=3?'Top 3 operator — maximum leaderboard participation bonus.'
+         :'Rank #'+lbEntry.rank+' of '+lbTotal+'. Position earns '+Math.round(((lbTotal-lbEntry.rank+1)/lbTotal)*100)+'% of the 7-pt bonus.',
+       earned:!!lbEntry,earnedPts:rankPts,maxPts:7,prog:null,
+       impact:rankTgt?10-rankPts:lbEntry?0:7,
+       action:!lbEntry?'Claim Mesh to appear on the leaderboard → unlocks rank bonus'
+         :rankTgt?'Reach rank #3 to earn the full leaderboard bonus':null},
+    ];
+  }
+
+  if(key==='reputation'){
+    const achCount=achs.length;
+    const achPts=Math.min(8,achCount*2);
+    const rankPts=lbEntry?(lbEntry.rank<=3?10:lbEntry.rank<=10?8:lbEntry.rank<=25?6:lbEntry.rank<=50?4:lbEntry.rank<=100?2:1):0;
+    const twit=idn?.twitter?1:0;
+    const nm=(idn?.name&&!idn.name.startsWith('0x'))?1:0;
+    return[
+      {label:'Mesh Rank ('+(lbEntry?'#'+lbEntry.rank:'Unranked')+')',
+       desc:!lbEntry?'No leaderboard rank yet. Appearing on the leaderboard earns at least +1 reputation pt.'
+         :lbEntry.rank<=3?'Elite rank — top 3 operators in the Litany ecosystem.'
+         :lbEntry.rank<=10?'Top 10 operator. Your rank reflects strong community standing.'
+         :'Rank #'+lbEntry.rank+' earns a tiered reputation bonus.',
+       earned:!!lbEntry,earnedPts:rankPts,maxPts:10,prog:null,
+       impact:lbEntry?(lbEntry.rank>3?10-rankPts:0):1,
+       action:!lbEntry?'Appear on the Mesh leaderboard to earn reputation pts'
+         :lbEntry.rank>3?'Reach top 3 to unlock the maximum +10 rank bonus':null},
+      {label:'Achievements ('+achCount+' earned)',
+       desc:achCount===0?'No achievements yet. Each achievement reflects a meaningful ecosystem action.'
+         :achCount>=4?achCount+' achievements earned — near or at the 8-pt cap.'
+         :achCount+' achievement'+(achCount!==1?'s':'')+' earned. Each is worth +2 pts (cap: 4 achievements / 8 pts).',
+       earned:achCount>0,earnedPts:achPts,maxPts:8,prog:null,
+       impact:Math.max(0,8-achPts),
+       action:achCount>=4?null:'Earn '+(4-achCount)+' more achievement'+(4-achCount!==1?'s':'')+' → +'+(8-achPts)+' pts'},
+      {label:'X / Twitter Linked',
+       desc:twit?'@'+idn.twitter+' linked — identity verified.':'Link your X account to signal commitment.',
+       earned:!!twit,earnedPts:twit,maxPts:1,prog:null,
+       impact:twit?0:1,
+       action:twit?null:'Link your X / Twitter account on your profile → +1 pt'},
+      {label:'Named Identity',
+       desc:nm?'Profile name set: '+idn.name:'Register an ENS name or set a profile handle to earn this point.',
+       earned:!!nm,earnedPts:nm,maxPts:1,prog:null,
+       impact:nm?0:1,
+       action:nm?null:'Register an ENS name or set your profile name → +1 pt'},
+    ];
+  }
+
+  if(key==='progression'){
+    const cap=genesisStats?.genesis_supply_cap||5000;
+    const claimed=genesisStats?.total_genesis_claimed||cap;
+    const open=genesisStats?.claims_open;
+    const bestPct=cards.length?Math.max(...cards.map(id=>cardStats[id]?.percentile||0)):0;
+    const hollowPts=hollowCount>0?Math.min(8,3+hollowCount):0;
+    const qualPts=Math.round(bestPct/100*5);
+    const earlyPts=hollowCount>0?Math.round(Math.max(0,1-claimed/cap)*2):0;
+    return[
+      {label:'Hollow NFTs ('+hollowCount+')',
+       desc:hollowCount===0?'No Hollows claimed. A Hollow requires one Litany Card + gas — the deepest commitment signal. '+(open?'Genesis claims are currently open.':'Genesis claims are paused.')
+         :hollowCount>=5?hollowCount+' Hollows — maximum progression bonus reached.'
+         :hollowCount+' Hollow'+(hollowCount!==1?'s':'')+'. Each additional Hollow adds +1 pt (max 5 → 8 pts total).',
+       earned:hollowCount>0,earnedPts:hollowPts,maxPts:8,
+       prog:hollowCount>0&&hollowCount<5?{cur:hollowCount,tgt:5,unit:'Hollows'}:null,
+       impact:Math.max(0,8-hollowPts),
+       action:hollowCount===0?(open?'Claim a Hollow NFT now — genesis is open → +4 pts instantly':'Claim a Hollow when genesis reopens → +4 pts')
+         :hollowCount<5?'Claim '+(5-hollowCount)+' more Hollow'+(5-hollowCount!==1?'s':'')+' → +'+(8-hollowPts)+' pts':null},
+      {label:'Best Card Quality ('+bestPct+'th %tile)',
+       desc:bestPct===0?'No cards held. Card quality measures the rarity percentile of your best card.'
+         :bestPct>=90?'Your best card is in the '+bestPct+'th percentile — near-maximum quality bonus.'
+         :'Your best card is at the '+bestPct+'th percentile. Legendary and Epic cards push this toward the 5-pt cap.',
+       earned:bestPct>0,earnedPts:qualPts,maxPts:5,prog:null,
+       impact:Math.max(0,5-qualPts),
+       action:bestPct>=90?null:bestPct===0?'Acquire any Litany Card to enable quality scoring':'Acquire an Epic or Legendary card to improve your quality score'},
+      {label:'Genesis Early Adopter',
+       desc:hollowCount===0?'Claim a Hollow during genesis to earn up to +2 pts based on how early you claimed.'
+         :earlyPts>=2?'You claimed your Hollow while supply was plentiful — full early adopter bonus.'
+         :earlyPts===1?'Partial early adopter bonus earned.'
+         :'Genesis is near exhausted — the early adopter window is closing.',
+       earned:earlyPts>0,earnedPts:earlyPts,maxPts:2,prog:null,
+       impact:hollowCount===0?2:Math.max(0,2-earlyPts),
+       action:hollowCount===0&&open?'Claim a Hollow now while supply remains → +2 early adopter bonus':null},
+    ];
+  }
+
+  // contribution
+  const cc=cards.length;
+  const pcts=cards.map(id=>cardStats[id]?.percentile||0).filter(Boolean);
+  const avg=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
+  const breadthPts=cc>0?Math.min(6,Math.round(Math.sqrt(Math.min(cc,16))*1.5)):0;
+  const qualPts=pcts.length?Math.round(avg/100*4):0;
+  const nxtBreadth=[1,4,9,16].find(t=>t>cc)||null;
+  const nxtBreadthPts=nxtBreadth?Math.min(6,Math.round(Math.sqrt(nxtBreadth)*1.5))-breadthPts:0;
+  return[
+    {label:'Card Collection ('+cc+' card'+(cc!==1?'s':'')+')',
+     desc:cc===0?'No cards held. Acquiring Litany Cards is the entry point to the ecosystem.'
+       :cc>=16?cc+' cards — breadth cap reached. More cards do not increase this score.'
+       :''+cc+' card'+(cc!==1?'s':'')+' held. Square-root scaling is used here — 16 cards is the effective cap.',
+     earned:cc>0,earnedPts:breadthPts,maxPts:6,
+     prog:cc>0&&cc<16?{cur:cc,tgt:16,unit:'cards'}:null,
+     impact:cc>=16?0:Math.max(0,6-breadthPts),
+     action:cc>=16?null:nxtBreadth?'Acquire '+(nxtBreadth-cc)+' more card'+(nxtBreadth-cc!==1?'s':'')+' → +'+nxtBreadthPts+' pts':null},
+    {label:'Portfolio Quality (avg '+avg+'th %tile)',
+     desc:avg===0?'No rarity data yet. A diverse set of quality cards improves this score.'
+       :avg>=70?'Strong portfolio average at the '+avg+'th percentile.'
+       :'Your collection averages the '+avg+'th percentile. Prioritise Rare+ cards when acquiring.',
+     earned:avg>30,earnedPts:qualPts,maxPts:4,prog:null,
+     impact:Math.max(0,4-qualPts),
+     action:avg>=70?null:avg===0?null:'Focus on Rare or higher-rarity cards to improve portfolio quality'},
+  ];
+}
+
+function _sipStory(key,items,pts,max,d){
+  const pct=Math.round(pts/max*100);
+  const earned=items.filter(i=>i.earned);
+  const missing=items.filter(i=>!i.earned);
+  if(pct>=90)return'Excellent — '+pts+'/'+max+' pts. You\'ve mastered this pillar. '+(missing.length?'Only minor improvements remain.':'Maximum score achieved.');
+  if(pct>=60)return'Strong performance — '+pts+'/'+max+' pts. '+earned.length+' of '+items.length+' factors active. '+(missing.length?'Focus on: '+missing.slice(0,2).map(i=>i.label).join(', ')+'.':'');
+  if(pct>=30)return'Developing — '+pts+'/'+max+' pts. '+(missing.length?'Key gaps: '+missing.slice(0,2).map(i=>i.label).join(', ')+'. These are your clearest paths to improvement.':'');
+  return pts+'/'+max+' pts. This pillar has the most room to grow. '+(items[0]?.action?'Start with: '+items[0].action:'Begin engaging with this area to build your score.');
+}
+
+function openSIP(key){
+  if(!_sipData)return;
+  const meta=SIP_PILLARS.find(p=>p.key===key)||SIP_PILLARS[0];
+  const pts=_scoreObj.pillars?.[key]||0;
+  // Nav tabs
+  document.getElementById('sip-nav').innerHTML=SIP_PILLARS.map(p=>
+    `<button class="sip-ntab${p.key===key?' act':''}" onclick="openSIP('${p.key}')">${p.i} ${p.n}</button>`
+  ).join('');
+  // Header
+  document.getElementById('sip-pi').textContent=meta.i;
+  document.getElementById('sip-pn').textContent=meta.n;
+  document.getElementById('sip-sn').textContent=pts;
+  document.getElementById('sip-smx').textContent=meta.max;
+  const hf=document.getElementById('sip-hf');
+  hf.style.width='0%';
+  setTimeout(()=>{hf.style.width=Math.round(pts/meta.max*100)+'%';},50);
+  // Build items
+  const items=_sipItems(key,_sipData);
+  const story=_sipStory(key,items,pts,meta.max,_sipData);
+  const improvements=items.filter(i=>i.impact>0&&i.action).sort((a,b)=>b.impact-a.impact);
+  // Render items HTML
+  const itemsHtml=items.map(it=>{
+    const pHtml=it.prog?`<div class="sip-prog"><div class="sip-pbar"><div class="sip-pfill" style="width:${Math.min(100,Math.round(it.prog.cur/it.prog.tgt*100))}%"></div></div><div class="sip-pmeta"><span>${it.prog.cur.toLocaleString()} / ${it.prog.tgt.toLocaleString()} ${it.prog.unit}</span><span>${Math.min(100,Math.round(it.prog.cur/it.prog.tgt*100))}%</span></div></div>`:'';
+    return`<div class="sip-item sip-item-${it.earned?'y':'n'}"><div class="sip-ck">${it.earned?'✓':'○'}</div><div class="sip-ib"><div class="sip-inm">${esc(it.label)}</div><div class="sip-id">${esc(it.desc)}</div>${pHtml}</div><div class="sip-ipts">${it.earned?'+':''}${it.earnedPts}<span style="font-size:8.5px;font-weight:400;color:var(--faint)"> /${it.maxPts}</span></div></div>`;
+  }).join('');
+  const improvHtml=improvements.length
+    ?improvements.map(it=>`<div class="sip-act"><span class="sip-act-i">🔥</span><span class="sip-act-t">${esc(it.action)}</span><span class="sip-act-pts">+${it.impact}</span></div>`).join('')
+    :`<div style="font-size:11px;color:var(--muted);padding:6px 0;opacity:.7">All improvements in this pillar are complete.</div>`;
+  document.getElementById('sip-body').innerHTML=`
+    <div class="sip-sec"><div class="sip-sec-l">WHY YOU RECEIVED ${pts} / ${meta.max} PTS</div>${itemsHtml}<div class="sip-total"><span class="sip-total-l">PILLAR TOTAL</span><span class="sip-total-v">${pts} / ${meta.max}</span></div></div>
+    <div class="sip-sec"><div class="sip-sec-l">YOUR STORY</div><div class="sip-story">${esc(story)}</div></div>
+    <div class="sip-sec"><div class="sip-sec-l">HOW TO IMPROVE</div>${improvHtml}</div>
+  `;
+  document.getElementById('sip').classList.add('open');
+  document.getElementById('sip-ov').classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closeSIP(){
+  document.getElementById('sip')?.classList.remove('open');
+  document.getElementById('sip-ov')?.classList.remove('open');
+  document.body.style.overflow='';
+}
 async function openCard(tid,cs){
   const m=document.getElementById("cmodal");
   document.getElementById("mtitle").textContent="Litany Card #"+tid;
