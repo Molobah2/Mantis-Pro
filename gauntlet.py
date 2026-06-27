@@ -618,7 +618,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 "getClient:function(){return{request:async function(){return null;},chain:{id:_CID}};},"
                 "reconnect:_noop};}"
                 "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["
-                "null,"
+                "typeof document!=='undefined'?document.currentScript:void 0,"
                 "103111,289600,485738,196943,885157,151794,356327,"
                 "160518,557073,373403,712369,700510,249994,985369,"
                 "174960,979454,377349,604140,689862,794702,200057,"
