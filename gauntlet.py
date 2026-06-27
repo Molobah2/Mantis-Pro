@@ -553,6 +553,18 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 content = await _body_text(page)
                 log(f"Page snippet: {content[:300].strip()!r}")
 
+                # If landing shows a connect prompt, click it to trigger wallet auth.
+                # Our injected window.ethereum responds to eth_requestAccounts instantly.
+                if not await _is_authed(page):
+                    log("Not authed — clicking connect...")
+                    for kw in ["CONNECT WALLET", "CONNECT", "GET STARTED", "SIGN IN"]:
+                        if kw in content.upper():
+                            await _click_kw(page, kw)
+                            await asyncio.sleep(4)
+                            break
+                    c2 = await _body_text(page)
+                    log(f"Post-connect snippet: {c2[:200].strip()!r}")
+
                 try:
                     ns = await context.storage_state()
                     _state_put("storage_state", json.dumps(ns))
@@ -565,6 +577,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 await page.goto(sector["url"], wait_until="domcontentloaded", timeout=30000)
                 await asyncio.sleep(5)
 
+                prep_content = await _body_text(page)
+                log(f"Prep page: {prep_content[:300].strip()!r}")
+
                 try:
                     for btn in await page.query_selector_all("button"):
                         if (await btn.inner_text()).strip().lower() == "x":
@@ -574,14 +589,29 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 except Exception:
                     pass
 
-                # ── select hollow(s) ───────────────────────────────────────
-                for hollow in sector["hollows"]:
+                # ── select hollow(s) — use query_selector_all (instant, no locator timeout)
+                async def _select_hollow(name: str) -> bool:
                     try:
-                        await page.get_by_text(hollow, exact=False).first.click()
+                        els = await page.query_selector_all("button, div, span, p, li, td")
+                        for el in els:
+                            try:
+                                txt = await asyncio.wait_for(el.inner_text(), timeout=0.5)
+                                if name.lower() in txt.lower():
+                                    await el.click()
+                                    await asyncio.sleep(1)
+                                    return True
+                            except Exception:
+                                continue
+                    except Exception as e:
+                        log(f"select_hollow error: {e}")
+                    return False
+
+                for hollow in sector["hollows"]:
+                    if await _select_hollow(hollow):
                         hollow_used = hollow
                         log(f"Selected {hollow}")
-                        await asyncio.sleep(2)
-                    except Exception:
+                        await asyncio.sleep(1)
+                    else:
                         log(f"Could not select {hollow}")
 
                 _set_run_state(hollow=hollow_used)
