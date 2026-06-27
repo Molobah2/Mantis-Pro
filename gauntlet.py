@@ -410,13 +410,16 @@ async def run_battle(sector_key: str = "surge") -> dict:
     """
     Play one full gauntlet run in the given sector.
     Returns dict: {result, stages_won, pearl, hollow, sector}.
-    Persists auth state and logs run to SQLite.
+    Hard 90-second timeout prevents hung browser from blocking forever.
     """
     from playwright.async_api import async_playwright
 
-    sector       = SECTORS.get(sector_key, SECTORS["surge"])
-    hollow_used  = sector["hollows"][0]
-    logs         = []
+    sector      = SECTORS.get(sector_key, SECTORS["surge"])
+    hollow_used = sector["hollows"][0]
+    logs        = []
+    result      = "error"
+    stages_won  = 0
+    pearl       = 0
 
     def log(msg: str):
         print(f"  [gauntlet:{sector_key}] {msg}")
@@ -425,19 +428,15 @@ async def run_battle(sector_key: str = "surge") -> dict:
 
     if not GAUNTLET_ADDR:
         return {"result": "error", "stages_won": 0, "pearl": 0,
-                "hollow": hollow_used, "sector": sector_key,
-                "error": "GAUNTLET_ADDRESS not set"}
+                "hollow": hollow_used, "sector": sector_key}
 
     _set_run_state(running=True, sector=sector_key, hollow=hollow_used,
                    stage=0, started=time.time(), last_log="Starting...")
 
-    result     = "error"
-    stages_won = 0
-    pearl      = 0
+    async def _run():
+        nonlocal result, stages_won, pearl, hollow_used
 
-    try:
         async with async_playwright() as pw:
-            # Restore saved auth state (cookies + localStorage) if available
             ctx_kwargs = {"viewport": {"width": 1280, "height": 800}}
             saved = _state_get("storage_state")
             if saved:
@@ -447,6 +446,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 except Exception:
                     pass
 
+            log("Launching browser...")
             browser = await pw.chromium.launch(
                 headless=True,
                 args=[
@@ -468,9 +468,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     "--js-flags=--max-old-space-size=256",
                 ],
             )
+            log("Browser launched")
             context = await browser.new_context(**ctx_kwargs)
 
-            # Block heavy assets before any page loads to keep memory low
             await context.route(
                 re.compile(
                     r"\.(png|jpg|jpeg|gif|webp|mp4|webm|ogg|mp3|wav|woff2?|ttf|otf)(\?.*)?$",
@@ -480,7 +480,6 @@ async def run_battle(sector_key: str = "surge") -> dict:
             )
 
             await context.add_init_script(_provider_js(GAUNTLET_ADDR))
-            # Kill animations so the page stays lightweight
             await context.add_init_script("""
                 const s = document.createElement('style');
                 s.textContent = `*, *::before, *::after {
@@ -490,7 +489,6 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 document.addEventListener('DOMContentLoaded', () => document.head.appendChild(s));
             """)
 
-            # Auto-inject signing bridge into any popup the site opens
             async def _setup_page(p):
                 try:
                     await p.expose_function("__pwSignPersonal", _sign_personal)
@@ -502,25 +500,21 @@ async def run_battle(sector_key: str = "surge") -> dict:
             page = await context.new_page()
             await _setup_page(page)
 
-            # Log /api/ calls for diagnostics
             intercepted = []
             page.on("request", lambda req: intercepted.append(req.url)
                     if "/api/" in req.url else None)
 
             try:
                 # ── auth phase ──────────────────────────────────────────────
-                # Navigate to landing and let the SPA auto-call
-                # eth_requestAccounts via the injected window.ethereum.
-                # Heavy assets are blocked; animations disabled.
                 log("Navigating to demo landing...")
                 await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
-                log("Waiting for SPA boot...")
-                await page.wait_for_timeout(6000)
+                log("goto complete — sleeping 6s for SPA boot...")
+                await asyncio.sleep(6)   # asyncio.sleep, not page.wait_for_timeout
+                log("Sleep done — reading page...")
 
                 content = await _body_text(page)
                 log(f"Page snippet: {content[:300].strip()!r}")
 
-                # Save whatever session state we have
                 try:
                     ns = await context.storage_state()
                     _state_put("storage_state", json.dumps(ns))
@@ -531,14 +525,13 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 # ── navigate to sector prep ─────────────────────────────────
                 log(f"Navigating to {sector['name']}...")
                 await page.goto(sector["url"], wait_until="domcontentloaded", timeout=30000)
-                await page.wait_for_timeout(5000)
+                await asyncio.sleep(5)
 
-                # Dismiss tutorial / any overlay
                 try:
                     for btn in await page.query_selector_all("button"):
                         if (await btn.inner_text()).strip().lower() == "x":
                             await btn.click()
-                            await page.wait_for_timeout(1000)
+                            await asyncio.sleep(1)
                             break
                 except Exception:
                     pass
@@ -549,7 +542,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         await page.get_by_text(hollow, exact=False).first.click()
                         hollow_used = hollow
                         log(f"Selected {hollow}")
-                        await page.wait_for_timeout(2000)
+                        await asyncio.sleep(2)
                     except Exception:
                         log(f"Could not select {hollow}")
 
@@ -557,13 +550,13 @@ async def run_battle(sector_key: str = "surge") -> dict:
 
                 # ── enter sector ───────────────────────────────────────────
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await page.wait_for_timeout(1000)
+                await asyncio.sleep(1)
 
                 if not await _click_kw(page, f"ENTER {sector['enter_kw']}"):
                     await _click_kw(page, "ENTER")
 
                 log("Entered sector")
-                await page.wait_for_timeout(5000)
+                await asyncio.sleep(5)
 
                 # ── stage loop ─────────────────────────────────────────────
                 for stage in range(1, sector["stages"] + 1):
@@ -576,9 +569,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         break
 
                     await _click_kw(page, "BEGIN STAGE")
-                    await page.wait_for_timeout(10000)
+                    await asyncio.sleep(10)
 
-                    # Detect unexpected navigation away from crawl
                     if ("crawl" not in page.url and "battle" not in page.url
                             and "results" not in page.url):
                         log(f"Page left crawl: {page.url}")
@@ -592,14 +584,14 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         stages_won = stage
                         result     = "win"
                         await _click_kw(page, "VIEW RESULTS")
-                        await page.wait_for_timeout(3000)
+                        await asyncio.sleep(3)
                         break
 
                     elif "VICTORY" in content.upper():
                         stages_won = stage
                         log(f"Stage {stage} VICTORY")
                         await _click_kw(page, "CONTINUE")
-                        await page.wait_for_timeout(3000)
+                        await asyncio.sleep(3)
 
                         if "results" in page.url:
                             result = "win"
@@ -609,19 +601,19 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         if "CRAWL COMPLETE" in c2.upper():
                             result = "win"
                             await _click_kw(page, "VIEW RESULTS")
-                            await page.wait_for_timeout(3000)
+                            await asyncio.sleep(3)
                             break
 
                         if stage == sector["stages"]:
                             result = "win"
-                        elif stage < sector["stages"]:
-                            await page.wait_for_timeout(2000)
+                        else:
+                            await asyncio.sleep(2)
                             await page.evaluate("window.scrollTo(0,0)")
-                            await page.wait_for_timeout(500)
+                            await asyncio.sleep(0.5)
                             await page.evaluate("window.scrollTo(0,document.body.scrollHeight)")
-                            await page.wait_for_timeout(500)
+                            await asyncio.sleep(0.5)
                             await _click_kw(page, "NEXT STAGE")
-                            await page.wait_for_timeout(5000)
+                            await asyncio.sleep(5)
 
                     elif "DEFEAT" in content.upper():
                         log(f"Stage {stage} DEFEAT")
@@ -629,13 +621,12 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         break
 
                 # ── extract PEARL ─────────────────────────────────────────
-                await page.wait_for_timeout(3000)
+                await asyncio.sleep(3)
                 pearl = await _extract_pearl(page)
                 log(f"PEARL earned: {pearl}")
 
-                # ── return to dashboard & save fresh state ────────────────
                 await _click_kw(page, "RETURN TO DASHBOARD")
-                await page.wait_for_timeout(3000)
+                await asyncio.sleep(3)
 
                 try:
                     fs = await context.storage_state()
@@ -643,22 +634,28 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 except Exception:
                     pass
 
-                # Log any API endpoints discovered
                 api_calls = list(set(intercepted))
                 if api_calls:
-                    log(f"API calls observed: {', '.join(api_calls[:10])}")
+                    log(f"API calls: {', '.join(api_calls[:10])}")
 
             except Exception as e:
                 log(f"Battle error: {e}")
                 result = "error"
 
             finally:
-                await browser.close()
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
 
+    try:
+        await asyncio.wait_for(_run(), timeout=90.0)
+    except asyncio.TimeoutError:
+        log("Battle timed out after 90s — browser likely hung")
+        result = "error"
     except Exception as e:
         log(f"Runner error: {e}")
         result = "error"
-
     finally:
         _set_run_state(running=False, last_log=f"Done: {result}")
 
