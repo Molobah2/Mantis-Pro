@@ -601,12 +601,13 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 "function _hook(){return{data:undefined,isLoading:false,error:null};}"
                 f"var _A='{GAUNTLET_ADDR}',_CID=2741,_UID='injected';"
                 "function _cfg(opts){"
+                "var _ssr=!!(opts&&opts.ssr);"
                 "var _map=new Map([[_UID,{accounts:[_A],chainId:_CID,connector:{id:_UID,name:'MetaMask',type:'injected',uid:_UID}}]]);"
                 "var _st={connections:_map,chainId:_CID,current:_UID,status:'connected'};"
                 "return{chains:(opts&&opts.chains)||[],connectors:[],"
                 "storage:{getItem:function(){return null;},setItem:_noop,removeItem:_noop},"
-                "ssr:false,"
-                "_internal:{ssr:false,"
+                "ssr:_ssr,"
+                "_internal:{ssr:_ssr,"
                 "connectors:{setup:function(){return{id:_UID,type:'injected',uid:_UID,name:'MetaMask',emitter:{on:_noop,off:_noop,emit:_noop}};},"
                 "getState:function(){return[];},setState:_noop,subscribe:function(){return _noop;}},"
                 "events:{conn:{onConnect:_noop,onDisconnect:_noop},change:_noop,disconnect:_noop},"
@@ -688,6 +689,12 @@ async def run_battle(sector_key: str = "surge") -> dict:
             _crashed = asyncio.Event()
             page.on("crash", lambda: _crashed.set())
 
+            # Capture JS console errors for diagnostics
+            js_errors = []
+            page.on("console", lambda msg: js_errors.append(f"[{msg.type}] {msg.text[:200]}")
+                    if msg.type in ("error", "warning") else None)
+            page.on("pageerror", lambda err: js_errors.append(f"[pageerror] {str(err)[:200]}"))
+
             async def _safe_eval(js: str, t: float = 5.0) -> str:
                 eval_task  = asyncio.ensure_future(page.evaluate(js))
                 crash_task = asyncio.ensure_future(_crashed.wait())
@@ -736,6 +743,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 log(f"Dashboard text: {content[:600].strip()!r}")
                 log(f"URL: {page.url}")
                 log(f"Authed: {await _is_authed(page)}")
+                if js_errors:
+                    log(f"JS errors (dashboard): {' | '.join(js_errors[-6:])}")
 
                 # Capture all localStorage keys for diagnostics
                 try:
@@ -770,6 +779,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
 
                 prep_content = await _body_text(page)
                 log(f"Prep page: {prep_content[:800].strip()!r}")
+
+                if js_errors:
+                    log(f"JS errors: {' | '.join(js_errors[-8:])}")
 
                 # Also log localStorage demo state to confirm our hollow seed was read
                 try:
