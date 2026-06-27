@@ -18,6 +18,9 @@ load_dotenv()
 # ── MOODY MADNESS ───────────────────────────
 from moody_agent import moody_check, record_woke, get_status, send_woke_confirmation
 
+# ── GAUNTLET ────────────────────────────────
+import gauntlet as _gauntlet
+
 # ── FLASK HEALTH SERVER ─────────────────────
 app = Flask(__name__)
 
@@ -1464,6 +1467,57 @@ def run_identity_refresh():
             print(f"identity refresh: {e}")
         time.sleep(24 * 3600)
 
+@app.route("/gauntlet")
+def gauntlet_page():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "gauntlet.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+@app.route("/api/gauntlet-stats")
+def gauntlet_stats():
+    data = _gauntlet.get_stats()
+    resp = jsonify(data)
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+_gauntlet_queue_lock = threading.Lock()
+_gauntlet_queued     = False
+
+@app.route("/api/gauntlet-run", methods=["POST"])
+def gauntlet_run():
+    from flask import request as freq
+    global _gauntlet_queued
+
+    state = _gauntlet.get_run_state()
+    if state["running"]:
+        return jsonify({"queued": False, "reason": "A run is already in progress"}), 409
+
+    with _gauntlet_queue_lock:
+        if _gauntlet_queued:
+            return jsonify({"queued": False, "reason": "A run is already queued"}), 409
+        _gauntlet_queued = True
+
+    sector = (freq.get_json(silent=True) or {}).get("sector", "surge")
+    if sector not in _gauntlet.SECTORS:
+        sector = "surge"
+
+    def _do_run():
+        global _gauntlet_queued
+        try:
+            import asyncio
+            asyncio.run(_gauntlet.run_battle(sector))
+        except Exception as e:
+            print(f"gauntlet_run thread: {e}")
+        finally:
+            with _gauntlet_queue_lock:
+                _gauntlet_queued = False
+
+    threading.Thread(target=_do_run, daemon=True).start()
+    return jsonify({"queued": True, "sector": sector})
+
 @app.route("/moody/woke")
 def moody_woke():
     woke_time = record_woke()
@@ -1820,6 +1874,25 @@ def run_moody():
         print("Sleeping 60 minutes before next Moody check...")
         time.sleep(60 * 60)
 
+def run_gauntlet_auto():
+    """Auto-play gauntlet battles on a configurable interval (default 30 min)."""
+    import asyncio
+    interval = int(os.environ.get("GAUNTLET_INTERVAL_MINS", "30")) * 60
+    # Stagger startup so it doesn't clash with litany loop
+    time.sleep(60)
+    while True:
+        if os.environ.get("GAUNTLET_AUTO", "").lower() in ("1", "true", "yes"):
+            try:
+                sectors = list(_gauntlet.SECTORS.keys())
+                # Rotate through sectors each run
+                run_count = _gauntlet.get_stats().get("total", 0)
+                sector = sectors[run_count % len(sectors)]
+                print(f"[gauntlet auto] starting {sector} run...")
+                asyncio.run(_gauntlet.run_battle(sector))
+            except Exception as e:
+                print(f"[gauntlet auto] error: {e}")
+        time.sleep(interval)
+
 litany_thread = threading.Thread(target=run_litany, daemon=True)
 litany_thread.start()
 
@@ -1828,6 +1901,9 @@ moody_thread.start()
 
 identity_thread = threading.Thread(target=run_identity_refresh, daemon=True)
 identity_thread.start()
+
+gauntlet_thread = threading.Thread(target=run_gauntlet_auto, daemon=True)
+gauntlet_thread.start()
 
 # Run warmup in background so Flask starts immediately (avoids health-check timeout)
 threading.Thread(target=_warmup_profile_cache, daemon=True).start()

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gauntlet Command — Mantis Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:         #050907;
+    --bg1:        #0a100d;
+    --bg2:        #0f1812;
+    --border:     rgba(255,255,255,.06);
+    --border-em:  rgba(35,224,122,.18);
+    --green:      #23e07a;
+    --green-dim:  #10a050;
+    --green-glow: rgba(35,224,122,.12);
+    --text:       #e2e8e4;
+    --muted:      #6b7b72;
+    --muted2:     #3d4f43;
+    --gold:       #D1AB58;
+    --blue:       #2f6df0;
+    --red:        #e5484d;
+    --mono:       'JetBrains Mono', monospace;
+    --sans:       'Inter', sans-serif;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  /* ── NAV ───────────────────────────────────────────────────── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(5,9,7,.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex; align-items: center; gap: 8px; height: 52px;
+  }
+  .nav-brand {
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    color: var(--green); letter-spacing: .04em;
+    padding-right: 16px; border-right: 1px solid var(--border);
+    margin-right: 8px; white-space: nowrap;
+  }
+  .nav-link {
+    font-size: 12px; font-weight: 500; color: var(--muted);
+    padding: 6px 12px; border-radius: 6px; transition: all .15s;
+    letter-spacing: .02em;
+  }
+  .nav-link:hover { color: var(--text); background: rgba(255,255,255,.04); }
+  .nav-link.active { color: var(--green); background: var(--green-glow); }
+  .nav-spacer { flex: 1; }
+  .nav-wallet {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    background: rgba(255,255,255,.03); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 6px;
+  }
+
+  /* ── LAYOUT ─────────────────────────────────────────────────── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; }
+
+  /* ── PAGE HEADER ─────────────────────────────────────────────── */
+  .page-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 24px; margin-bottom: 28px; flex-wrap: wrap;
+  }
+  .page-title-block {}
+  .page-eyebrow {
+    font-family: var(--mono); font-size: 10px; font-weight: 500;
+    color: var(--green-dim); letter-spacing: .12em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .page-title {
+    font-size: 26px; font-weight: 700; letter-spacing: -.02em;
+    color: var(--text); line-height: 1.1;
+  }
+  .page-subtitle {
+    font-size: 13px; color: var(--muted); margin-top: 6px;
+    font-family: var(--mono);
+  }
+  .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  /* ── BUTTONS ─────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase;
+    padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer;
+    transition: all .15s; white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--green); color: #050907;
+    box-shadow: 0 0 16px rgba(35,224,122,.25);
+  }
+  .btn-primary:hover { box-shadow: 0 0 24px rgba(35,224,122,.4); filter: brightness(1.05); }
+  .btn-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+  .btn-ghost {
+    background: rgba(255,255,255,.04); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,.07); color: var(--text); }
+  .btn-ghost.active-sector {
+    border-color: var(--green-dim); color: var(--green);
+    background: var(--green-glow);
+  }
+
+  /* ── STATUS STRIP ────────────────────────────────────────────── */
+  .status-strip {
+    display: flex; gap: 8px; align-items: center;
+    background: rgba(35,224,122,.06); border: 1px solid var(--border-em);
+    border-radius: 10px; padding: 10px 16px; margin-bottom: 28px;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted2); flex-shrink: 0;
+  }
+  .status-dot.running { background: var(--green); animation: pulse 1.4s infinite; }
+  .status-dot.error   { background: var(--red); }
+  @keyframes pulse {
+    0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(35,224,122,.4); }
+    50%      { opacity: .85; box-shadow: 0 0 0 5px rgba(35,224,122,0); }
+  }
+  .status-label { color: var(--text); font-weight: 500; }
+  .status-detail { color: var(--muted); }
+  .status-strip-spacer { flex: 1; }
+  .status-ts { color: var(--muted2); font-size: 11px; }
+
+  /* ── METRIC CARDS ────────────────────────────────────────────── */
+  .metrics {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 14px; margin-bottom: 28px;
+  }
+  @media (max-width: 768px) { .metrics { grid-template-columns: repeat(2,1fr); } }
+  .metric-card {
+    background: rgba(255,255,255,.025);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px;
+    position: relative; overflow: hidden;
+    transition: border-color .2s;
+  }
+  .metric-card:hover { border-color: rgba(255,255,255,.1); }
+  .metric-card.accent { border-color: var(--border-em); background: var(--green-glow); }
+  .metric-label {
+    font-size: 10px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+  }
+  .metric-value {
+    font-family: var(--mono); font-size: 32px; font-weight: 600;
+    color: var(--green); line-height: 1; letter-spacing: -.02em;
+  }
+  .metric-card.accent .metric-value { text-shadow: 0 0 20px rgba(35,224,122,.4); }
+  .metric-sub {
+    font-size: 11px; color: var(--muted); margin-top: 5px;
+  }
+
+  /* ── SECTOR PANELS ───────────────────────────────────────────── */
+  .sectors { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 28px; }
+  @media (max-width: 900px) { .sectors { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .sectors { grid-template-columns: 1fr; } }
+
+  .sector-card {
+    background: rgba(255,255,255,.025); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px; transition: border-color .2s;
+  }
+  .sector-card:hover { border-color: rgba(255,255,255,.1); }
+  .sector-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .sector-icon {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: var(--green-glow); border: 1px solid var(--border-em);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .sector-name { font-size: 13px; font-weight: 600; }
+  .sector-stages { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .sector-stat-row { display: flex; justify-content: space-between; margin-top: 8px; }
+  .sector-stat-label { font-size: 11px; color: var(--muted); }
+  .sector-stat-val { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+  .sector-win-bar {
+    height: 3px; background: var(--bg2); border-radius: 2px; margin-top: 12px; overflow: hidden;
+  }
+  .sector-win-fill {
+    height: 100%; background: var(--green); border-radius: 2px; transition: width .5s ease;
+  }
+  .btn-run-sector {
+    margin-top: 14px; width: 100%;
+    background: rgba(35,224,122,.07); border: 1px solid var(--border-em);
+    color: var(--green); font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 8px 0; border-radius: 7px; cursor: pointer; transition: all .15s;
+  }
+  .btn-run-sector:hover { background: rgba(35,224,122,.14); }
+  .btn-run-sector:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── RUN HISTORY ─────────────────────────────────────────────── */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-size: 12px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .run-count-badge {
+    font-family: var(--mono); font-size: 11px;
+    background: rgba(255,255,255,.04); border: 1px solid var(--border);
+    color: var(--muted); padding: 2px 8px; border-radius: 20px;
+  }
+
+  .run-table {
+    background: rgba(255,255,255,.02); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+  }
+  .run-table-header {
+    display: grid;
+    grid-template-columns: 140px 100px 120px 80px 80px 80px 1fr;
+    padding: 10px 16px;
+    font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted2); border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,.015);
+  }
+  .run-row {
+    display: grid;
+    grid-template-columns: 140px 100px 120px 80px 80px 80px 1fr;
+    padding: 11px 16px; border-bottom: 1px solid var(--border);
+    transition: background .1s; align-items: center;
+    cursor: default;
+  }
+  .run-row:last-child { border-bottom: none; }
+  .run-row:hover { background: rgba(255,255,255,.02); }
+  .run-ts { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .run-sector { font-size: 12px; font-weight: 500; }
+  .run-hollow { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .run-result {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 5px;
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .run-result.win     { color: var(--green); background: var(--green-glow); }
+  .run-result.defeat  { color: var(--red);   background: rgba(229,72,77,.1); }
+  .run-result.error   { color: var(--muted); background: rgba(255,255,255,.04); }
+  .run-stages { font-family: var(--mono); font-size: 12px; }
+  .run-pearl  { font-family: var(--mono); font-size: 12px; color: var(--green); font-weight: 500; }
+  .run-log-toggle {
+    font-size: 11px; color: var(--muted); cursor: pointer;
+    padding: 2px 8px; border-radius: 5px; background: rgba(255,255,255,.03);
+    font-family: var(--mono); border: 1px solid var(--border);
+    transition: all .12s;
+  }
+  .run-log-toggle:hover { color: var(--text); background: rgba(255,255,255,.06); }
+  .run-log-expand {
+    display: none; padding: 10px 16px 14px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,0,0,.2);
+  }
+  .run-log-expand.open { display: block; }
+  .run-log-text {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    white-space: pre-wrap; line-height: 1.6;
+  }
+
+  .empty-state {
+    padding: 48px 24px; text-align: center;
+    color: var(--muted); font-family: var(--mono); font-size: 12px;
+  }
+
+  /* ── LIVE INDICATOR ──────────────────────────────────────────── */
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--green); padding: 3px 8px; border-radius: 5px;
+    background: var(--green-glow); border: 1px solid var(--border-em);
+  }
+  .live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); animation: pulse 1.2s infinite; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--muted2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="nav-brand">MANTIS PRO</span>
+  <a href="/"          class="nav-link">Home</a>
+  <a href="/litany"    class="nav-link">Litany</a>
+  <a href="/activity"  class="nav-link">Activity</a>
+  <a href="/gauntlet"  class="nav-link active">Gauntlet</a>
+  <div class="nav-spacer"></div>
+  <span class="nav-wallet" id="navWallet">–</span>
+</nav>
+
+<div class="container">
+
+  <!-- Page header -->
+  <div class="page-header">
+    <div class="page-title-block">
+      <div class="page-eyebrow">Autonomous Agent · Litany Demo</div>
+      <div class="page-title">Gauntlet Command</div>
+      <div class="page-subtitle" id="addrLine">–</div>
+    </div>
+    <div class="header-actions">
+      <span class="live-badge" id="liveIndicator" style="display:none">
+        <span class="live-dot"></span>RUNNING
+      </span>
+      <button class="btn btn-ghost" onclick="refreshStats()">↺ Refresh</button>
+      <button class="btn btn-primary" id="btnRun" onclick="triggerRun(activeSector)">▶ Run Battle</button>
+    </div>
+  </div>
+
+  <!-- Status strip -->
+  <div class="status-strip" id="statusStrip">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-label" id="statusLabel">Idle</span>
+    <span class="status-detail" id="statusDetail"></span>
+    <div class="status-strip-spacer"></div>
+    <span class="status-ts" id="statusTs"></span>
+  </div>
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric-card accent">
+      <div class="metric-label">PEARL Total</div>
+      <div class="metric-value" id="metPearl">–</div>
+      <div class="metric-sub">All-time earned</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Win Rate</div>
+      <div class="metric-value" id="metWinRate">–</div>
+      <div class="metric-sub" id="metWinDetail">–</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Total Runs</div>
+      <div class="metric-value" id="metTotal">–</div>
+      <div class="metric-sub" id="metToday">–</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Last Result</div>
+      <div class="metric-value" id="metLast" style="font-size:20px">–</div>
+      <div class="metric-sub" id="metLastSub">–</div>
+    </div>
+  </div>
+
+  <!-- Sector selector + panels -->
+  <div class="section-header" style="margin-bottom:14px">
+    <span class="section-title">Sectors</span>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost active-sector" id="btnSurge" onclick="setSector('surge')">Surge</button>
+      <button class="btn btn-ghost" id="btnRigid" onclick="setSector('rigid')">Rigid</button>
+      <button class="btn btn-ghost" id="btnDrift" onclick="setSector('drift')">Drift</button>
+    </div>
+  </div>
+
+  <div class="sectors" id="sectorGrid">
+    <!-- filled by JS -->
+  </div>
+
+  <!-- Run history -->
+  <div class="section-header">
+    <span class="section-title">Run History</span>
+    <span class="run-count-badge" id="runCountBadge">0 runs</span>
+  </div>
+
+  <div class="run-table" id="runTable">
+    <div class="run-table-header">
+      <span>Time</span>
+      <span>Sector</span>
+      <span>Hollow</span>
+      <span>Result</span>
+      <span>Stages</span>
+      <span>PEARL</span>
+      <span>Log</span>
+    </div>
+    <div id="runBody">
+      <div class="empty-state">No runs yet. Click ▶ Run Battle to start.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const SECTOR_META = {
+    surge: { label: 'Surge Sector', icon: '⚡', stages: 3, hollows: ['Monolith', 'Shellvoid'] },
+    rigid: { label: 'Rigid Sector', icon: '🪨', stages: 3, hollows: ['Echoshade', 'Primordia'] },
+    drift: { label: 'The Drift',    icon: '🌊', stages: 5, hollows: ['Monolith', 'Shellvoid', 'Primordia'] },
+  };
+
+  let activeSector = 'surge';
+  let stats        = null;
+  let pollTimer    = null;
+
+  // ── wallet display ────────────────────────────────────────────────────────
+  const addr = (new URLSearchParams(location.search).get('addr') || '').toLowerCase();
+  const gauntletAddr = ''; // will be filled from stats
+  function fmtAddr(a) {
+    if (!a) return '–';
+    return a.slice(0,6) + '…' + a.slice(-4);
+  }
+
+  // ── sector selector ───────────────────────────────────────────────────────
+  function setSector(key) {
+    activeSector = key;
+    ['surge','rigid','drift'].forEach(k => {
+      document.getElementById('btn' + k.charAt(0).toUpperCase() + k.slice(1))
+        .classList.toggle('active-sector', k === key);
+    });
+  }
+
+  // ── render sector panels ──────────────────────────────────────────────────
+  function renderSectors(bySector) {
+    const grid = document.getElementById('sectorGrid');
+    grid.innerHTML = '';
+    Object.entries(SECTOR_META).forEach(([key, meta]) => {
+      const s      = bySector[key] || { total: 0, wins: 0, pearl: 0 };
+      const wr     = s.total ? Math.round(s.wins / s.total * 100) : 0;
+      const div    = document.createElement('div');
+      div.className = 'sector-card';
+      div.innerHTML = `
+        <div class="sector-header">
+          <div class="sector-icon">${meta.icon}</div>
+          <div>
+            <div class="sector-name">${meta.label}</div>
+            <div class="sector-stages">${meta.stages} stages · ${meta.hollows.join(', ')}</div>
+          </div>
+        </div>
+        <div class="sector-stat-row">
+          <span class="sector-stat-label">Runs</span>
+          <span class="sector-stat-val">${s.total}</span>
+        </div>
+        <div class="sector-stat-row">
+          <span class="sector-stat-label">Wins</span>
+          <span class="sector-stat-val">${s.wins} <span style="color:var(--muted);font-size:11px">(${wr}%)</span></span>
+        </div>
+        <div class="sector-stat-row">
+          <span class="sector-stat-label">PEARL</span>
+          <span class="sector-stat-val" style="color:var(--green)">${s.pearl}</span>
+        </div>
+        <div class="sector-win-bar">
+          <div class="sector-win-fill" style="width:${wr}%"></div>
+        </div>
+        <button class="btn-run-sector" id="runBtn-${key}" onclick="triggerRun('${key}')">
+          ▶ Run ${meta.label}
+        </button>
+      `;
+      grid.appendChild(div);
+    });
+  }
+
+  // ── render run history ────────────────────────────────────────────────────
+  function renderRuns(runs) {
+    const body = document.getElementById('runBody');
+    document.getElementById('runCountBadge').textContent = `${runs.length} runs`;
+
+    if (!runs.length) {
+      body.innerHTML = '<div class="empty-state">No runs yet. Click ▶ Run Battle to start.</div>';
+      return;
+    }
+
+    body.innerHTML = runs.map(r => {
+      const d     = new Date(r.ts * 1000);
+      const ts    = d.toLocaleString('en-US', { month:'short', day:'numeric',
+                      hour:'2-digit', minute:'2-digit', hour12: false });
+      const res   = r.result || 'error';
+      const sBadge = SECTOR_META[r.sector] || {};
+      const logId = `log-${r.id}`;
+      return `
+        <div>
+          <div class="run-row">
+            <span class="run-ts">${ts}</span>
+            <span class="run-sector">${sBadge.icon || ''} ${r.sector || '–'}</span>
+            <span class="run-hollow">${r.hollow || '–'}</span>
+            <span class="run-result ${res}">${res}</span>
+            <span class="run-stages" style="color:var(--muted)">${r.stages_won}/${r.stages_total}</span>
+            <span class="run-pearl">${r.pearl || 0}</span>
+            <span class="run-log-toggle" onclick="toggleLog('${logId}')">log</span>
+          </div>
+          <div class="run-log-expand" id="${logId}">
+            <pre class="run-log-text">${escHtml(r.log || '(no log)')}</pre>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function toggleLog(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('open');
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── update status strip ───────────────────────────────────────────────────
+  function updateStatus(running) {
+    const dot    = document.getElementById('statusDot');
+    const label  = document.getElementById('statusLabel');
+    const detail = document.getElementById('statusDetail');
+    const live   = document.getElementById('liveIndicator');
+    const strip  = document.getElementById('statusStrip');
+    const ts     = document.getElementById('statusTs');
+
+    if (running && running.running) {
+      dot.className   = 'status-dot running';
+      label.textContent  = 'Battle in progress';
+      detail.textContent = `${running.sector || ''} · ${running.hollow || ''} · Stage ${running.stage || '?'}`;
+      if (running.last_log) detail.textContent = running.last_log;
+      live.style.display = 'inline-flex';
+      strip.style.borderColor = 'rgba(35,224,122,.3)';
+      if (running.started)
+        ts.textContent = 'Started ' + new Date(running.started * 1000).toLocaleTimeString();
+    } else {
+      dot.className      = 'status-dot';
+      label.textContent  = 'Idle';
+      detail.textContent = '';
+      live.style.display = 'none';
+      strip.style.borderColor = '';
+      ts.textContent = stats && stats.runs && stats.runs[0]
+        ? 'Last run ' + new Date(stats.runs[0].ts * 1000).toLocaleTimeString()
+        : '';
+    }
+  }
+
+  // ── update metrics ────────────────────────────────────────────────────────
+  function updateMetrics(s) {
+    document.getElementById('metPearl').textContent   = s.pearl_total || 0;
+    document.getElementById('metWinRate').textContent = (s.win_rate || 0) + '%';
+    document.getElementById('metWinDetail').textContent = `${s.wins || 0} wins of ${s.total || 0} runs`;
+    document.getElementById('metTotal').textContent   = s.total || 0;
+    document.getElementById('metToday').textContent   = `${s.today || 0} today`;
+
+    const last = s.runs && s.runs[0];
+    if (last) {
+      const map = { win: '✓ WIN', defeat: '✗ DEFEAT', error: '⚠ ERROR' };
+      const col = { win: 'var(--green)', defeat: 'var(--red)', error: 'var(--muted)' };
+      document.getElementById('metLast').textContent  = map[last.result] || last.result;
+      document.getElementById('metLast').style.color  = col[last.result] || '';
+      document.getElementById('metLastSub').textContent = last.sector + ' · ' + (last.pearl || 0) + ' PEARL';
+    }
+  }
+
+  // ── fetch stats & render ──────────────────────────────────────────────────
+  async function refreshStats() {
+    try {
+      const res = await fetch('/api/gauntlet-stats');
+      stats = await res.json();
+      updateMetrics(stats);
+      renderSectors(stats.by_sector || {});
+      renderRuns(stats.runs || []);
+      updateStatus(stats.running);
+      schedulePoll(stats.running && stats.running.running);
+    } catch (e) {
+      console.error('gauntlet stats:', e);
+    }
+  }
+
+  function schedulePoll(isRunning) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(refreshStats, isRunning ? 4000 : 30000);
+  }
+
+  // ── trigger a battle run ──────────────────────────────────────────────────
+  async function triggerRun(sector) {
+    const btn = document.getElementById('btnRun');
+    btn.disabled = true;
+    btn.textContent = '⏳ Queuing…';
+    disableRunBtns(true);
+
+    try {
+      const res  = await fetch('/api/gauntlet-run', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ sector }),
+      });
+      const data = await res.json();
+
+      if (data.queued) {
+        btn.textContent = '▶ Run Battle';
+        btn.disabled    = false;
+        refreshStats();
+      } else {
+        btn.textContent = '▶ Run Battle';
+        btn.disabled    = false;
+        disableRunBtns(false);
+        alert(data.reason || 'Could not start run');
+      }
+    } catch (e) {
+      btn.textContent = '▶ Run Battle';
+      btn.disabled    = false;
+      disableRunBtns(false);
+    }
+  }
+
+  function disableRunBtns(disabled) {
+    ['surge','rigid','drift'].forEach(k => {
+      const b = document.getElementById('runBtn-' + k);
+      if (b) b.disabled = disabled;
+    });
+  }
+
+  // ── addr display ──────────────────────────────────────────────────────────
+  function initAddrDisplay() {
+    const gAddr = (window.GAUNTLET_ADDR || '').toLowerCase();
+    if (gAddr) {
+      document.getElementById('navWallet').textContent = fmtAddr(gAddr);
+      document.getElementById('addrLine').textContent  = gAddr;
+    } else {
+      document.getElementById('addrLine').textContent = 'Configure GAUNTLET_ADDRESS in Railway env vars';
+    }
+  }
+
+  // ── init ──────────────────────────────────────────────────────────────────
+  initAddrDisplay();
+  renderSectors({});   // render empty shells first
+  refreshStats();
+</script>
+</body>
+</html>
