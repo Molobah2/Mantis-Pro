@@ -444,7 +444,7 @@ async def _click_kw(page, keyword: str) -> bool:
             txt = (await el.inner_text()).strip().upper()
             if keyword.upper() in txt:
                 await el.click()
-                await page.wait_for_timeout(2000)
+                await asyncio.sleep(1)
                 return True
     except Exception as e:
         print(f"  [gauntlet] click_kw '{keyword}': {e}")
@@ -720,8 +720,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 # /demo/dashboard. We then wait there for full render (~20s).
                 log("Navigating to demo landing...")
                 await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
-                log("Waiting 12s for hydration + auto-redirect...")
-                await asyncio.sleep(12)
+                log("Waiting 8s for hydration + auto-redirect...")
+                await asyncio.sleep(8)
 
                 if _crashed.is_set():
                     raise RuntimeError("Page crashed during hydration")
@@ -734,8 +734,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 if "dashboard" not in page.url:
                     log("No auto-redirect — navigating to dashboard directly...")
                     await page.goto(DASHBOARD_URL, wait_until="domcontentloaded", timeout=30000)
-                    log("Waiting 20s for React hydration on dashboard...")
-                    await asyncio.sleep(20)
+                    log("Waiting 12s for React hydration on dashboard...")
+                    await asyncio.sleep(12)
 
                 if _crashed.is_set():
                     raise RuntimeError("Page crashed on dashboard")
@@ -772,8 +772,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 log(f"Navigating to {sector['name']}...")
                 await page.goto(sector["url"], wait_until="domcontentloaded", timeout=30000)
                 log(f"Prep URL: {page.url}")
-                # Wait for React to hydrate — dashboard stub allows real React mount now
-                await asyncio.sleep(20)
+                # Wait for React to hydrate on prep page
+                await asyncio.sleep(12)
 
                 if _crashed.is_set():
                     raise RuntimeError("Page crashed on prep page")
@@ -903,7 +903,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     txt = await _body_text(page)
                     u   = txt.upper()
                     _set_run_state(stage=tick)
-                    log(f"Tick {tick}: url={url.split('/')[-1]!r} snippet={txt[:80].strip()!r}")
+                    log(f"Tick {tick}: url={url.split('/')[-1]!r} txt={txt[80:400].strip()!r}")
 
                     if "CRAWL COMPLETE" in u or ("results" in url):
                         log("CRAWL COMPLETE / results page")
@@ -972,9 +972,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     pass
 
     try:
-        await asyncio.wait_for(_run(), timeout=150.0)
+        await asyncio.wait_for(_run(), timeout=270.0)
     except asyncio.TimeoutError:
-        log("Battle timed out after 90s — browser likely hung")
+        log("Battle timed out after 270s — browser likely hung")
         result = "error"
     except Exception as e:
         log(f"Runner error: {e}")
