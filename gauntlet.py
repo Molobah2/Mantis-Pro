@@ -330,10 +330,13 @@ def _provider_js(address: str) -> str:
 
 # ── Battle helpers ────────────────────────────────────────────────────────────
 
-async def _body_text(page) -> str:
-    """Read body text via JS eval — no locator timeout, works mid-render."""
+async def _body_text(page, timeout: float = 5.0) -> str:
+    """Read body text via JS eval with a hard timeout so a dead browser can't hang."""
     try:
-        return await page.evaluate("document.body ? document.body.innerText : ''")
+        return await asyncio.wait_for(
+            page.evaluate("document.body ? document.body.innerText : ''"),
+            timeout=timeout,
+        )
     except Exception:
         return ""
 
@@ -504,6 +507,26 @@ async def run_battle(sector_key: str = "surge") -> dict:
             page.on("request", lambda req: intercepted.append(req.url)
                     if "/api/" in req.url else None)
 
+            # Crash detection: raise immediately instead of hanging on next eval
+            _crashed = asyncio.Event()
+            page.on("crash", lambda: _crashed.set())
+
+            async def _safe_eval(js: str, t: float = 5.0) -> str:
+                eval_task  = asyncio.ensure_future(page.evaluate(js))
+                crash_task = asyncio.ensure_future(_crashed.wait())
+                done, pending = await asyncio.wait(
+                    [eval_task, crash_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                    timeout=t,
+                )
+                for task in pending:
+                    task.cancel()
+                if _crashed.is_set():
+                    raise RuntimeError("Page crashed")
+                if eval_task in done:
+                    return eval_task.result()
+                raise RuntimeError(f"eval timed out after {t}s")
+
             try:
                 # ── auth phase ──────────────────────────────────────────────
                 log("Navigating to demo landing...")
@@ -511,6 +534,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 log("goto complete — sleeping 6s for SPA boot...")
                 await asyncio.sleep(6)   # asyncio.sleep, not page.wait_for_timeout
                 log("Sleep done — reading page...")
+
+                if _crashed.is_set():
+                    raise RuntimeError("Page crashed during SPA boot")
 
                 content = await _body_text(page)
                 log(f"Page snippet: {content[:300].strip()!r}")
