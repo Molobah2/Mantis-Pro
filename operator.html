@@ -470,6 +470,49 @@ a{color:inherit;text-decoration:none}
 .sk-pct{width:100px;height:9px;border-radius:4px;display:block;margin:0 auto}
 .sk-pb{height:44px;border-radius:4px;margin:6px 0 4px}
 .sk-card{width:58px;height:58px;border-radius:7px;display:block}
+
+/* ══════════════════════════════════════════
+   CONTRACT ACTIVITY EXPLORER
+══════════════════════════════════════════ */
+.ca-wrap{border-top:1px solid var(--line);padding-bottom:32px}
+.ca-hd{display:flex;align-items:center;justify-content:space-between;padding:20px 28px 14px}
+.ca-tabs{display:flex;gap:3px;padding:0 28px 16px}
+.ca-tab{padding:7px 18px;font-size:11.5px;font-weight:700;border-radius:8px;border:1px solid var(--line);background:none;color:var(--muted);cursor:pointer;transition:.13s;font-family:inherit}
+.ca-tab.on{background:rgba(35,224,122,.07);border-color:rgba(35,224,122,.3);color:var(--green)}
+.ca-tab:hover:not(.on){background:var(--panel);color:var(--ink)}
+.ca-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 28px 14px}
+@media(max-width:900px){.ca-stats-grid{grid-template-columns:repeat(2,1fr)}}
+.ca-stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;transition:.13s}
+.ca-stat:hover{border-color:rgba(35,224,122,.2);background:var(--panel2)}
+.ca-stat-k{font-size:7.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.ca-stat-v{font-size:22px;font-weight:900;font-family:'JetBrains Mono',monospace;letter-spacing:-1px;color:var(--ink);line-height:1}
+.ca-stat-sub{font-size:9px;color:var(--faint);margin-top:3px;font-family:'JetBrains Mono',monospace}
+.ca-insights{display:flex;gap:8px;flex-wrap:wrap;padding:0 28px 14px}
+.ca-insight{font-size:11px;color:var(--muted);line-height:1.55;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--line);border-left:2px solid rgba(35,224,122,.35);flex:1;min-width:180px}
+.ca-chart-wrap{margin:0 28px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;position:relative;height:96px}
+.ca-chart-label{font-size:7.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+#ca-canvas{display:block;width:100%;height:68px}
+.ca-filters{display:flex;gap:6px;padding:0 28px 12px;flex-wrap:wrap}
+.ca-chip{padding:4px 12px;border-radius:7px;border:1px solid var(--line);font-size:10.5px;font-weight:700;color:var(--muted);background:none;cursor:pointer;transition:.12s;font-family:inherit}
+.ca-chip.on{background:rgba(35,224,122,.07);border-color:rgba(35,224,122,.3);color:var(--green)}
+.ca-chip:hover:not(.on){background:var(--panel);color:var(--ink)}
+.ca-list{padding:0 28px}
+.ca-row{display:flex;align-items:center;gap:12px;padding:9px 13px;margin-bottom:4px;border-radius:10px;background:var(--panel);border:1px solid var(--line);cursor:pointer;transition:transform .12s,border-color .12s,background .12s}
+.ca-row:hover{transform:translateY(-1px);border-color:rgba(35,224,122,.22);background:var(--panel2);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.ca-icon{width:32px;height:32px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;font-size:14px;border:1px solid var(--line)}
+.ca-icon.mint{background:rgba(35,224,122,.1)}.ca-icon.received{background:rgba(47,109,240,.1)}.ca-icon.sent{background:rgba(209,171,88,.1)}.ca-icon.burned{background:rgba(229,72,77,.1)}
+.ca-body{flex:1;min-width:0}
+.ca-label{font-size:12px;font-weight:700}
+.ca-meta{font-size:9.5px;color:var(--faint);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.ca-time{font-size:9px;color:var(--faint);font-family:'JetBrains Mono',monospace;flex-shrink:0;white-space:nowrap}
+.ca-tx{font-size:8.5px;font-family:'JetBrains Mono',monospace;color:var(--faint);padding:2px 7px;border-radius:5px;border:1px solid var(--line);flex-shrink:0;transition:.12s;white-space:nowrap}
+.ca-tx:hover{color:var(--green);border-color:rgba(35,224,122,.3)}
+.ca-badge{font-size:7px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle}
+.ca-badge-card{background:rgba(35,224,122,.1);color:var(--green)}
+.ca-badge-hollow{background:rgba(209,171,88,.1);color:var(--gold)}
+.ca-empty{text-align:center;color:var(--faint);font-size:11px;font-family:'JetBrains Mono',monospace;padding:28px}
+.ca-more-btn{display:block;width:calc(100% - 56px);margin:10px 28px 0;padding:10px;text-align:center;border-radius:9px;border:1px dashed var(--line);background:none;color:var(--faint);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:.13s}
+.ca-more-btn:hover{border-color:rgba(35,224,122,.3);color:var(--green);background:rgba(35,224,122,.03)}
 </style>
 </head>
 <body>
@@ -487,6 +530,7 @@ a{color:inherit;text-decoration:none}
     <a class="sb-a" href="#journey"><span class="i">⚡</span> Journey</a>
     <a class="sb-a" href="#cards"><span class="i">◆</span> Collections</a>
     <a class="sb-a" href="#activity"><span class="i">≋</span> Activity</a>
+    <a class="sb-a" href="#ca-section"><span class="i">⬡</span> Contract Activity</a>
     <div class="sb-g">Platform</div>
     <a class="sb-a" href="/activity"><span class="i">⚡</span> Activity Explorer</a>
     <a class="sb-a" href="/litany"><span class="i">▤</span> Dashboard</a>
@@ -645,6 +689,43 @@ a{color:inherit;text-decoration:none}
         <div id="cmplist" style="margin-top:12px"><div class="fst">Loading…</div></div>
         <a class="vmor" href="/litany#mesh">View leaderboard →</a>
       </div>
+    </div>
+
+    <!-- CONTRACT ACTIVITY EXPLORER -->
+    <div class="ca-wrap" id="ca-section">
+      <div class="ca-hd">
+        <div class="panel-title"><div class="panel-title-dot"></div>CONTRACT ACTIVITY EXPLORER</div>
+        <div class="panel-badge">ONCHAIN · LIVE</div>
+      </div>
+      <div class="ca-tabs">
+        <button class="ca-tab on" data-c="all"     onclick="switchCATab('all')">All Activity</button>
+        <button class="ca-tab"    data-c="cards"   onclick="switchCATab('cards')">Cards</button>
+        <button class="ca-tab"    data-c="hollows" onclick="switchCATab('hollows')">Hollows</button>
+      </div>
+      <div class="ca-stats-grid" id="ca-stats">
+        <div class="ca-stat"><div class="ca-stat-k">Total Transactions</div><div class="ca-stat-v">—</div></div>
+        <div class="ca-stat"><div class="ca-stat-k">Minted</div><div class="ca-stat-v">—</div></div>
+        <div class="ca-stat"><div class="ca-stat-k">Received</div><div class="ca-stat-v">—</div></div>
+        <div class="ca-stat"><div class="ca-stat-k">Sent</div><div class="ca-stat-v">—</div></div>
+        <div class="ca-stat"><div class="ca-stat-k">Burned</div><div class="ca-stat-v">—</div></div>
+        <div class="ca-stat"><div class="ca-stat-k">First Interaction</div><div class="ca-stat-v" style="font-size:13px">—</div></div>
+        <div class="ca-stat"><div class="ca-stat-k">Last Active</div><div class="ca-stat-v" style="font-size:13px">—</div></div>
+        <div class="ca-stat"><div class="ca-stat-k">Activity Score</div><div class="ca-stat-v" style="font-size:13px">—</div></div>
+      </div>
+      <div class="ca-insights" id="ca-insights"></div>
+      <div class="ca-chart-wrap">
+        <div class="ca-chart-label">30-DAY ACTIVITY</div>
+        <canvas id="ca-canvas"></canvas>
+      </div>
+      <div class="ca-filters">
+        <button class="ca-chip on" data-f="all"      onclick="switchCAFilter('all')">All</button>
+        <button class="ca-chip"    data-f="Minted"   onclick="switchCAFilter('Minted')">Mints</button>
+        <button class="ca-chip"    data-f="Received" onclick="switchCAFilter('Received')">Received</button>
+        <button class="ca-chip"    data-f="Sent"     onclick="switchCAFilter('Sent')">Sent</button>
+        <button class="ca-chip"    data-f="Burned"   onclick="switchCAFilter('Burned')">Burned</button>
+      </div>
+      <div class="ca-list" id="ca-list"><div class="ca-empty">Loading contract activity…</div></div>
+      <button class="ca-more-btn" id="ca-more" style="display:none" onclick="loadMoreCA()">Load more →</button>
     </div>
 
   </div>
@@ -1330,11 +1411,118 @@ let _profAddr="";
       }else{document.getElementById("cmplist").innerHTML='<div class="fst">Not in leaderboard.</div>';}
     })(),
   ]);
+  // Load contract activity asynchronously after main profile renders
+  loadCA(addr);
 })();
 
 function copyAddr(){if(_profAddr)navigator.clipboard.writeText(_profAddr).then(()=>{const b=document.querySelector('.cpbtn');if(b){b.textContent="Copied!";setTimeout(()=>{b.textContent="Copy";},1500);}});}
 function shareProfile(){if(navigator.share)navigator.share({title:'Operator Profile',url:location.href});else{navigator.clipboard.writeText(location.href);alert("Link copied!");}}
 function toggleBd(){document.getElementById("bdpanel").classList.toggle("open");}
+
+// ── CONTRACT ACTIVITY EXPLORER ──────────────────────────────────────────────
+let _caData=null,_caContract='all',_caFilter='all',_caShown=0;
+const CA_PAGE=25;
+const CA_ICONS={Minted:'🪙',Received:'↓',Sent:'↑',Burned:'🔥'};
+const CA_CLASSES={Minted:'mint',Received:'received',Sent:'sent',Burned:'burned'};
+
+async function loadCA(addr){
+  document.getElementById('ca-list').innerHTML='<div class="ca-empty">Scanning contract activity…</div>';
+  document.getElementById('ca-more').style.display='none';
+  try{
+    const d=await fetch('/api/contract-activity?addr='+encodeURIComponent(addr)+'&contract='+_caContract).then(r=>r.json());
+    _caData=d;_caShown=0;
+    renderCAStats();
+    setTimeout(drawCAChart,60);  // after paint
+    renderCATxns();
+  }catch(e){
+    document.getElementById('ca-list').innerHTML='<div class="ca-empty">Contract activity unavailable.</div>';
+  }
+}
+
+function renderCAStats(){
+  if(!_caData)return;
+  const s=_caData.stats||{};
+  const fmt=n=>n!=null?Number(n).toLocaleString():'—';
+  const fmtDate=ts=>ts?new Date(ts*1e3).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'}):'—';
+  const cells=[
+    {k:'Total Transactions',v:fmt(s.total),       sub:'all selected contracts'},
+    {k:'Minted',            v:fmt(s.minted),       sub:'direct mints from 0x0'},
+    {k:'Received',          v:fmt(s.received),     sub:'transfers into this wallet'},
+    {k:'Sent',              v:fmt(s.sent),          sub:'transfers out'},
+    {k:'Burned',            v:fmt(s.burned),        sub:'sent to 0x0'},
+    {k:'First Interaction', v:fmtDate(s.first_ts), sub:'earliest recorded tx'},
+    {k:'Last Active',       v:s.last_ts?rel(s.last_ts):'—', sub:'most recent activity'},
+    {k:'Activity Score',    v:s.activity_score||'—',sub:(s.recent_30d||0)+' txns in 30d'},
+  ];
+  document.getElementById('ca-stats').innerHTML=cells.map(x=>`<div class="ca-stat"><div class="ca-stat-k">${esc(x.k)}</div><div class="ca-stat-v" style="${x.v.length>6?'font-size:14px;':''}">${esc(x.v)}</div><div class="ca-stat-sub">${esc(x.sub)}</div></div>`).join('');
+  const ins=_caData.insights||[];
+  document.getElementById('ca-insights').innerHTML=ins.map(i=>`<div class="ca-insight">${esc(i)}</div>`).join('');
+}
+
+function drawCAChart(){
+  const canvas=document.getElementById('ca-canvas');if(!canvas)return;
+  const W=canvas.parentElement.clientWidth-28,H=68;
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=W*dpr;canvas.height=H*dpr;
+  canvas.style.width=W+'px';canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+  const now=Date.now()/1e3,days=[];
+  for(let i=29;i>=0;i--){days.push(new Date((now-i*86400)*1e3).toISOString().slice(0,10));}
+  const tl=(_caData&&_caData.timeline)||{};
+  const vals=days.map(d=>tl[d]?.total||0);
+  const maxV=Math.max(...vals,1);
+  const pw=W-16,gap=pw/days.length,bw=Math.max(2,gap*0.65);
+  ctx.clearRect(0,0,W,H);
+  // subtle grid
+  ctx.strokeStyle='rgba(255,255,255,.05)';ctx.lineWidth=1;
+  [0.33,0.66,1].forEach(f=>{const y=H-2-f*(H-12);ctx.beginPath();ctx.moveTo(8,y);ctx.lineTo(W-8,y);ctx.stroke();});
+  days.forEach((day,i)=>{
+    const v=vals[i],h=Math.max(2,(v/maxV)*(H-14)),x=8+i*gap+(gap-bw)/2,y=H-2-h;
+    ctx.fillStyle=v>0?'rgba(35,224,122,.55)':'rgba(255,255,255,.04)';
+    if(i===days.length-1&&v>0)ctx.fillStyle='rgba(35,224,122,.9)';
+    ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,bw,h,2);else ctx.rect(x,y,bw,h);ctx.fill();
+  });
+}
+
+function renderCATxns(){
+  if(!_caData)return;
+  const all=(_caData.transactions||[]).filter(t=>_caFilter==='all'||t.action===_caFilter);
+  const slice=all.slice(0,_caShown+CA_PAGE);_caShown=slice.length;
+  if(!slice.length){
+    document.getElementById('ca-list').innerHTML='<div class="ca-empty">No transactions match this filter.</div>';
+    document.getElementById('ca-more').style.display='none';return;
+  }
+  document.getElementById('ca-list').innerHTML=slice.map((t,i)=>{
+    const icon=CA_ICONS[t.action]||'·',cls=CA_CLASSES[t.action]||'';
+    const txShort=t.tx?t.tx.slice(0,10)+'…':'—';
+    const badge=t.contract==='cards'?'<span class="ca-badge ca-badge-card">CARD</span>':'<span class="ca-badge ca-badge-hollow">HOLLOW</span>';
+    const cp=t.counterparty?`<span>${esc(sa(t.counterparty))}</span> · `:'';
+    const txHref=t.tx?`href="https://abscan.org/tx/${esc(t.tx)}" target="_blank" rel="noopener"`:'';
+    return`<div class="ca-row rowin" style="animation-delay:${Math.min(i,.2)*0.03}s" onclick="if('${esc(t.tx)}')window.open('https://abscan.org/tx/${esc(t.tx)}','_blank','noopener')">
+<div class="ca-icon ${cls}">${icon}</div>
+<div class="ca-body"><div class="ca-label">${esc(t.label)}${badge}</div><div class="ca-meta">${cp}Block #${t.block.toLocaleString()}</div></div>
+<span class="ca-time">${t.ts?esc(rel(t.ts)):'—'}</span>
+<span class="ca-tx" onclick="event.stopPropagation();navigator.clipboard.writeText('${esc(t.tx||'')}');this.textContent='Copied!';setTimeout(()=>this.textContent='${esc(txShort)}',1200)" title="Copy tx hash">${esc(txShort)}</span>
+</div>`;
+  }).join('');
+  const hasMore=all.length>_caShown;
+  const moreBtn=document.getElementById('ca-more');
+  moreBtn.style.display=hasMore?'':'none';
+  if(hasMore)moreBtn.textContent=`Load more · ${all.length-_caShown} remaining →`;
+}
+
+function switchCATab(c){
+  _caContract=c;_caFilter='all';_caShown=0;
+  document.querySelectorAll('.ca-tab').forEach(b=>b.classList.toggle('on',b.dataset.c===c));
+  document.querySelectorAll('.ca-chip').forEach(b=>b.classList.toggle('on',b.dataset.f==='all'));
+  if(_profAddr)loadCA(_profAddr);
+}
+function switchCAFilter(f){
+  _caFilter=f;_caShown=0;
+  document.querySelectorAll('.ca-chip').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
+  renderCATxns();
+}
+function loadMoreCA(){_caShown+=CA_PAGE;renderCATxns();}
 
 function closeMod(){document.getElementById("cmodal").classList.remove("open");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeMod();closeSIP();}});

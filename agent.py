@@ -674,6 +674,9 @@ _OS_NFT_TTL     = 300  # 5-minute NFT ownership cache
 _refresh_set      = set()
 _refresh_lock_bg  = threading.Lock()
 
+_ca_cache = {}
+_CA_TTL   = 300   # 5 minutes
+
 # ── SQLite profile persistence ────────────────────────────────────────────────
 def _prof_db_get(wallet):
     """Return (data_dict, age_secs) from SQLite, or (None, inf) on miss."""
@@ -1033,6 +1036,150 @@ def hollow_global():
     resp = jsonify(data)
     resp.headers["Cache-Control"] = "public, max-age=60"
     return resp
+
+@app.route("/api/contract-activity")
+def contract_activity():
+    from flask import request as freq
+    from concurrent.futures import ThreadPoolExecutor
+    from collections import defaultdict
+    from datetime import datetime, timezone
+
+    addr     = (freq.args.get("addr") or "").strip().lower()
+    contract = freq.args.get("contract", "all")
+
+    if not (addr.startswith("0x") and len(addr) == 42):
+        return jsonify({"error": "bad address"}), 400
+
+    ck  = (addr, contract)
+    hit = _ca_cache.get(ck)
+    if hit and time.time() - hit["ts"] < _CA_TTL:
+        return jsonify(hit["data"])
+
+    padded = "0x" + addr[2:].lower().zfill(64)
+
+    def _fetch_contract(cname, caddr):
+        try:
+            latest_hex = _rpc("eth_blockNumber", []) or "0x0"
+            latest_blk = int(latest_hex, 16)
+            now_ts     = time.time()
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                f_in  = ex.submit(_rpc, "eth_getLogs", [{"address": caddr, "topics": [TT, None, padded],  "fromBlock": "0x0", "toBlock": latest_hex}])
+                f_out = ex.submit(_rpc, "eth_getLogs", [{"address": caddr, "topics": [TT, padded, None],  "fromBlock": "0x0", "toBlock": latest_hex}])
+            logs_in  = f_in.result()  or []
+            logs_out = f_out.result() or []
+            seen, txns = set(), []
+            for log in logs_in + logs_out:
+                key = (log.get("transactionHash"), log.get("logIndex", "0"))
+                if key in seen: continue
+                seen.add(key)
+                from_a = "0x" + log["topics"][1][-40:]
+                to_a   = "0x" + log["topics"][2][-40:]
+                tok_id = str(int(log["topics"][3], 16)) if len(log.get("topics", [])) > 3 else "?"
+                blkn   = int(log["blockNumber"], 16)
+                ts     = now_ts - (latest_blk - blkn) * 2
+                is_mint = from_a.lower() == ZERO.lower()
+                is_burn = to_a.lower()   == ZERO.lower()
+                is_in   = to_a.lower()   == addr
+                if is_mint:   action = "Minted"
+                elif is_burn: action = "Burned"
+                elif is_in:   action = "Received"
+                else:         action = "Sent"
+                asset = "Card" if cname == "cards" else "Hollow"
+                cp    = from_a if (is_in and not is_mint) else (to_a if not is_burn else None)
+                txns.append({
+                    "ts":           round(ts),
+                    "block":        blkn,
+                    "tx":           log.get("transactionHash", ""),
+                    "contract":     cname,
+                    "token_id":     tok_id,
+                    "from":         from_a,
+                    "to":           to_a,
+                    "action":       action,
+                    "label":        f"{action} {asset} #{tok_id}",
+                    "counterparty": cp,
+                })
+            return txns
+        except Exception as e:
+            print(f"contract_activity {cname}: {e}")
+            return []
+
+    targets = {"cards": CARDS_ADDR, "hollows": HOLLOW_NFT_ADDR}
+    fetch_list = [(contract, targets[contract])] if contract in targets else list(targets.items())
+
+    all_txns = []
+    with ThreadPoolExecutor(max_workers=len(fetch_list)) as ex:
+        for f in [ex.submit(_fetch_contract, n, a) for n, a in fetch_list]:
+            all_txns.extend(f.result())
+    all_txns.sort(key=lambda x: x["block"], reverse=True)
+
+    by_action = {}
+    for t in all_txns:
+        by_action[t["action"]] = by_action.get(t["action"], 0) + 1
+
+    total = len(all_txns)
+    now   = time.time()
+    cut90 = now - 90 * 86400
+
+    daily = defaultdict(lambda: defaultdict(int))
+    for t in all_txns:
+        if t["ts"] >= cut90:
+            day = datetime.fromtimestamp(t["ts"], tz=timezone.utc).strftime("%Y-%m-%d")
+            daily[day][t["action"]] += 1
+            daily[day]["total"]     += 1
+
+    first_ts = all_txns[-1]["ts"] if all_txns else None
+    last_ts  = all_txns[0]["ts"]  if all_txns else None
+    r30      = sum(1 for t in all_txns if t["ts"] >= now - 30 * 86400)
+
+    if   r30 >= 20: act_score = "Very High"
+    elif r30 >= 10: act_score = "High"
+    elif r30 >= 3:  act_score = "Moderate"
+    elif total > 0: act_score = "Low"
+    else:           act_score = "None"
+
+    insights = []
+    if total == 0:
+        insights.append("No on-chain activity found for this operator with Litany contracts.")
+    else:
+        mint_r = by_action.get("Minted",   0) / total
+        sent_r = by_action.get("Sent",     0) / total
+        recv_r = by_action.get("Received", 0) / total
+        if   mint_r > 0.6: insights.append("Primarily a minter — most interactions are direct mints, not secondary market activity.")
+        elif sent_r > 0.4:  insights.append("Active trader — frequently transfers or sells assets to other wallets.")
+        elif recv_r > 0.4:  insights.append("Active acquirer — regularly receives assets, suggesting secondary market buying.")
+        else:               insights.append("Balanced operator — mix of minting, receiving, and sending across contracts.")
+        if   last_ts and now - last_ts < 86400:        insights.append("Active today — last transaction within the past 24 hours.")
+        elif last_ts and now - last_ts < 7 * 86400:    insights.append("Recently active — last transaction within the past 7 days.")
+        elif last_ts and now - last_ts > 30 * 86400:   insights.append("Dormant — no recorded activity in over 30 days.")
+        c_n = sum(1 for t in all_txns if t["contract"] == "cards")
+        h_n = sum(1 for t in all_txns if t["contract"] == "hollows")
+        if c_n > 0 and h_n > 0:
+            insights.append(f"Cross-protocol — active in both Cards ({c_n} txns) and Hollows ({h_n} txns).")
+        elif c_n > 0:
+            insights.append("Cards-only — no Hollow contract interactions detected.")
+        elif h_n > 0:
+            insights.append("Hollow-focused — activity concentrated in the Hollow NFT contract.")
+
+    data = {
+        "transactions": all_txns[:120],
+        "total": total,
+        "stats": {
+            "total": total,
+            "minted":   by_action.get("Minted",   0),
+            "received": by_action.get("Received", 0),
+            "sent":     by_action.get("Sent",     0),
+            "burned":   by_action.get("Burned",   0),
+            "first_ts": first_ts,
+            "last_ts":  last_ts,
+            "activity_score": act_score,
+            "recent_30d":     r30,
+        },
+        "timeline": {k: dict(v) for k, v in daily.items()},
+        "insights": insights,
+    }
+    _ca_cache[ck] = {"ts": now, "data": data}
+    return jsonify(data)
+
 
 def run_identity_refresh():
     time.sleep(30)
