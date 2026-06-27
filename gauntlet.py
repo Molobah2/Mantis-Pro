@@ -844,19 +844,19 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         els = await page.query_selector_all(
                             "button, div, span, p, li, td, tr, label"
                         )
-                        matches = []
+                        matches = []  # (length, text, element)
                         for el in els:
                             try:
                                 txt = (await asyncio.wait_for(
                                     el.inner_text(), timeout=0.3)).strip()
                                 if name.lower() in txt.lower():
-                                    matches.append((len(txt), el))
+                                    matches.append((len(txt), txt, el))
                             except Exception:
                                 continue
                         matches.sort(key=lambda x: x[0])
                         log(f"_select_hollow({name!r}): {len(matches)} candidates: "
-                            f"{[t[:30] for t,_ in matches[:4]]}")
-                        for _, el in matches[:6]:
+                            f"{[t[:40] for _,t,_ in matches[:4]]}")
+                        for _, txt, el in matches[:6]:
                             try:
                                 await el.click()
                                 await asyncio.sleep(1.5)
