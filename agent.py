@@ -1829,7 +1829,8 @@ moody_thread.start()
 identity_thread = threading.Thread(target=run_identity_refresh, daemon=True)
 identity_thread.start()
 
-_warmup_profile_cache()
+# Run warmup in background so Flask starts immediately (avoids health-check timeout)
+threading.Thread(target=_warmup_profile_cache, daemon=True).start()
 
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":
