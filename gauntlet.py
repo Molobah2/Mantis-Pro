@@ -394,8 +394,8 @@ def _wagmi_seed_js(address: str) -> str:
         deepestDeepStage: 0, totalSyntheses: 0,
         crawlHistory: [],
         tutorial: {{
-            boughtFirstHollow: true, assignedFirstFirmware: false,
-            completedFirstCrawl: false, completedFirstSynthesis: false
+            boughtFirstHollow: true, assignedFirstFirmware: true,
+            completedFirstCrawl: true, completedFirstSynthesis: true
         }},
         marketPurchasedIds: [],
         streaks: {{}}, dailyQuests: [], dailyQuestSeed: '',
@@ -819,10 +819,13 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 except Exception as e:
                     log(f"Demo state read err: {e}")
 
+                # Dismiss any tutorial/modal overlay before hollow selection.
+                # The close button text is "×" (U+00D7), not the letter "x".
                 try:
-                    for btn in await page.query_selector_all("button"):
-                        if (await btn.inner_text()).strip().lower() == "x":
-                            await btn.click()
+                    for el in await page.query_selector_all("button, div, span"):
+                        t = (await el.inner_text()).strip()
+                        if t in ("×", "x", "X", "✕", "close", "Close", "CLOSE"):
+                            await el.click()
                             await asyncio.sleep(1)
                             break
                 except Exception:
