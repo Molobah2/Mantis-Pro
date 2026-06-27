@@ -259,6 +259,20 @@ tbody tr:hover{background:var(--p0)}
 .net-v.g{color:var(--green)}
 .net-sub{font-size:9.5px;color:var(--ink4);margin-top:3px}
 
+/* ── REFERRAL LEADERBOARD ───────────────────────────────────── */
+.ref-lb-wrap{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--l0)}
+.ref-lb-col{border-right:1px solid var(--l0);padding:0}
+.ref-lb-col:last-child{border-right:none}
+.ref-lb-col-hd{padding:9px 16px;border-bottom:1px solid var(--l0);font-size:8.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4)}
+.ref-lb-item{display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:1px solid var(--l0);cursor:pointer;transition:background .1s}
+.ref-lb-item:last-child{border-bottom:none}
+.ref-lb-item:hover{background:rgba(255,255,255,.02)}
+.ref-rk2{width:20px;font-size:9.5px;font-weight:800;color:var(--ink4);text-align:right;font-family:'JetBrains Mono',monospace}
+.ref-rk2.t{color:var(--green)}
+.ref-av2{width:24px;height:24px;border-radius:50%;object-fit:cover;background:var(--bg3)}
+.ref-nm2{flex:1;font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ref-cnt2{font-size:11px;font-weight:800;color:var(--green);font-family:'JetBrains Mono',monospace}
+.ref-sub2{font-size:9px;color:var(--ink4)}
 /* ── FOOTER ──────────────────────────────────────────────────── */
 .foot{padding:14px 22px;border-top:1px solid var(--l0);font-size:10px;color:var(--ink4);line-height:1.8}
 .foot a{color:var(--green);font-weight:600}
@@ -303,6 +317,7 @@ tbody tr:hover{background:var(--p0)}
     <a class="sb-a" href="#collection"><span class="si">◈</span> Collection</a>
     <a class="sb-a" href="#mesh"><span class="si">⬡</span> Mesh</a>
     <a class="sb-a" href="#modules"><span class="si">◇</span> Modules</a>
+    <a class="sb-a" href="#referrals"><span class="si">◈</span> Referrals</a>
     <a class="sb-a" href="#network"><span class="si">◉</span> Network</a>
     <div class="sb-g">Platform</div>
     <a class="sb-a" href="/activity"><span class="si">⚡</span> Activity</a>
@@ -564,6 +579,18 @@ tbody tr:hover{background:var(--p0)}
       </div>
     </div>
 
+    <!-- ── REFERRAL LEADERBOARD ── -->
+    <div id="referrals">
+      <div class="sec-bar reveal">
+        <div class="sec-dot"></div>
+        <span class="sec-lbl">Referral Leaderboard</span>
+        <span class="sec-badge">Litany Market</span>
+      </div>
+      <div class="ref-lb-wrap reveal" id="ref-lb-wrap">
+        <div class="ca-empty" style="padding:24px">Loading referral leaderboard…</div>
+      </div>
+    </div>
+
     <!-- ── ABSTRACT NETWORK ── -->
     <div id="network">
       <div class="sec-bar reveal">
@@ -797,7 +824,31 @@ async function loadMesh(){
   }catch(e){fc.innerHTML='<div class="mfac" style="grid-column:1/-1"><div style="color:var(--ink4);font-size:11px">Mesh unavailable.</div></div>';}
 }
 
-(async function(){await loadCore();loadGas();loadMarket();loadTiers();loadRecentActivity();loadMesh();})();
+async function loadRefLeaderboard(){
+  const wrap=document.getElementById('ref-lb-wrap');if(!wrap)return;
+  try{
+    const lb=await fetch('/api/referral-leaderboard').then(r=>r.json());
+    if(!lb||!lb.length){wrap.innerHTML='<div class="ca-empty" style="padding:24px">No referral data yet.</div>';return;}
+    // Split into 3 columns of ~ceil(n/3) each
+    const col=Math.ceil(lb.length/3),cols=[lb.slice(0,col),lb.slice(col,col*2),lb.slice(col*2)];
+    wrap.innerHTML=cols.map(chunk=>`
+      <div class="ref-lb-col">
+        <div class="ref-lb-col-hd">Rank · Operator · Referees</div>
+        ${chunk.map(e=>`<div class="ref-lb-item" onclick="location.href='/operator/${esc(e.wallet)}'">
+          <span class="ref-rk2${e.rank<=3?' t':''}">${e.rank}</span>
+          <img class="ref-av2" src="/api/avatar?addr=${esc(e.wallet)}" loading="lazy">
+          <span class="ref-nm2">${esc(e.display_name||sa(e.wallet))}</span>
+          <span class="ref-cnt2">${(e.referee_count||0).toLocaleString()} <span class="ref-sub2">refs</span></span>
+        </div>`).join('')}
+      </div>`).join('');
+  }catch(e){
+    wrap.innerHTML='<div class="ca-empty" style="padding:24px">Referral leaderboard unavailable.</div>';
+  }
+}
+function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function sa(a){return a?a.slice(0,6)+'…'+a.slice(-4):'';}
+
+(async function(){await loadCore();loadGas();loadMarket();loadTiers();loadRecentActivity();loadMesh();loadRefLeaderboard();})();
 setInterval(loadRecentActivity,60000);
 setInterval(()=>{loadCore();loadGas();},30000);
 </script>

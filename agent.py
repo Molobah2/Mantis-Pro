@@ -920,22 +920,63 @@ def _loyalty_data(addr):
         return 0.0
 
 
+_ref_cache    = {}
+_REF_TTL      = 300   # 5 minutes per-wallet
+_ref_lb_cache = {"ts": 0, "data": []}
+_REF_LB_TTL   = 600   # 10 minutes for global leaderboard
+
+def _referral_data(addr):
+    hit = _ref_cache.get(addr)
+    if hit and time.time() - hit["ts"] < _REF_TTL:
+        return hit["data"]
+    BASE = "https://litany.gg"
+    def _codes():
+        try:
+            return requests.get(f"{BASE}/api/market/referrals/codes?wallet={addr}",
+                                timeout=10).json()
+        except: return {}
+    def _rel():
+        try:
+            return requests.get(f"{BASE}/api/market/referrals/relationship?wallet={addr}",
+                                timeout=10).json()
+        except: return {}
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+    with _TPE(max_workers=2) as ex:
+        f_c = ex.submit(_codes); f_r = ex.submit(_rel)
+    codes_raw   = f_c.result()
+    rel_raw     = f_r.result()
+    codes       = codes_raw.get("codes") or []
+    active      = [c for c in codes if c.get("status") == "active"]
+    total_refs  = sum(c.get("total_referees", 0) for c in codes)
+    rel         = rel_raw.get("relationship") or {}
+    data = {
+        "codes":          active,
+        "total_referees": total_refs,
+        "referrer_wallet": rel.get("referrer_wallet"),
+        "referred_at":     rel.get("established_at"),
+        "is_og":          rel.get("is_og_relationship", False),
+    }
+    _ref_cache[addr] = {"ts": time.time(), "data": data}
+    return data
+
 def _compute_profile(addr):
     """Fan out all upstream calls and return the assembled profile dict."""
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=7) as ex:
         f_idn     = ex.submit(resolve_identity, addr, True)
         f_mesh    = ex.submit(_mesh_get, f"/wallet/{addr}")
         f_lb      = ex.submit(_mesh_leaderboard)
         f_nfts    = ex.submit(_server_owned_cards, addr)
         f_hollows = ex.submit(_hollow_balance, addr)
         f_loyalty = ex.submit(_loyalty_data, addr)
+        f_ref     = ex.submit(_referral_data, addr)
     identity      = f_idn.result()     or {}
     mesh_data     = f_mesh.result()
     lb_raw        = f_lb.result()      or {}
     owned         = f_nfts.result()    or []
     hollow_count  = f_hollows.result() or 0
     loyalty_bonus = f_loyalty.result() or 0.0
+    referral      = f_ref.result()     or {}
     floor         = _server_floor()
     genesis       = _genesis_global_stats()
     lb_entries = lb_raw.get("entries", []) if isinstance(lb_raw, dict) else []
@@ -958,6 +999,7 @@ def _compute_profile(addr):
         "hollow_count":  hollow_count,
         "genesis_stats": genesis,
         "loyalty_bonus": loyalty_bonus,
+        "referral":      referral,
     }
 
 def _bg_refresh(addr):
@@ -1036,6 +1078,50 @@ def hollow_global():
     resp = jsonify(data)
     resp.headers["Cache-Control"] = "public, max-age=60"
     return resp
+
+@app.route("/api/referral-leaderboard")
+def referral_leaderboard():
+    import re, json as _json
+    now = time.time()
+    if now - _ref_lb_cache["ts"] < _REF_LB_TTL and _ref_lb_cache["data"]:
+        resp = jsonify(_ref_lb_cache["data"])
+        resp.headers["Cache-Control"] = "public, max-age=300"
+        return resp
+    try:
+        r = requests.get("https://litany.gg/market/leaderboard", timeout=15,
+                         headers={"User-Agent": "Mozilla/5.0 (compatible; MantisBot/1.0)"})
+        html = r.text
+        leaders = []
+        seen_wallets = set()
+        # Each leaderboard entry is a flat JSON object containing referee_count + rank
+        for m in re.finditer(r'\{[^{}]*?"referee_count"\s*:\s*\d+[^{}]*?\}', html):
+            try:
+                obj = _json.loads(m.group())
+                wallet = (obj.get("wallet") or "").lower()
+                if wallet and wallet not in seen_wallets and "rank" in obj:
+                    seen_wallets.add(wallet)
+                    leaders.append({
+                        "rank":            obj.get("rank"),
+                        "wallet":          wallet,
+                        "display_name":    obj.get("display_name") or "",
+                        "referee_count":   obj.get("referee_count", 0),
+                        "points_total":    obj.get("points_total", 0),
+                        "referral_points": obj.get("referral_points", 0),
+                        "tier":            obj.get("tier", ""),
+                    })
+            except: pass
+        leaders.sort(key=lambda x: x.get("rank", 9999))
+        if leaders:
+            _ref_lb_cache["ts"]   = now
+            _ref_lb_cache["data"] = leaders
+        resp = jsonify(leaders or _ref_lb_cache["data"])
+        resp.headers["Cache-Control"] = "public, max-age=300"
+        return resp
+    except Exception as e:
+        print(f"referral_leaderboard: {e}")
+        resp = jsonify(_ref_lb_cache["data"] or [])
+        resp.headers["Cache-Control"] = "public, max-age=60"
+        return resp
 
 @app.route("/api/contract-activity")
 def contract_activity():

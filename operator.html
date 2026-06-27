@@ -521,6 +521,36 @@ a{color:inherit;text-decoration:none}
 .ca-party-clear:hover{color:var(--ink);border-color:var(--muted)}
 .ca-cp-link{color:var(--green2);cursor:pointer;text-decoration:underline dotted;transition:color .1s}
 .ca-cp-link:hover{color:var(--green)}
+/* ── REFERRAL PANEL ─────────────────────────────────────────── */
+.ref-wrap{border-top:1px solid var(--line);padding:24px 28px 28px}
+.ref-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 18px}
+.ref-cell{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.ref-k{font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+.ref-v{font-size:20px;font-weight:800;color:var(--ink);font-family:'JetBrains Mono',monospace}
+.ref-v.big{font-size:28px;color:var(--green)}
+.ref-sub{font-size:10px;color:var(--muted);margin-top:2px}
+.ref-code-box{background:var(--panel);border:1px solid rgba(35,224,122,.2);border-radius:10px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ref-code{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:800;color:var(--green);letter-spacing:.5px}
+.ref-copy{font-size:9.5px;font-weight:800;padding:4px 11px;border-radius:6px;border:1px solid rgba(35,224,122,.3);background:rgba(35,224,122,.06);color:var(--green);cursor:pointer;font-family:inherit;transition:.12s}
+.ref-copy:hover{background:rgba(35,224,122,.14)}
+.ref-referrer{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 14px;display:flex;align-items:center;gap:10px;margin-top:8px;text-decoration:none;transition:border-color .13s,background .13s}
+.ref-referrer:hover{border-color:rgba(35,224,122,.3);background:rgba(35,224,122,.03)}
+.ref-referrer-av{width:28px;height:28px;border-radius:50%;object-fit:cover;background:var(--bg3)}
+.ref-referrer-body{flex:1;min-width:0}
+.ref-referrer-name{font-size:12px;font-weight:800;color:var(--ink)}
+.ref-referrer-lbl{font-size:9.5px;color:var(--faint);font-family:'JetBrains Mono',monospace}
+.ref-referrer-badge{font-size:9px;font-weight:800;letter-spacing:.8px;padding:3px 8px;border-radius:5px;background:rgba(209,171,88,.1);color:var(--gold);border:1px solid rgba(209,171,88,.2)}
+.ref-lb{margin-top:18px}
+.ref-lb-hd{font-size:9px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.ref-lb-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;margin-bottom:3px;transition:background .1s;cursor:pointer}
+.ref-lb-row:hover{background:var(--panel)}
+.ref-lb-row.me{background:rgba(35,224,122,.05);border:1px solid rgba(35,224,122,.15)}
+.ref-rk{width:22px;font-size:10px;font-weight:800;color:var(--faint);text-align:right;font-family:'JetBrains Mono',monospace}
+.ref-rk.top{color:var(--green)}
+.ref-lb-av{width:22px;height:22px;border-radius:50%;object-fit:cover;background:var(--bg3)}
+.ref-lb-nm{flex:1;font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ref-lb-cnt{font-size:11px;font-weight:800;color:var(--green);font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.ref-lb-sub{font-size:9px;color:var(--faint)}
 </style>
 </head>
 <body>
@@ -539,6 +569,7 @@ a{color:inherit;text-decoration:none}
     <a class="sb-a" href="#cards"><span class="i">◆</span> Collections</a>
     <a class="sb-a" href="#activity"><span class="i">≋</span> Activity</a>
     <a class="sb-a" href="#ca-section"><span class="i">⬡</span> Contract Activity</a>
+    <a class="sb-a" href="#ref-section"><span class="i">◈</span> Referrals</a>
     <div class="sb-g">Platform</div>
     <a class="sb-a" href="/activity"><span class="i">⚡</span> Activity Explorer</a>
     <a class="sb-a" href="/litany"><span class="i">▤</span> Dashboard</a>
@@ -735,6 +766,29 @@ a{color:inherit;text-decoration:none}
       <div class="ca-party-banner" id="ca-party-banner" style="display:none"></div>
       <div class="ca-list" id="ca-list"><div class="ca-empty">Loading contract activity…</div></div>
       <button class="ca-more-btn" id="ca-more" style="display:none" onclick="loadMoreCA()">Load more →</button>
+    </div>
+
+    <!-- ── REFERRAL INTELLIGENCE ── -->
+    <div class="ref-wrap" id="ref-section">
+      <div class="ca-hd">
+        <div class="panel-title"><div class="panel-title-dot"></div>REFERRAL INTELLIGENCE</div>
+        <div class="panel-badge">LITANY MARKET</div>
+      </div>
+      <!-- Stat grid -->
+      <div class="ref-grid">
+        <div class="ref-cell"><div class="ref-k">Total Referees</div><div class="ref-v big" id="ref-total">—</div><div class="ref-sub">wallets referred</div></div>
+        <div class="ref-cell"><div class="ref-k">Leaderboard Rank</div><div class="ref-v" id="ref-rank">—</div><div class="ref-sub">global referral rank</div></div>
+        <div class="ref-cell"><div class="ref-k">Active Codes</div><div class="ref-v" id="ref-codes-count">—</div><div class="ref-sub">referral codes</div></div>
+      </div>
+      <!-- Active codes -->
+      <div id="ref-codes-list"></div>
+      <!-- Referred by -->
+      <div id="ref-by"></div>
+      <!-- Mini leaderboard -->
+      <div class="ref-lb" id="ref-lb">
+        <div class="ref-lb-hd">Top Referrers</div>
+        <div id="ref-lb-list"><div class="ca-empty" style="padding:14px 0">Loading leaderboard…</div></div>
+      </div>
     </div>
 
   </div>
@@ -1420,8 +1474,9 @@ let _profAddr="";
       }else{document.getElementById("cmplist").innerHTML='<div class="fst">Not in leaderboard.</div>';}
     })(),
   ]);
-  // Load contract activity asynchronously after main profile renders
+  // Load contract activity and referral data asynchronously
   loadCA(addr);
+  loadReferrals(addr, opData);
 })();
 
 function copyAddr(){if(_profAddr)navigator.clipboard.writeText(_profAddr).then(()=>{const b=document.querySelector('.cpbtn');if(b){b.textContent="Copied!";setTimeout(()=>{b.textContent="Copy";},1500);}});}
@@ -1559,6 +1614,82 @@ function switchCAFilter(f){
   renderCATxns();
 }
 function loadMoreCA(){_caShown+=CA_PAGE;renderCATxns();}
+
+// ── REFERRAL INTELLIGENCE ────────────────────────────────────────────────────
+async function loadReferrals(addr, opData){
+  // Per-wallet stats come from opData (already fetched in profile)
+  const ref = opData.referral || {};
+  document.getElementById('ref-total').textContent = ref.total_referees ?? '0';
+  document.getElementById('ref-codes-count').textContent = (ref.codes||[]).length || '0';
+
+  // Render active referral codes
+  const codesList = document.getElementById('ref-codes-list');
+  const codes = ref.codes || [];
+  if(codes.length){
+    codesList.innerHTML = codes.map(c=>`
+      <div class="ref-code-box">
+        <span class="ref-code">${esc(c.code||'')}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:10px;color:var(--faint)">${(c.total_referees||0)} referees</span>
+          <button class="ref-copy" onclick="navigator.clipboard.writeText('${esc(c.code||'')}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1400)">Copy</button>
+        </div>
+      </div>`).join('');
+  } else {
+    codesList.innerHTML = '<div class="ca-empty" style="padding:10px 0;text-align:left;font-size:10.5px">No active referral codes.</div>';
+  }
+
+  // Render referred-by
+  const refByEl = document.getElementById('ref-by');
+  if(ref.referrer_wallet){
+    const rw = ref.referrer_wallet.toLowerCase();
+    let rname = sa(rw);
+    try{ const rid = await fetch('/api/identities?addrs='+rw).then(r=>r.json()); rname = (rid[rw]||{}).name || sa(rw); }catch(_){}
+    const ogBadge = ref.is_og ? '<span class="ref-referrer-badge">OG Referral</span>' : '';
+    refByEl.innerHTML = `
+      <a class="ref-referrer" href="/operator/${esc(rw)}">
+        <img class="ref-referrer-av" src="/api/avatar?addr=${esc(rw)}" loading="lazy">
+        <div class="ref-referrer-body">
+          <div class="ref-referrer-name">${esc(rname)}</div>
+          <div class="ref-referrer-lbl">Referred you${ref.referred_at ? ' · '+new Date(ref.referred_at).toLocaleDateString('en',{month:'short',day:'numeric',year:'numeric'}) : ''}</div>
+        </div>
+        ${ogBadge}
+      </a>`;
+  } else {
+    refByEl.innerHTML = '';
+  }
+
+  // Fetch global leaderboard + find this wallet's rank
+  try{
+    const lb = await fetch('/api/referral-leaderboard').then(r=>r.json());
+    const myEntry = lb.find(e=>e.wallet===addr);
+    document.getElementById('ref-rank').textContent = myEntry ? '#'+myEntry.rank : '—';
+    // Render mini leaderboard: show top 10, highlight current wallet
+    const top = lb.slice(0,10);
+    document.getElementById('ref-lb-list').innerHTML = top.map(e=>{
+      const isMe = e.wallet === addr;
+      return`<div class="ref-lb-row${isMe?' me':''}" onclick="location.href='/operator/${esc(e.wallet)}'">
+        <span class="ref-rk${e.rank<=3?' top':''}">${e.rank}</span>
+        <img class="ref-lb-av" src="/api/avatar?addr=${esc(e.wallet)}" loading="lazy">
+        <span class="ref-lb-nm">${esc(e.display_name||sa(e.wallet))}</span>
+        <span class="ref-lb-cnt">${(e.referee_count||0).toLocaleString()} <span class="ref-lb-sub">referees</span></span>
+      </div>`;
+    }).join('');
+    // If current wallet is not in top 10 but has a rank, append separator + their row
+    if(myEntry && myEntry.rank > 10){
+      document.getElementById('ref-lb-list').innerHTML += `
+        <div style="text-align:center;font-size:9px;color:var(--faint);padding:6px 0">···</div>
+        <div class="ref-lb-row me" onclick="location.href='/operator/${esc(myEntry.wallet)}'">
+          <span class="ref-rk">${myEntry.rank}</span>
+          <img class="ref-lb-av" src="/api/avatar?addr=${esc(myEntry.wallet)}" loading="lazy">
+          <span class="ref-lb-nm">You</span>
+          <span class="ref-lb-cnt">${(myEntry.referee_count||0).toLocaleString()} <span class="ref-lb-sub">referees</span></span>
+        </div>`;
+    }
+  }catch(e){
+    document.getElementById('ref-rank').textContent='—';
+    document.getElementById('ref-lb-list').innerHTML='<div class="ca-empty" style="padding:10px 0">Leaderboard unavailable.</div>';
+  }
+}
 
 function closeMod(){document.getElementById("cmodal").classList.remove("open");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeMod();closeSIP();}});
