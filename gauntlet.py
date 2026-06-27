@@ -829,6 +829,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     pass
 
                 # ── select hollow(s) ───────────────────────────────────────
+                # MUST be confirmed before clicking ENTER — game blocks entry with 0 selected.
+                log(f"Prep page full text:\n{prep_content[:1000].strip()}")
+
                 def _selection_confirmed(body: str) -> bool:
                     u = body.upper()
                     return ("(1 SELECTED)" in u or "(1/" in u or
@@ -851,6 +854,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                             except Exception:
                                 continue
                         matches.sort(key=lambda x: x[0])
+                        log(f"_select_hollow({name!r}): {len(matches)} candidates: "
+                            f"{[t[:30] for t,_ in matches[:4]]}")
                         for _, el in matches[:6]:
                             try:
                                 await el.click()
@@ -864,19 +869,21 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         log(f"select_hollow error: {e}")
                     return False
 
-                # Try seeded hollow name first, then sector names
+                # Up to 3 selection rounds.
+                # Tries: seeded hollow name → sector hollows → CSS card selectors.
+                # ENTER is only clicked once confirmed.
                 hollow_names = ["Mantis"] + sector["hollows"]
                 selected_any = False
-                for hollow in hollow_names:
-                    if await _select_hollow(hollow):
-                        hollow_used = hollow
-                        log(f"Selected {hollow} (confirmed)")
-                        selected_any = True
+                for _attempt in range(3):
+                    for hollow in hollow_names:
+                        if await _select_hollow(hollow):
+                            hollow_used = hollow
+                            log(f"Selected {hollow!r} (confirmed) on attempt {_attempt+1}")
+                            selected_any = True
+                            break
+                    if selected_any:
                         break
-
-                if not selected_any:
-                    # Last resort: look for hollow-like class names
-                    log("Named hollow not confirmed — trying CSS selectors")
+                    # CSS fallback before next attempt
                     for sel in ["[class*='hollow']", "[class*='card']", "[class*='unit']"]:
                         cards = await page.query_selector_all(sel)
                         if cards:
@@ -885,11 +892,19 @@ async def run_battle(sector_key: str = "surge") -> dict:
                             body = await _body_text(page)
                             if _selection_confirmed(body):
                                 selected_any = True
-                                log(f"CSS-selected hollow via {sel}")
+                                log(f"CSS-selected hollow via {sel} on attempt {_attempt+1}")
                                 break
+                    if selected_any:
+                        break
+                    log(f"Selection attempt {_attempt+1} failed — retrying after 2s")
+                    await asyncio.sleep(2)
 
                 if not selected_any:
-                    log("WARNING: hollow selection unconfirmed — proceeding anyway")
+                    # Log current body to diagnose what went wrong
+                    body_now = await _body_text(page)
+                    log(f"HOLLOW SELECTION FAILED after 3 attempts. Body: {body_now[:400]!r}")
+                    raise RuntimeError("Hollow selection failed — cannot enter sector")
+
                 _set_run_state(hollow=hollow_used)
 
                 # ── enter sector ───────────────────────────────────────────
@@ -917,9 +932,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         log(f"_click_any({keyword!r}) err: {ex}")
                     return False
 
-                # Build enter-button keyword list from sector name + fallbacks.
+                # Click ENTER — only reached if hollow selection confirmed above.
                 # `_click_any` covers div-buttons that `_click_kw` (button/a only) misses.
-                entered = False
                 enter_kws = [
                     f"ENTER {sector['name'].upper()}",   # e.g. ENTER SURGE SECTOR
                     f"ENTER {sector['enter_kw']}",
@@ -927,11 +941,21 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 ]
                 for kw in enter_kws:
                     if await _click_any(kw):
-                        log(f"Entered sector via '{kw}'")
-                        entered = True
+                        log(f"Clicked enter via '{kw}' — waiting for battle page...")
                         break
-                if not entered:
-                    log("WARNING: enter button not found — proceeding")
+                else:
+                    log("WARNING: enter button not found")
+
+                # Wait up to 15s for URL to become '/battle'
+                for _ in range(15):
+                    await asyncio.sleep(1)
+                    if "battle" in page.url:
+                        log(f"On battle page: {page.url}")
+                        break
+                else:
+                    body_now = await _body_text(page)
+                    log(f"Not on battle after 15s. URL={page.url!r} body={body_now[:300]!r}")
+                    raise RuntimeError("Never navigated to battle page after ENTER")
 
                 # ── wait for battle / auto-battle to resolve ────────────────
                 # The demo resolves ALL stages at once after clicking BEGIN STAGE.
