@@ -443,9 +443,17 @@ async def run_battle(sector_key: str = "surge") -> dict:
             browser = await pw.chromium.launch(
                 headless=True,
                 args=[
-                    "--no-sandbox", "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage", "--disable-gpu",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
                     "--disable-software-rasterizer",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-features=TranslateUI,VizDisplayCompositor",
+                    "--single-process",
                 ],
             )
             context = await browser.new_context(**ctx_kwargs)
@@ -465,7 +473,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
             try:
                 # ── auth phase ──────────────────────────────────────────────
                 log("Navigating to demo landing...")
-                await page.goto(DEMO_BASE, wait_until="networkidle", timeout=30000)
+                await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
                 await page.wait_for_timeout(4000)
 
                 if not await _is_authed(page):
@@ -483,7 +491,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
 
                 # ── navigate to sector prep ─────────────────────────────────
                 log(f"Navigating to {sector['name']}...")
-                await page.goto(sector["url"], wait_until="networkidle", timeout=30000)
+                await page.goto(sector["url"], wait_until="domcontentloaded", timeout=30000)
                 await page.wait_for_timeout(5000)
 
                 # Dismiss tutorial / any overlay
