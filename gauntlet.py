@@ -18,6 +18,7 @@ from eth_account.messages import encode_defunct
 
 GAUNTLET_KEY  = os.environ.get("GAUNTLET_PRIVATE_KEY", "").strip()
 GAUNTLET_ADDR = os.environ.get("GAUNTLET_ADDRESS", "").strip().lower()
+HEADLESS      = os.environ.get("HEADLESS", "true").lower() != "false"
 DEMO_BASE     = "https://litany.gg/demo"
 DASHBOARD_URL = f"{DEMO_BASE}/dashboard"
 
@@ -576,7 +577,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
 
             log("Launching browser...")
             browser = await pw.chromium.launch(
-                headless=True,
+                headless=HEADLESS,
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
@@ -1088,3 +1089,11 @@ async def run_battle(sector_key: str = "surge") -> dict:
         "hollow":     hollow_used,
         "sector":     sector_key,
     }
+
+
+if __name__ == "__main__":
+    import sys
+    sector = sys.argv[1] if len(sys.argv) > 1 else "surge"
+    print(f"Running gauntlet: sector={sector!r}  headless={HEADLESS}")
+    result = asyncio.run(play_sector(sector))
+    print(f"\nResult: {result}")
