@@ -612,6 +612,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 "getState:function(){return[];},setState:_noop,subscribe:function(){return _noop;}},"
                 "events:{conn:{onConnect:_noop,onDisconnect:_noop},change:_noop,disconnect:_noop},"
                 "chains:{getState:function(){return _st;},subscribe:function(){return _noop;}}},"
+                "get state(){return _st;},"
                 "getState:function(){return _st;},"
                 "setState:function(fn){if(typeof fn==='function')_st=fn(_st);},"
                 "subscribe:function(l){return _noop;},"
