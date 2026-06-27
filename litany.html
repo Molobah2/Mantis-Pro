@@ -52,10 +52,29 @@ a{color:inherit;text-decoration:none}
 /* ── TOPBAR ── */
 .tnav{display:flex;align-items:center;gap:12px;padding:10px 20px;background:rgba(5,9,7,.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--line);flex-shrink:0}
 .tnav-title{font-size:13px;font-weight:900;letter-spacing:-.3px;white-space:nowrap}
-.tsearch{flex:1;max-width:340px;display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:7px 12px}
-.tsearch span{color:var(--faint);font-size:12px}
-.tsearch input{flex:1;background:none;border:none;outline:none;color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:11.5px}
+.tsearch{position:relative;flex:1;max-width:360px;display:flex;align-items:center;
+  background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;
+  transition:border-color .18s,box-shadow .18s}
+.tsearch:focus-within{border-color:rgba(35,224,122,.5);box-shadow:0 0 0 3px rgba(35,224,122,.08),inset 0 0 0 1px rgba(35,224,122,.12)}
+.tsearch span{position:absolute;left:12px;color:var(--faint);font-size:13px;pointer-events:none;z-index:1}
+.tsearch input{flex:1;background:none;border:none;outline:none;color:var(--ink);
+  font-family:'JetBrains Mono',monospace;font-size:12px;padding:10px 8px 10px 36px}
 .tsearch input::placeholder{color:var(--faint)}
+.tsearch .ts-btn{background:var(--green);color:#021008;border:none;border-radius:0 9px 9px 0;
+  padding:0 14px;font-weight:800;font-size:10.5px;letter-spacing:.3px;cursor:pointer;
+  font-family:inherit;align-self:stretch;transition:.13s;white-space:nowrap;flex-shrink:0}
+.tsearch .ts-btn:hover{background:#1ff076}
+.ts-ac{position:absolute;top:calc(100% + 6px);left:0;right:0;
+  background:var(--bg2);border:1px solid rgba(35,224,122,.22);border-radius:10px;
+  box-shadow:0 16px 48px rgba(0,0,0,.65);z-index:500;overflow:hidden;max-height:260px;overflow-y:auto}
+.ts-ac-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+  transition:.12s;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+.ts-ac-item:last-child{border-bottom:none}
+.ts-ac-item:hover{background:rgba(35,224,122,.07)}
+.ts-ac-nm{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ts-ac-fa{font-size:8px;font-weight:800;letter-spacing:.3px;padding:2px 6px;border-radius:4px;
+  background:rgba(255,255,255,.1);color:#fff;text-transform:uppercase;flex-shrink:0}
+.ts-ac-ad{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--faint);flex-shrink:0}
 .tpill{display:flex;align-items:center;gap:5px;font-size:9.5px;font-family:'JetBrains Mono',monospace;color:var(--faint);padding:4px 10px;border:1px solid var(--line);border-radius:7px;white-space:nowrap;margin-left:auto}
 .tpill-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:beat 2.4s infinite}
 .tblk{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--green);padding:4px 10px;border:1px solid rgba(35,224,122,.2);border-radius:7px;background:rgba(35,224,122,.06)}
@@ -231,7 +250,12 @@ tbody tr:hover{background:var(--panel2)}
 <div class="main">
   <div class="tnav">
     <div class="tnav-title">Litany Intelligence</div>
-    <div class="tsearch"><span>⌕</span><input id="opsearch" placeholder="Search operator or address…" autocomplete="off" spellcheck="false"></div>
+    <div class="tsearch">
+      <span>⌕</span>
+      <input id="opsearch" placeholder="Scan any operator or wallet…" autocomplete="off" spellcheck="false">
+      <button class="ts-btn" onclick="doScan()">SCAN</button>
+      <div class="ts-ac" id="opsearch-ac" hidden></div>
+    </div>
     <div class="tpill"><span class="tpill-dot"></span> Abstract 2741</div>
     <div class="tblk">Block <span id="tb-block-bar">—</span></div>
   </div>
@@ -425,18 +449,36 @@ function openX(e,h){e.preventDefault();e.stopPropagation();window.open('https://
 const FAC={horizon:{c:"#D1AB58",n:"Horizon"},lens:{c:"#2f6df0",n:"Lens"},breach:{c:"#e5484d",n:"Breach"}};
 function facBadge(f){const x=FAC[f];if(!x)return f?('<span class="fac">'+esc(f)+'</span>'):'';return '<span class="fac" style="background:'+x.c+'aa">'+x.n+'</span>';}
 
-const _opsearch=document.getElementById("opsearch");
-_opsearch.addEventListener("keydown",async e=>{
-  if(e.key!=="Enter")return;
-  const v=e.target.value.trim();if(!v)return;
-  if(/^0x[a-fA-F0-9]{40}$/.test(v)){location.href="/operator/"+v;return;}
-  try{
-    const res=await fetch('/api/operator-search?q='+encodeURIComponent(v)).then(r=>r.json());
-    if(res&&res.length===1){location.href="/operator/"+res[0].address;return;}
-    if(res&&res.length>1){location.href="/litany/scanner?q="+encodeURIComponent(v);return;}
-  }catch(_){}
-  location.href="/litany/scanner?q="+encodeURIComponent(v);
-});
+(function(){
+  const inp=document.getElementById('opsearch'),acEl=document.getElementById('opsearch-ac');
+  let timer=null,res=[];
+  const sh=a=>a.slice(0,6)+'…'+a.slice(-4);
+  function hide(){acEl.hidden=true;}
+  function show(r){
+    if(!r.length){hide();return;}res=r;
+    acEl.innerHTML=r.map((x,i)=>{
+      const fa=x.faction?`<span class="ts-ac-fa">${esc(x.faction)}</span>`:'';
+      return`<div class="ts-ac-item" data-i="${i}"><span class="ts-ac-nm">${x.name?esc(x.name):sh(x.address)}</span>${fa}<span class="ts-ac-ad">${sh(x.address)}</span></div>`;
+    }).join('');
+    acEl.hidden=false;
+    acEl.querySelectorAll('.ts-ac-item').forEach(el=>el.addEventListener('mousedown',e=>{
+      e.preventDefault();location.href='/operator/'+res[+el.dataset.i].address;
+    }));
+  }
+  window.doScan=function(){
+    const v=inp.value.trim();if(!v)return;
+    if(/^0x[a-fA-F0-9]{40}$/.test(v)){location.href='/operator/'+v;return;}
+    if(res.length){location.href='/operator/'+res[0].address;return;}
+    location.href='/litany/scanner?q='+encodeURIComponent(v);
+  };
+  inp.addEventListener('input',()=>{
+    clearTimeout(timer);const v=inp.value.trim();
+    if(v.length<2||/^0x[0-9a-fA-F]{38,}$/.test(v)){hide();return;}
+    timer=setTimeout(async()=>{let r=[];try{r=await fetch('/api/operator-search?q='+encodeURIComponent(v)).then(x=>x.json());}catch(_){}show(r||[]);},250);
+  });
+  inp.addEventListener('blur',()=>setTimeout(hide,200));
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){hide();doScan();}});
+})();
 
 // Build SVG ticks
 (function(){let s="";for(let i=0;i<60;i++){const a=i*6*Math.PI/180,x1=160+Math.cos(a)*150,y1=160+Math.sin(a)*150,x2=160+Math.cos(a)*(i%5===0?142:146),y2=160+Math.sin(a)*(i%5===0?142:146);s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(35,224,122,${i%5===0?.3:.12})" stroke-width="${i%5===0?1.2:.7}"/>`;}const t=document.getElementById("ticks");if(t)t.innerHTML=s;})();

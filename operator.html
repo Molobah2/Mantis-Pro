@@ -50,10 +50,29 @@ a{color:inherit;text-decoration:none}
 
 /* ── TOPNAV ── */
 .tnav{display:flex;align-items:center;gap:12px;padding:10px 20px;background:rgba(5,9,7,.97);border-bottom:1px solid var(--line);flex-shrink:0;position:sticky;top:0;z-index:50;will-change:transform}
-.tsearch{flex:1;max-width:400px;display:flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:7px 12px}
-.tsearch span{color:var(--faint);font-size:12px}
-.tsearch input{flex:1;background:none;border:none;outline:none;color:var(--ink);font-family:'Inter',sans-serif;font-size:12.5px}
+.tsearch{position:relative;flex:1;max-width:400px;display:flex;align-items:center;
+  background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;
+  transition:border-color .18s,box-shadow .18s}
+.tsearch:focus-within{border-color:rgba(35,224,122,.5);box-shadow:0 0 0 3px rgba(35,224,122,.08),inset 0 0 0 1px rgba(35,224,122,.12)}
+.tsearch span{position:absolute;left:12px;color:var(--faint);font-size:13px;pointer-events:none;z-index:1}
+.tsearch input{flex:1;background:none;border:none;outline:none;color:var(--ink);
+  font-family:'JetBrains Mono',monospace;font-size:12px;padding:10px 8px 10px 36px}
 .tsearch input::placeholder{color:var(--faint)}
+.tsearch .ts-btn{background:var(--green);color:#021008;border:none;border-radius:0 9px 9px 0;
+  padding:0 15px;font-weight:800;font-size:10.5px;letter-spacing:.3px;cursor:pointer;
+  font-family:inherit;align-self:stretch;transition:.13s;white-space:nowrap;flex-shrink:0}
+.tsearch .ts-btn:hover{background:#1ff076}
+.ts-ac{position:absolute;top:calc(100% + 6px);left:0;right:0;
+  background:var(--bg2);border:1px solid rgba(35,224,122,.22);border-radius:10px;
+  box-shadow:0 16px 48px rgba(0,0,0,.65);z-index:500;overflow:hidden;max-height:260px;overflow-y:auto}
+.ts-ac-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+  transition:.12s;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+.ts-ac-item:last-child{border-bottom:none}
+.ts-ac-item:hover{background:rgba(35,224,122,.07)}
+.ts-ac-nm{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ts-ac-fa{font-size:8px;font-weight:800;letter-spacing:.3px;padding:2px 6px;border-radius:4px;
+  background:rgba(255,255,255,.1);color:#fff;text-transform:uppercase;flex-shrink:0}
+.ts-ac-ad{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--faint);flex-shrink:0}
 .sharebtn{background:var(--green);color:#021008;border:none;border-radius:8px;padding:7px 16px;font-weight:800;font-size:11.5px;cursor:pointer;font-family:inherit;letter-spacing:.3px;margin-left:auto;transition:.15s}
 .sharebtn:hover{background:#1ff076;transform:translateY(-1px)}
 
@@ -490,7 +509,12 @@ a{color:inherit;text-decoration:none}
 <!-- MAIN -->
 <div class="main">
   <div class="tnav">
-    <div class="tsearch"><span>⌕</span><input id="psearch" placeholder="Search operators, wallets…" autocomplete="off"></div>
+    <div class="tsearch">
+      <span>⌕</span>
+      <input id="psearch" placeholder="Scan any operator or wallet…" autocomplete="off" spellcheck="false">
+      <button class="ts-btn" onclick="doScan()">SCAN</button>
+      <div class="ts-ac" id="psearch-ac" hidden></div>
+    </div>
     <button class="sharebtn" onclick="shareProfile()">SHARE PROFILE</button>
   </div>
   <div class="cnt">
@@ -1077,7 +1101,36 @@ let _profAddr="";
   const addr=(parts[parts.length-1]||"").toLowerCase();
   if(!addr.startsWith("0x")||addr.length!==42){document.getElementById("hnm").innerHTML='<span style="color:var(--faint)">Invalid address.</span>';return;}
   _profAddr=addr;
-  document.getElementById("psearch").addEventListener("keydown",async e=>{if(e.key!=="Enter")return;const v=e.target.value.trim();if(!v)return;if(/^0x[a-fA-F0-9]{40}$/.test(v)){location.href="/operator/"+v;return;}try{const r=await fetch('/api/operator-search?q='+encodeURIComponent(v)).then(x=>x.json());if(r&&r.length===1){location.href="/operator/"+r[0].address;return;}}catch(_){}location.href="/litany/scanner?q="+encodeURIComponent(v);});
+  (function(){
+    const inp=document.getElementById('psearch'),acEl=document.getElementById('psearch-ac');
+    let timer=null,res=[];
+    const sh=a=>a.slice(0,6)+'…'+a.slice(-4);
+    function hide(){acEl.hidden=true;}
+    function show(r){
+      if(!r.length){hide();return;}res=r;
+      acEl.innerHTML=r.map((x,i)=>{
+        const fa=x.faction?`<span class="ts-ac-fa">${esc(x.faction)}</span>`:'';
+        return`<div class="ts-ac-item" data-i="${i}"><span class="ts-ac-nm">${x.name?esc(x.name):sh(x.address)}</span>${fa}<span class="ts-ac-ad">${sh(x.address)}</span></div>`;
+      }).join('');
+      acEl.hidden=false;
+      acEl.querySelectorAll('.ts-ac-item').forEach(el=>el.addEventListener('mousedown',e=>{
+        e.preventDefault();location.href='/operator/'+res[+el.dataset.i].address;
+      }));
+    }
+    window.doScan=function(){
+      const v=inp.value.trim();if(!v)return;
+      if(/^0x[a-fA-F0-9]{40}$/.test(v)){location.href='/operator/'+v;return;}
+      if(res.length){location.href='/operator/'+res[0].address;return;}
+      location.href='/litany/scanner?q='+encodeURIComponent(v);
+    };
+    inp.addEventListener('input',()=>{
+      clearTimeout(timer);const v=inp.value.trim();
+      if(v.length<2||/^0x[0-9a-fA-F]{38,}$/.test(v)){hide();return;}
+      timer=setTimeout(async()=>{let r=[];try{r=await fetch('/api/operator-search?q='+encodeURIComponent(v)).then(x=>x.json());}catch(_){}show(r||[]);},250);
+    });
+    inp.addEventListener('blur',()=>setTimeout(hide,200));
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){hide();doScan();}});
+  })();
 
   const opLink=document.getElementById('hoperator-link');
   if(opLink){opLink.href='https://abscan.org/address/'+addr;opLink.style.display='';}

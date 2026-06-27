@@ -59,11 +59,29 @@ a{color:inherit;text-decoration:none}
 .cb-pill{display:flex;align-items:center;gap:5px;font-size:9.5px;font-family:'JetBrains Mono',monospace;color:var(--faint);padding:4px 10px;border:1px solid var(--line);border-radius:7px;white-space:nowrap}
 .cb-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:beat 2.4s infinite}
 .stat-pill{font-size:9.5px;font-family:'JetBrains Mono',monospace;padding:4px 10px;border-radius:7px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
-.cb-search{display:flex;align-items:center;gap:0;background:var(--panel2);border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-left:auto}
-.cb-search input{background:none;border:none;outline:none;color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:11.5px;padding:6px 12px;width:200px}
+.cb-search{position:relative;display:flex;align-items:center;
+  background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;
+  margin-left:auto;transition:border-color .18s,box-shadow .18s}
+.cb-search:focus-within{border-color:rgba(35,224,122,.5);box-shadow:0 0 0 3px rgba(35,224,122,.08),inset 0 0 0 1px rgba(35,224,122,.12)}
+.cb-search .cb-icon{position:absolute;left:11px;color:var(--faint);font-size:13px;pointer-events:none;z-index:1}
+.cb-search input{background:none;border:none;outline:none;color:var(--ink);
+  font-family:'JetBrains Mono',monospace;font-size:12px;padding:9px 8px 9px 34px;width:220px}
 .cb-search input::placeholder{color:var(--faint)}
-.cb-search button{background:var(--green);border:none;color:#021008;font-weight:900;font-size:10px;padding:6px 12px;cursor:pointer;font-family:inherit;letter-spacing:.3px;transition:.13s}
+.cb-search button{background:var(--green);border:none;color:#021008;font-weight:800;font-size:10.5px;
+  padding:0 14px;cursor:pointer;font-family:inherit;letter-spacing:.3px;transition:.13s;
+  border-radius:0 9px 9px 0;align-self:stretch;white-space:nowrap}
 .cb-search button:hover{background:#1ff076}
+.cb-ac{position:absolute;top:calc(100% + 6px);left:0;right:0;
+  background:var(--bg2,#0b1610);border:1px solid rgba(35,224,122,.22);border-radius:10px;
+  box-shadow:0 16px 48px rgba(0,0,0,.65);z-index:500;overflow:hidden;max-height:260px;overflow-y:auto}
+.cb-ac-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+  transition:.12s;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
+.cb-ac-item:last-child{border-bottom:none}
+.cb-ac-item:hover{background:rgba(35,224,122,.07)}
+.cb-ac-nm{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cb-ac-fa{font-size:8px;font-weight:800;letter-spacing:.3px;padding:2px 6px;border-radius:4px;
+  background:rgba(255,255,255,.1);color:#fff;text-transform:uppercase;flex-shrink:0}
+.cb-ac-ad{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--faint);flex-shrink:0}
 
 /* ── CONTENT AREA ── */
 .cnt-wrap{flex:1;overflow:hidden;display:grid;grid-template-columns:1fr 290px}
@@ -191,8 +209,10 @@ a{color:inherit;text-decoration:none}
     <span class="stat-pill" id="stat-pill">—</span>
     <div class="cb-pill"><span class="cb-dot"></span>Abstract 2741</div>
     <div class="cb-search">
-      <input id="act-search" placeholder="Operator or address…" autocomplete="off" spellcheck="false">
-      <button onclick="actSearch()">GO</button>
+      <span class="cb-icon">⌕</span>
+      <input id="act-search" placeholder="Scan any operator or wallet…" autocomplete="off" spellcheck="false">
+      <button onclick="actSearch()">SCAN</button>
+      <div class="cb-ac" id="act-search-ac" hidden></div>
     </div>
   </div>
 
@@ -261,17 +281,37 @@ function set(id,t){const e=document.getElementById(id);if(e)e.textContent=t;}
 // Sidebar block height
 rpc("eth_blockNumber",[]).then(b=>{const el=document.getElementById("sb-blk");if(el)el.textContent=hi(b).toLocaleString();}).catch(()=>{});
 
-async function actSearch(){
-  const v=(document.getElementById("act-search").value||"").trim();if(!v)return;
-  if(/^0x[a-fA-F0-9]{40}$/.test(v)){location.href="/operator/"+v;return;}
-  try{
-    const res=await fetch('/api/operator-search?q='+encodeURIComponent(v)).then(r=>r.json());
-    if(res&&res.length===1){location.href="/operator/"+res[0].address;return;}
-    if(res&&res.length>1){location.href="/litany/scanner?q="+encodeURIComponent(v);return;}
-  }catch(_){}
-  location.href="/litany/scanner?q="+encodeURIComponent(v);
-}
-document.getElementById("act-search").addEventListener("keydown",e=>{if(e.key==="Enter")actSearch();});
+(function(){
+  const inp=document.getElementById('act-search'),acEl=document.getElementById('act-search-ac');
+  let timer=null,res=[];
+  const sh=a=>a.slice(0,6)+'…'+a.slice(-4);
+  const esc2=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  function hide(){acEl.hidden=true;}
+  function show(r){
+    if(!r.length){hide();return;}res=r;
+    acEl.innerHTML=r.map((x,i)=>{
+      const fa=x.faction?`<span class="cb-ac-fa">${esc2(x.faction)}</span>`:'';
+      return`<div class="cb-ac-item" data-i="${i}"><span class="cb-ac-nm">${x.name?esc2(x.name):sh(x.address)}</span>${fa}<span class="cb-ac-ad">${sh(x.address)}</span></div>`;
+    }).join('');
+    acEl.hidden=false;
+    acEl.querySelectorAll('.cb-ac-item').forEach(el=>el.addEventListener('mousedown',e=>{
+      e.preventDefault();location.href='/operator/'+res[+el.dataset.i].address;
+    }));
+  }
+  window.actSearch=function(){
+    const v=inp.value.trim();if(!v)return;
+    if(/^0x[a-fA-F0-9]{40}$/.test(v)){location.href='/operator/'+v;return;}
+    if(res.length){location.href='/operator/'+res[0].address;return;}
+    location.href='/litany/scanner?q='+encodeURIComponent(v);
+  };
+  inp.addEventListener('input',()=>{
+    clearTimeout(timer);const v=inp.value.trim();
+    if(v.length<2||/^0x[0-9a-fA-F]{38,}$/.test(v)){hide();return;}
+    timer=setTimeout(async()=>{let r=[];try{r=await fetch('/api/operator-search?q='+encodeURIComponent(v)).then(x=>x.json());}catch(_){}show(r||[]);},250);
+  });
+  inp.addEventListener('blur',()=>setTimeout(hide,200));
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){hide();actSearch();}});
+})();
 
 let allLogs=[], activeFilter='all', rendered=0, idmap={};
 const BATCH=20;
