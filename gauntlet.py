@@ -330,6 +330,13 @@ def _provider_js(address: str) -> str:
 
 # ── Battle helpers ────────────────────────────────────────────────────────────
 
+async def _body_text(page) -> str:
+    """Read body text via JS eval — no locator timeout, works mid-render."""
+    try:
+        return await page.evaluate("document.body ? document.body.innerText : ''")
+    except Exception:
+        return ""
+
 async def _click_kw(page, keyword: str) -> bool:
     """Click the first button/link whose text contains keyword (case-insensitive)."""
     try:
@@ -346,7 +353,7 @@ async def _click_kw(page, keyword: str) -> bool:
 async def _extract_pearl(page) -> int:
     """Read PEARL count from result screen text."""
     try:
-        text = await page.inner_text("body")
+        text = await _body_text(page)
         for pat in [r"(\d+)\s*PEARL", r"PEARL[:\s]+(\d+)", r"earned[:\s]+(\d+)"]:
             m = re.search(pat, text, re.I)
             if m:
@@ -362,7 +369,7 @@ async def _maybe_connect_wallet(page) -> bool:
     Returns True if we interacted with the modal.
     """
     try:
-        content = await page.inner_text("body")
+        content = await _body_text(page)
         connect_triggers = ["CONNECT WALLET", "CONNECT", "SIGN IN", "LOGIN", "GET STARTED"]
         if not any(k in content.upper() for k in connect_triggers):
             return False
@@ -378,7 +385,7 @@ async def _maybe_connect_wallet(page) -> bool:
             if await _click_kw(page, kw):
                 await page.wait_for_timeout(4000)
                 # Handle any sign message prompt
-                c2 = await page.inner_text("body")
+                c2 = await _body_text(page)
                 if "SIGN" in c2.upper():
                     await _click_kw(page, "SIGN")
                     await page.wait_for_timeout(3000)
@@ -391,7 +398,7 @@ async def _is_authed(page) -> bool:
     """True if we appear logged in (dashboard/game content visible)."""
     try:
         url  = page.url
-        text = await page.inner_text("body")
+        text = await _body_text(page)
         auth_signals = ["DASHBOARD", "PEARL", "GAUNTLET", "CRAWL", "HOLLOW", "SECTOR", "YOUR HOLLOWS"]
         return any(k in text.upper() for k in auth_signals) or "demo/dashboard" in url
     except Exception:
@@ -510,12 +517,8 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 log("Waiting for SPA boot...")
                 await page.wait_for_timeout(6000)
 
-                try:
-                    content = await page.inner_text("body")
-                    log(f"Page snippet: {content[:300].strip()!r}")
-                except Exception as e:
-                    log(f"Could not read page body: {e}")
-                    raise
+                content = await _body_text(page)
+                log(f"Page snippet: {content[:300].strip()!r}")
 
                 # Save whatever session state we have
                 try:
@@ -582,7 +585,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         await page.goto(DASHBOARD_URL)
                         break
 
-                    content = await page.inner_text("body")
+                    content = await _body_text(page)
 
                     if "results" in page.url or "CRAWL COMPLETE" in content.upper():
                         log("Crawl complete!")
@@ -602,7 +605,7 @@ async def run_battle(sector_key: str = "surge") -> dict:
                             result = "win"
                             break
 
-                        c2 = await page.inner_text("body")
+                        c2 = await _body_text(page)
                         if "CRAWL COMPLETE" in c2.upper():
                             result = "win"
                             await _click_kw(page, "VIEW RESULTS")
