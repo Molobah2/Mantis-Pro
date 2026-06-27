@@ -1137,13 +1137,15 @@ let _profAddr="";
 
   rpc("eth_blockNumber",[]).then(b=>{const el=document.getElementById("sb-blk");if(el)el.textContent=hi(b).toLocaleString();}).catch(()=>{});
 
-  // ── Single aggregated fetch — identity + mesh + lb + cards + stats, 2-min sessionStorage cache ──
-  const CACHE_KEY='op:2:'+addr,CACHE_TTL=120e3;
+  // ── Single aggregated fetch — multi-tier cache: sessionStorage 10min, localStorage 30min ──
+  const CACHE_KEY='op:3:'+addr, SS_TTL=600e3, LS_TTL=1800e3;
   let opData=null;
-  try{const raw=sessionStorage.getItem(CACHE_KEY);if(raw){const c=JSON.parse(raw);if(Date.now()-c.ts<CACHE_TTL)opData=c.d;}}catch(_){}
+  const _now=Date.now();
+  try{const r=sessionStorage.getItem(CACHE_KEY);if(r){const c=JSON.parse(r);if(_now-c.ts<SS_TTL)opData=c.d;}}catch(_){}
+  if(!opData){try{const r=localStorage.getItem(CACHE_KEY);if(r){const c=JSON.parse(r);if(_now-c.ts<LS_TTL)opData=c.d;}}catch(_){}}
   if(!opData){
     opData=await fetch('/api/operator-data?addr='+addr).then(r=>r.json());
-    try{sessionStorage.setItem(CACHE_KEY,JSON.stringify({ts:Date.now(),d:opData}));}catch(_){}
+    try{const p=JSON.stringify({ts:_now,d:opData});sessionStorage.setItem(CACHE_KEY,p);localStorage.setItem(CACHE_KEY,p);}catch(_){}
   }
   const idn=opData.identity||{};
   const mesh=(opData.mesh?.data!==undefined?opData.mesh.data:opData.mesh)||null;

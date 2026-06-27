@@ -234,6 +234,8 @@ def _id_db():
     conn.execute("""CREATE TABLE IF NOT EXISTS identities(
         wallet TEXT PRIMARY KEY, name TEXT, twitter TEXT, avatar TEXT,
         source TEXT, updated REAL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS profiles(
+        wallet TEXT PRIMARY KEY, data TEXT NOT NULL, updated REAL NOT NULL)""")
     return conn
 
 try:
@@ -659,11 +661,68 @@ def litany_mesh_proxy():
 # Collapses 6+ browser→Flask→external calls into one parallel server fetch.
 # Server-to-server latency is 10-50ms vs 200-500ms browser-initiated.
 
-_op_prof_cache = {}              # addr -> {"ts": float, "data": dict}
-_OP_PROF_TTL   = 120             # 2-minute profile cache
+_op_prof_cache  = {}   # addr -> {"ts": float, "data": dict}
+_OP_PROF_TTL    = 600  # serve fresh within 10 min
+_OP_PROF_STALE  = 1800 # serve stale up to 30 min while refreshing in bg
 
-_os_nft_cache  = {}              # addr -> {"ts": float, "ids": list[int]}
-_OS_NFT_TTL    = 300             # 5-minute NFT ownership cache
+_loyalty_cache  = {}   # addr -> {"ts": float, "bonus": float}
+_LOYALTY_TTL    = 3600 # loyalty changes at most hourly
+
+_os_nft_cache   = {}   # addr -> {"ts": float, "ids": list[int]}
+_OS_NFT_TTL     = 300  # 5-minute NFT ownership cache
+
+_refresh_set      = set()
+_refresh_lock_bg  = threading.Lock()
+
+# ── SQLite profile persistence ────────────────────────────────────────────────
+def _prof_db_get(wallet):
+    """Return (data_dict, age_secs) from SQLite, or (None, inf) on miss."""
+    try:
+        with _id_lock:
+            conn = _id_db()
+            row  = conn.execute(
+                "SELECT data, updated FROM profiles WHERE wallet=?", (wallet,)
+            ).fetchone()
+            conn.close()
+        if row:
+            return json.loads(row[0]), time.time() - row[1]
+    except Exception:
+        pass
+    return None, float("inf")
+
+def _prof_db_put(wallet, data):
+    try:
+        payload = json.dumps(data, default=str)
+        with _id_lock:
+            conn = _id_db()
+            conn.execute(
+                "INSERT OR REPLACE INTO profiles(wallet,data,updated) VALUES(?,?,?)",
+                (wallet, payload, time.time())
+            )
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"prof db put {wallet}: {e}")
+
+def _warmup_profile_cache():
+    """Pre-load recent profiles from SQLite into memory on startup."""
+    try:
+        with _id_lock:
+            conn = _id_db()
+            rows = conn.execute(
+                "SELECT wallet,data,updated FROM profiles WHERE updated>? ORDER BY updated DESC LIMIT 200",
+                (time.time() - _OP_PROF_STALE,)
+            ).fetchall()
+            conn.close()
+        for wallet, data_json, ts in rows:
+            try:
+                _op_prof_cache[wallet] = {"ts": ts, "data": json.loads(data_json)}
+            except Exception:
+                pass
+        if rows:
+            print(f"profile cache warm: {len(rows)} profiles pre-loaded")
+    except Exception as e:
+        print(f"profile warmup: {e}")
 
 _floor_cache   = {"val": 0.0, "ts": 0.0}
 _FLOOR_TTL     = 300             # 5-minute floor price cache
@@ -778,8 +837,13 @@ def _server_floor():
 
 def _loyalty_data(addr):
     """Hidden loyalty multiplier: +0.25 per 7 consecutive days without selling a card.
+    Result cached for 1 hour — sell history changes slowly.
     Max +5.0. Selling resets the streak and applies a temporary penalty.
     Result is an internal signal only — never broken out in the UI breakdown."""
+    hit = _loyalty_cache.get(addr)
+    if hit and time.time() - hit["ts"] < _LOYALTY_TTL:
+        return hit["bonus"]
+
     BURN   = "0x0000000000000000000000000000000000000000"
     TT     = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
     padded = "0x000000000000000000000000" + addr[2:].lower()
@@ -821,58 +885,41 @@ def _loyalty_data(addr):
             if to not in (BURN, addr):
                 sell_ages.append(block_age_days(int(lg["blockNumber"], 16)))
 
+        def _cache_return(v):
+            _loyalty_cache[addr] = {"ts": time.time(), "bonus": v}
+            return v
+
         if not sell_ages:
-            # Never sold — streak starts from first card received
             recv_raw = _rpc("eth_getLogs", [{
                 "address": CARDS_ADDR,
                 "topics": [TT, None, padded],
                 "fromBlock": "0x0", "toBlock": latest_hex
             }]) or []
             if not recv_raw:
-                return 0.0
+                return _cache_return(0.0)
             oldest_days = max(block_age_days(int(lg["blockNumber"], 16)) for lg in recv_raw)
-            bonus = min(5.0, (oldest_days / 7) * 0.25)
-            return round(bonus * 4) / 4
+            return _cache_return(round(min(5.0, (oldest_days / 7) * 0.25) * 4) / 4)
 
-        # Has sold — find days since most recent sell (min age = most recent)
         days_since_sell = min(sell_ages)
         sells_in_30d    = sum(1 for d in sell_ages if d < 30)
-
         if sells_in_30d >= 3:
             penalty_pts, penalty_days = -6, 21
         elif sells_in_30d == 2:
             penalty_pts, penalty_days = -4, 14
         else:
             penalty_pts, penalty_days = -2, 7
-
         if days_since_sell < penalty_days:
-            decay = 1 - (days_since_sell / penalty_days)
-            return round(penalty_pts * decay * 4) / 4
-        # Penalty expired — loyalty streak rebuilding
-        recovering = min(5.0, (days_since_sell / 7) * 0.25)
-        return round(recovering * 4) / 4
+            return _cache_return(round(penalty_pts * (1 - days_since_sell / penalty_days) * 4) / 4)
+        return _cache_return(round(min(5.0, (days_since_sell / 7) * 0.25) * 4) / 4)
 
     except Exception as e:
         print(f"loyalty {addr}: {e}")
         return 0.0
 
 
-@app.route("/api/operator-data")
-def operator_data_agg():
-    """Single aggregated payload for the operator profile page.
-    Fans out to identity, mesh wallet, leaderboard, and NFT lookup concurrently.
-    2-min server cache + client should use sessionStorage for instant revisits."""
-    from flask import request as freq
+def _compute_profile(addr):
+    """Fan out all upstream calls and return the assembled profile dict."""
     from concurrent.futures import ThreadPoolExecutor
-    addr = (freq.args.get("addr") or "").strip().lower()
-    if not (addr.startswith("0x") and len(addr) == 42):
-        return jsonify({"error": "bad address"}), 400
-    hit = _op_prof_cache.get(addr)
-    if hit and time.time() - hit["ts"] < _OP_PROF_TTL:
-        resp = jsonify(hit["data"])
-        resp.headers["Cache-Control"] = "public, max-age=60"
-        return resp
-    # Fan out all upstream calls in parallel — server-to-server is ~10-50ms each
     with ThreadPoolExecutor(max_workers=6) as ex:
         f_idn     = ex.submit(resolve_identity, addr, True)
         f_mesh    = ex.submit(_mesh_get, f"/wallet/{addr}")
@@ -886,13 +933,13 @@ def operator_data_agg():
     owned         = f_nfts.result()    or []
     hollow_count  = f_hollows.result() or 0
     loyalty_bonus = f_loyalty.result() or 0.0
-    floor         = _server_floor()                          # cheap — hits 5-min cache
-    genesis       = _genesis_global_stats()                  # cheap — 2-min cache
+    floor         = _server_floor()
+    genesis       = _genesis_global_stats()
     lb_entries = lb_raw.get("entries", []) if isinstance(lb_raw, dict) else []
     lb_entry   = next((e for e in lb_entries if (e.get("wallet") or "").lower() == addr), None)
     fmap       = _mesh_faction_map()
     idx        = _load_rarity_idx()
-    data = {
+    return {
         "identity": {
             "name":    identity.get("name"),
             "twitter": identity.get("twitter"),
@@ -909,9 +956,74 @@ def operator_data_agg():
         "genesis_stats": genesis,
         "loyalty_bonus": loyalty_bonus,
     }
-    _op_prof_cache[addr] = {"ts": time.time(), "data": data}
+
+def _bg_refresh(addr):
+    """Recompute profile in background and write to memory + SQLite."""
+    try:
+        data = _compute_profile(addr)
+        _op_prof_cache[addr] = {"ts": time.time(), "data": data}
+        _prof_db_put(addr, data)
+    except Exception as e:
+        print(f"bg_refresh {addr}: {e}")
+    finally:
+        with _refresh_lock_bg:
+            _refresh_set.discard(addr)
+
+def _queue_bg_refresh(addr):
+    with _refresh_lock_bg:
+        if addr in _refresh_set:
+            return
+        _refresh_set.add(addr)
+    threading.Thread(target=_bg_refresh, args=(addr,), daemon=True).start()
+
+@app.route("/api/operator-data")
+def operator_data_agg():
+    from flask import request as freq
+    addr = (freq.args.get("addr") or "").strip().lower()
+    if not (addr.startswith("0x") and len(addr) == 42):
+        return jsonify({"error": "bad address"}), 400
+
+    now = time.time()
+
+    # 1. Memory cache — fresh
+    hit = _op_prof_cache.get(addr)
+    if hit and now - hit["ts"] < _OP_PROF_TTL:
+        resp = jsonify(hit["data"])
+        resp.headers["Cache-Control"] = "public, max-age=300"
+        return resp
+
+    # 2. Memory cache — stale; serve immediately + refresh in background
+    if hit and now - hit["ts"] < _OP_PROF_STALE:
+        _queue_bg_refresh(addr)
+        resp = jsonify(hit["data"])
+        resp.headers["Cache-Control"] = "public, max-age=60"
+        return resp
+
+    # 3. SQLite — stale-while-revalidate from disk
+    db_data, db_age = _prof_db_get(addr)
+    if db_data:
+        _op_prof_cache[addr] = {"ts": now - db_age, "data": db_data}
+        if db_age < _OP_PROF_STALE:
+            _queue_bg_refresh(addr)
+            resp = jsonify(db_data)
+            resp.headers["Cache-Control"] = "public, max-age=60"
+            return resp
+        # DB too old — fall through to fresh fetch but use as fallback
+
+    # 4. Fresh compute (blocking)
+    try:
+        data = _compute_profile(addr)
+        _op_prof_cache[addr] = {"ts": now, "data": data}
+        _prof_db_put(addr, data)
+    except Exception as e:
+        print(f"operator_data_agg {addr}: {e}")
+        # Return stale DB data if fresh fetch failed
+        if db_data:
+            return jsonify(db_data)
+        return jsonify({"error": "upstream unavailable"}), 503
+
     resp = jsonify(data)
-    resp.headers["Cache-Control"] = "public, max-age=60"
+    resp.headers["Cache-Control"] = "public, max-age=300"
     return resp
 
 @app.route("/api/hollow-global")
@@ -1306,6 +1418,8 @@ moody_thread.start()
 
 identity_thread = threading.Thread(target=run_identity_refresh, daemon=True)
 identity_thread.start()
+
+_warmup_profile_cache()
 
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":
