@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -845,8 +845,6 @@ async function loadRefLeaderboard(){
     wrap.innerHTML='<div class="ca-empty" style="padding:24px">Referral leaderboard unavailable.</div>';
   }
 }
-function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function sa(a){return a?a.slice(0,6)+'…'+a.slice(-4):'';}
 
 (async function(){await loadCore();loadGas();loadMarket();loadTiers();loadRecentActivity();loadMesh();loadRefLeaderboard();})();
 setInterval(loadRecentActivity,60000);
