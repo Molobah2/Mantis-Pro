@@ -1055,16 +1055,48 @@ def contract_activity():
     if hit and time.time() - hit["ts"] < _CA_TTL:
         return jsonify(hit["data"])
 
-    padded = "0x" + addr[2:].lower().zfill(64)
+    padded = "0x000000000000000000000000" + addr[2:].lower()
+    TT     = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+    ZERO   = "0x0000000000000000000000000000000000000000"
+
+    def _rpc_ca(method, params):
+        r = requests.post(RPC_URL,
+            json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+            timeout=20).json()
+        if r.get("error"):
+            raise ValueError(r["error"].get("message", "rpc error"))
+        return r.get("result") or []
+
+    def _get_logs(caddr, topics, from_blk, to_blk):
+        return _rpc_ca("eth_getLogs", [{
+            "address": caddr, "topics": topics,
+            "fromBlock": hex(from_blk) if isinstance(from_blk, int) else from_blk,
+            "toBlock":   hex(to_blk)   if isinstance(to_blk,   int) else to_blk,
+        }])
+
+    def _fetch_logs_for(caddr, topics, latest_blk):
+        """Try full range first; fall back to 50k-block chunks if rejected."""
+        try:
+            return _get_logs(caddr, topics, "0x0", hex(latest_blk))
+        except Exception as e:
+            print(f"ca wide query failed ({e}), trying chunked")
+            CHUNK = 50_000
+            ranges = [(max(0, i - CHUNK + 1), i) for i in range(latest_blk, -1, -CHUNK)]
+            all_logs = []
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                futs = [ex.submit(_get_logs, caddr, topics, fb, tb) for fb, tb in ranges]
+                for f in futs:
+                    try: all_logs.extend(f.result())
+                    except: pass
+            return all_logs
 
     def _fetch_contract(cname, caddr):
         try:
-            latest_hex = _rpc("eth_blockNumber", []) or "0x0"
-            latest_blk = int(latest_hex, 16)
+            latest_blk = int(_rpc_ca("eth_blockNumber", []) or "0x0", 16)
             now_ts     = time.time()
             with ThreadPoolExecutor(max_workers=2) as ex:
-                f_in  = ex.submit(_rpc, "eth_getLogs", [{"address": caddr, "topics": [TT, None, padded],  "fromBlock": "0x0", "toBlock": latest_hex}])
-                f_out = ex.submit(_rpc, "eth_getLogs", [{"address": caddr, "topics": [TT, padded, None],  "fromBlock": "0x0", "toBlock": latest_hex}])
+                f_in  = ex.submit(_fetch_logs_for, caddr, [TT, None, padded], latest_blk)
+                f_out = ex.submit(_fetch_logs_for, caddr, [TT, padded, None], latest_blk)
             logs_in  = f_in.result()  or []
             logs_out = f_out.result() or []
             seen, txns = set(), []
@@ -1072,9 +1104,11 @@ def contract_activity():
                 key = (log.get("transactionHash"), log.get("logIndex", "0"))
                 if key in seen: continue
                 seen.add(key)
-                from_a = "0x" + log["topics"][1][-40:]
-                to_a   = "0x" + log["topics"][2][-40:]
-                tok_id = str(int(log["topics"][3], 16)) if len(log.get("topics", [])) > 3 else "?"
+                topics_list = log.get("topics", [])
+                if len(topics_list) < 3: continue
+                from_a = "0x" + topics_list[1][-40:]
+                to_a   = "0x" + topics_list[2][-40:]
+                tok_id = str(int(topics_list[3], 16)) if len(topics_list) > 3 else "?"
                 blkn   = int(log["blockNumber"], 16)
                 ts     = now_ts - (latest_blk - blkn) * 2
                 is_mint = from_a.lower() == ZERO.lower()
