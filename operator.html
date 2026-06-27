@@ -513,6 +513,14 @@ a{color:inherit;text-decoration:none}
 .ca-empty{text-align:center;color:var(--faint);font-size:11px;font-family:'JetBrains Mono',monospace;padding:28px}
 .ca-more-btn{display:block;width:calc(100% - 56px);margin:10px 28px 0;padding:10px;text-align:center;border-radius:9px;border:1px dashed var(--line);background:none;color:var(--faint);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:.13s}
 .ca-more-btn:hover{border-color:rgba(35,224,122,.3);color:var(--green);background:rgba(35,224,122,.03)}
+.ca-party-banner{display:flex;align-items:center;justify-content:space-between;margin:0 28px 10px;padding:9px 14px;border-radius:9px;background:rgba(35,224,122,.06);border:1px solid rgba(35,224,122,.2)}
+.ca-party-label{font-size:11px;font-weight:700;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:.3px}
+.ca-party-addr{color:var(--green);text-decoration:none;font-weight:800}
+.ca-party-addr:hover{text-decoration:underline}
+.ca-party-clear{font-size:10px;font-weight:800;color:var(--faint);background:none;border:1px solid var(--line);border-radius:5px;padding:3px 9px;cursor:pointer;font-family:inherit;transition:.12s}
+.ca-party-clear:hover{color:var(--ink);border-color:var(--muted)}
+.ca-cp-link{color:var(--green2);cursor:pointer;text-decoration:underline dotted;transition:color .1s}
+.ca-cp-link:hover{color:var(--green)}
 </style>
 </head>
 <body>
@@ -724,6 +732,7 @@ a{color:inherit;text-decoration:none}
         <button class="ca-chip"    data-f="Sent"     onclick="switchCAFilter('Sent')">Sent</button>
         <button class="ca-chip"    data-f="Burned"   onclick="switchCAFilter('Burned')">Burned</button>
       </div>
+      <div class="ca-party-banner" id="ca-party-banner" style="display:none"></div>
       <div class="ca-list" id="ca-list"><div class="ca-empty">Loading contract activity…</div></div>
       <button class="ca-more-btn" id="ca-more" style="display:none" onclick="loadMoreCA()">Load more →</button>
     </div>
@@ -1420,7 +1429,7 @@ function shareProfile(){if(navigator.share)navigator.share({title:'Operator Prof
 function toggleBd(){document.getElementById("bdpanel").classList.toggle("open");}
 
 // ── CONTRACT ACTIVITY EXPLORER ──────────────────────────────────────────────
-let _caData=null,_caContract='all',_caFilter='all',_caShown=0;
+let _caData=null,_caContract='all',_caFilter='all',_caShown=0,_caParty=null;
 const CA_PAGE=25;
 const CA_ICONS={Minted:'🪙',Received:'↓',Sent:'↑',Burned:'🔥'};
 const CA_CLASSES={Minted:'mint',Received:'received',Sent:'sent',Burned:'burned'};
@@ -1487,38 +1496,65 @@ function drawCAChart(){
 function renderCATxns(){
   if(!_caData)return;
   const all=(_caData.transactions||[]).filter(t=>_caFilter==='all'||t.action===_caFilter);
-  const slice=all.slice(0,_caShown+CA_PAGE);_caShown=slice.length;
+  // Party filter: only txns involving _caParty as counterparty
+  const visible = _caParty
+    ? all.filter(t => t.counterparty && t.counterparty.toLowerCase() === _caParty)
+    : all;
+
+  // Render party-filter banner
+  const partyBanner = document.getElementById('ca-party-banner');
+  if(partyBanner){
+    if(_caParty){
+      partyBanner.style.display='flex';
+      partyBanner.innerHTML=`<span class="ca-party-label">Interactions with <a href="/operator/${esc(_caParty)}" class="ca-party-addr">${esc(sa(_caParty))}</a></span><button class="ca-party-clear" onclick="clearCAParty()">× Clear</button>`;
+    }else{
+      partyBanner.style.display='none';
+    }
+  }
+
+  if(_caShown===0)_caShown=CA_PAGE;
+  const slice=visible.slice(0,_caShown);
   if(!slice.length){
-    document.getElementById('ca-list').innerHTML='<div class="ca-empty">No transactions match this filter.</div>';
+    document.getElementById('ca-list').innerHTML=`<div class="ca-empty">${_caParty?'No interactions with this address.':'No transactions match this filter.'}</div>`;
     document.getElementById('ca-more').style.display='none';return;
   }
   document.getElementById('ca-list').innerHTML=slice.map((t,i)=>{
     const icon=CA_ICONS[t.action]||'·',cls=CA_CLASSES[t.action]||'';
     const txShort=t.tx?t.tx.slice(0,10)+'…':'—';
     const badge=t.contract==='cards'?'<span class="ca-badge ca-badge-card">CARD</span>':'<span class="ca-badge ca-badge-hollow">HOLLOW</span>';
-    const cp=t.counterparty?`<span>${esc(sa(t.counterparty))}</span> · `:'';
-    const txHref=t.tx?`href="https://abscan.org/tx/${esc(t.tx)}" target="_blank" rel="noopener"`:'';
+    const cpAddr=t.counterparty||'';
+    const cpHtml=cpAddr
+      ? `<span class="ca-cp-link" title="${esc(cpAddr)}" onclick="event.stopPropagation();setCAParty('${esc(cpAddr.toLowerCase())}')">${esc(sa(cpAddr))}</span> · `
+      : '';
     return`<div class="ca-row rowin" style="animation-delay:${Math.min(i,.2)*0.03}s" onclick="if('${esc(t.tx)}')window.open('https://abscan.org/tx/${esc(t.tx)}','_blank','noopener')">
 <div class="ca-icon ${cls}">${icon}</div>
-<div class="ca-body"><div class="ca-label">${esc(t.label)}${badge}</div><div class="ca-meta">${cp}Block #${t.block.toLocaleString()}</div></div>
+<div class="ca-body"><div class="ca-label">${esc(t.label)}${badge}</div><div class="ca-meta">${cpHtml}Block #${t.block.toLocaleString()}</div></div>
 <span class="ca-time">${t.ts?esc(rel(t.ts)):'—'}</span>
 <span class="ca-tx" onclick="event.stopPropagation();navigator.clipboard.writeText('${esc(t.tx||'')}');this.textContent='Copied!';setTimeout(()=>this.textContent='${esc(txShort)}',1200)" title="Copy tx hash">${esc(txShort)}</span>
 </div>`;
   }).join('');
-  const hasMore=all.length>_caShown;
+  const hasMore=visible.length>_caShown;
   const moreBtn=document.getElementById('ca-more');
   moreBtn.style.display=hasMore?'':'none';
-  if(hasMore)moreBtn.textContent=`Load more · ${all.length-_caShown} remaining →`;
+  if(hasMore)moreBtn.textContent=`Load more · ${visible.length-_caShown} remaining →`;
 }
 
+function setCAParty(addr){
+  _caParty=addr;_caShown=0;
+  renderCATxns();
+}
+function clearCAParty(){
+  _caParty=null;_caShown=0;
+  renderCATxns();
+}
 function switchCATab(c){
-  _caContract=c;_caFilter='all';_caShown=0;
+  _caContract=c;_caFilter='all';_caParty=null;_caShown=0;
   document.querySelectorAll('.ca-tab').forEach(b=>b.classList.toggle('on',b.dataset.c===c));
   document.querySelectorAll('.ca-chip').forEach(b=>b.classList.toggle('on',b.dataset.f==='all'));
   if(_profAddr)loadCA(_profAddr);
 }
 function switchCAFilter(f){
-  _caFilter=f;_caShown=0;
+  _caFilter=f;_caParty=null;_caShown=0;
   document.querySelectorAll('.ca-chip').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
   renderCATxns();
 }

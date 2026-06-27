@@ -1090,27 +1090,59 @@ def contract_activity():
                     except: pass
             return all_logs
 
+    def _blk_timestamp(blkn):
+        try:
+            b = _rpc_ca("eth_getBlockByNumber", [hex(blkn), False])
+            if b and b.get("timestamp"):
+                return blkn, int(b["timestamp"], 16)
+        except:
+            pass
+        return blkn, None
+
     def _fetch_contract(cname, caddr):
         try:
             latest_blk = int(_rpc_ca("eth_blockNumber", []) or "0x0", 16)
-            now_ts     = time.time()
             with ThreadPoolExecutor(max_workers=2) as ex:
                 f_in  = ex.submit(_fetch_logs_for, caddr, [TT, None, padded], latest_blk)
                 f_out = ex.submit(_fetch_logs_for, caddr, [TT, padded, None], latest_blk)
             logs_in  = f_in.result()  or []
             logs_out = f_out.result() or []
-            seen, txns = set(), []
+
+            # Deduplicate
+            seen_keys, raw_logs = set(), []
             for log in logs_in + logs_out:
                 key = (log.get("transactionHash"), log.get("logIndex", "0"))
-                if key in seen: continue
-                seen.add(key)
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    raw_logs.append(log)
+
+            # Fetch real block timestamps in parallel — avoids wrong-block-time estimates
+            unique_blks = list(set(int(log["blockNumber"], 16) for log in raw_logs))
+            blk_ts = {}
+            if unique_blks:
+                with ThreadPoolExecutor(max_workers=min(12, len(unique_blks))) as ex:
+                    for blkn, ts in ex.map(_blk_timestamp, unique_blks):
+                        if ts is not None:
+                            blk_ts[blkn] = ts
+            # Reference for fallback: fetch latest block's real timestamp once
+            latest_ts = blk_ts.get(latest_blk)
+            if latest_ts is None:
+                _, latest_ts = _blk_timestamp(latest_blk)
+            now_ts = time.time()
+
+            txns = []
+            for log in raw_logs:
                 topics_list = log.get("topics", [])
                 if len(topics_list) < 3: continue
                 from_a = "0x" + topics_list[1][-40:]
                 to_a   = "0x" + topics_list[2][-40:]
                 tok_id = str(int(topics_list[3], 16)) if len(topics_list) > 3 else "?"
                 blkn   = int(log["blockNumber"], 16)
-                ts     = now_ts - (latest_blk - blkn) * 2
+                # Real timestamp if fetched; otherwise fall back using latest real ts
+                ts = blk_ts.get(blkn)
+                if ts is None:
+                    ref_ts = latest_ts or now_ts
+                    ts = round(ref_ts - (latest_blk - blkn) * 0.5)
                 is_mint = from_a.lower() == ZERO.lower()
                 is_burn = to_a.lower()   == ZERO.lower()
                 is_in   = to_a.lower()   == addr
