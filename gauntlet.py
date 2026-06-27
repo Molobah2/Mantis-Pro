@@ -897,16 +897,29 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 # simulates all stages and shows results. We watch for URL
                 # changes and text signals, clicking any "BEGIN STAGE" /
                 # "CONTINUE" prompts if the game requires manual advances.
-                for tick in range(20):
+                for tick in range(30):
                     await asyncio.sleep(5)
+
+                    if _crashed.is_set():
+                        log(f"Page crashed at tick {tick}")
+                        result = "error"
+                        break
+
                     url = page.url
                     txt = await _body_text(page)
                     u   = txt.upper()
                     _set_run_state(stage=tick)
-                    log(f"Tick {tick}: url={url.split('/')[-1]!r} txt={txt[80:400].strip()!r}")
+                    log(f"Tick {tick}: url={url.split('/')[-1]!r}")
+                    log(f"  body: {txt[:600].strip()!r}")
 
-                    if "CRAWL COMPLETE" in u or ("results" in url):
-                        log("CRAWL COMPLETE / results page")
+                    _WIN_KWS  = ("CRAWL COMPLETE", "SECTOR COMPLETE", "GAUNTLET COMPLETE",
+                                 "STAGE COMPLETE", "STAGE CLEAR", "CRAWL CLEAR",
+                                 "BATTLE COMPLETE", "YOU WIN", "HOLLOWS WIN")
+                    _LOSE_KWS = ("DEFEAT", "GAME OVER", "HOLLOWS LOST", "YOU LOSE",
+                                 "ALL HOLLOWS DOWN")
+
+                    if any(k in u for k in _WIN_KWS) or "results" in url:
+                        log(f"WIN detected: url={url.split('/')[-1]!r}")
                         stages_won = sector["stages"]
                         result     = "win"
                         await _click_kw(page, "VIEW RESULTS")
@@ -925,39 +938,43 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         await asyncio.sleep(3)
                         continue
 
-                    if "DEFEAT" in u:
+                    if any(k in u for k in _LOSE_KWS):
                         log("DEFEAT")
                         result = "defeat"
                         break
 
-                    # Click stage advance buttons — use Playwright text locator
-                    # so we find div/span "buttons" not just <button>/<a> elements.
-                    # _click_kw only queries button+a and silently fails on div-buttons.
+                    # Click stage-advance buttons via JS so we find ANY element
+                    # (div, span, etc.) not just <button>/<a>. The click is dispatched
+                    # as a bubbling MouseEvent so parent React handlers fire.
+                    _click_js = """(kw) => {
+                        const els = Array.from(document.querySelectorAll('*'));
+                        for (const el of els) {
+                            const t = (el.innerText || '').trim();
+                            if (t.includes(kw) && t.length < 80) {
+                                el.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
+                                return el.tagName + ':' + t.slice(0,40);
+                            }
+                        }
+                        return null;
+                    }"""
                     for btn_kw in ["BEGIN STAGE", "BEGIN CRAWL", "START STAGE"]:
                         if btn_kw in u:
                             try:
-                                loc = page.locator(f"text={btn_kw}")
-                                cnt = await loc.count()
-                                if cnt > 0:
-                                    await loc.first().click()
-                                    log(f"Clicked {btn_kw} ({cnt} matches)")
-                                else:
-                                    log(f"{btn_kw} in bodyText but not found by locator")
+                                clicked = await page.evaluate(_click_js, btn_kw)
+                                log(f"{btn_kw} JS click → {clicked}")
+                                await asyncio.sleep(2)
+                                if js_errors:
+                                    log(f"JS after click: {' | '.join(js_errors[-3:])}")
+                                    js_errors.clear()
                             except Exception as ex:
                                 log(f"{btn_kw} click error: {ex}")
-                            if js_errors:
-                                log(f"JS after click: {' | '.join(js_errors[-3:])}")
-                                js_errors.clear()
                             break
 
-                    # Also try advance-stage buttons for games that use different labels
                     for adv_kw in ["CONTINUE", "NEXT STAGE", "PROCEED", "VIEW RESULTS"]:
                         if adv_kw in u:
                             try:
-                                loc = page.locator(f"text={adv_kw}")
-                                if await loc.count() > 0:
-                                    await loc.first().click()
-                                    log(f"Advance-clicked {adv_kw}")
+                                await page.evaluate(_click_js, adv_kw)
+                                log(f"Advance-clicked {adv_kw}")
                             except Exception:
                                 pass
                             break
