@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Activity Explorer — Mantis Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -313,57 +315,43 @@ rpc("eth_blockNumber",[]).then(b=>{const el=document.getElementById("sb-blk");if
   inp.addEventListener('keydown',e=>{if(e.key==='Enter'){hide();actSearch();}});
 })();
 
-let allLogs=[], activeFilter='all', rendered=0, idmap={};
+let allEvents=[], activeFilter='all', rendered=0, idmap={};
 const BATCH=20;
 
-async function fetchLogs(){
-  const latest=hi(await rpc("eth_blockNumber",[]));
-  let logs=[], to=latest, chunks=0;
-  while(to>=0 && chunks<MAX_CHUNKS && logs.length<NEED){
-    const fb=Math.max(0,to-CHUNK+1);
-    try{const p=await rpc("eth_getLogs",[{address:CARDS,topics:[TT],fromBlock:"0x"+fb.toString(16),toBlock:"0x"+to.toString(16)}]);if(Array.isArray(p)&&p.length)logs=p.concat(logs);}catch(_){}
-    chunks++;to=fb-1;
-  }
-  return logs.sort((a,b)=>hi(a.blockNumber)-hi(b.blockNumber)||(a.logIndex||0)-(b.logIndex||0));
+function filtered(){
+  if(activeFilter==='mint')     return allEvents.filter(e=>e.action==='Minted');
+  if(activeFilter==='transfer') return allEvents.filter(e=>e.action==='Transferred');
+  return allEvents;
 }
-
-async function resolveTimestamps(logs){
-  const blocks=[...new Set(logs.map(l=>l.blockNumber))], ts={};
-  await Promise.all(blocks.map(async b=>{try{ts[b]=hi((await rpc("eth_getBlockByNumber",[b,false])).timestamp);}catch(_){ts[b]=null;}}));
-  return ts;
-}
-
-function filtered(){return activeFilter==='mint'?allLogs.filter(l=>ta(l.topics[1]).toLowerCase()===ZERO):activeFilter==='transfer'?allLogs.filter(l=>ta(l.topics[1]).toLowerCase()!==ZERO):allLogs;}
 
 function updateStats(){
-  const mints=allLogs.filter(l=>ta(l.topics[1]).toLowerCase()===ZERO).length;
-  const transfers=allLogs.length-mints;
-  const ops=new Set(allLogs.map(l=>ta(l.topics[2]).toLowerCase())).size;
-  set("s-total",allLogs.length.toLocaleString());
+  const mints=allEvents.filter(e=>e.action==='Minted').length;
+  const transfers=allEvents.filter(e=>e.action==='Transferred').length;
+  const ops=new Set(allEvents.map(e=>e.to.toLowerCase())).size;
+  set("s-total",allEvents.length.toLocaleString());
   set("s-mints",mints.toLocaleString());
   set("s-transfers",transfers.toLocaleString());
   set("s-ops",ops.toLocaleString());
-  const f=filtered();set("stat-pill",f.length.toLocaleString()+" events");
+  set("stat-pill",filtered().length.toLocaleString()+" events");
 }
 
-let ts={};
 async function renderFeed(reset=true){
   const feed=document.getElementById("feed"),btn=document.getElementById("load-more");
-  const logs=filtered().slice().reverse();
+  const evs=filtered(); // already newest-first from backend
   if(reset)rendered=0;
-  const batch=logs.slice(rendered,rendered+BATCH);
+  const batch=evs.slice(rendered,rendered+BATCH);
   if(!batch.length){feed.innerHTML='<div class="fstate">No events for this filter.</div>';btn.style.display="none";return;}
-  const addrs=[...new Set(batch.map(l=>ta(l.topics[2]).toLowerCase()))];
+  const addrs=[...new Set(batch.map(e=>e.to.toLowerCase()))];
   try{const r=await fetch('/api/identities?addrs='+addrs.join(',')).then(r=>r.json());Object.assign(idmap,r);}catch(_){}
-  const html=batch.map((l,idx)=>{
-    const f=ta(l.topics[1]).toLowerCase(),t=ta(l.topics[2]).toLowerCase(),id=BigInt(l.topics[3]).toString(),m=f===ZERO;
-    const idn=idmap[t]||{},nm=idn.name||sa(t),bts=ts[l.blockNumber];
+  const html=batch.map((ev,idx)=>{
+    const f=ev.from.toLowerCase(),t=ev.to.toLowerCase(),id=ev.token,m=ev.action==='Minted';
+    const idn=idmap[t]||{},nm=idn.name||sa(t);
     const fc=(FAC[idn.faction]||{}).c||'rgba(255,255,255,.15)';
     const xh=idn.twitter?'<span class="xlink" onclick="openX(event,\''+esc(idn.twitter)+'\')">@'+esc(idn.twitter)+'</span>':'';
     const fb=idn.faction?facBadge(idn.faction):'';
     const evb=m?'<span class="evbadge ev-m">Mint</span>':'<span class="evbadge ev-t">Transfer</span>';
     const actText=m?('Minted <strong>Litany Card #'+id+'</strong>'):('Acquired <strong>Card #'+id+'</strong> from '+sa(f));
-    const time=bts?rel(bts):'blk '+hi(l.blockNumber).toLocaleString();
+    const timeStr=ev.ts?rel(ev.ts):'blk '+ev.block.toLocaleString();
     const delay=(idx%BATCH*0.04).toFixed(2);
     return '<div class="ecard" style="animation-delay:'+delay+'s">'
       +'<div class="ec-body">'
@@ -376,14 +364,14 @@ async function renderFeed(reset=true){
         +'<img class="ec-thumb" loading="lazy" src="/api/card-image/'+id+'" alt="Card #'+id+'" onerror="this.classList.add(\'missing\')">'
       +'</div>'
       +'<div class="ec-foot">'
-        +'<div class="ec-meta"><span>'+time+'</span><span>Block '+hi(l.blockNumber).toLocaleString()+'</span></div>'
-        +'<div class="ec-links"><a class="ec-link" href="/operator/'+t+'">Operator ↗</a><a class="ec-link" href="https://abscan.org/tx/'+l.transactionHash+'" target="_blank">Tx ↗</a></div>'
+        +'<div class="ec-meta"><span>'+timeStr+'</span><span>Block '+ev.block.toLocaleString()+'</span></div>'
+        +'<div class="ec-links"><a class="ec-link" href="/operator/'+t+'">Operator ↗</a><a class="ec-link" href="https://abscan.org/tx/'+esc(ev.tx)+'" target="_blank">Tx ↗</a></div>'
       +'</div>'
     +'</div>';
   }).join('');
   if(reset)feed.innerHTML=html; else feed.insertAdjacentHTML('beforeend',html);
   rendered+=batch.length;
-  btn.style.display=rendered<logs.length?'block':'none';
+  btn.style.display=rendered<evs.length?'block':'none';
 }
 
 async function loadMore(){renderFeed(false);}
@@ -431,15 +419,15 @@ async function loadSidePanels(){
 }
 
 (async function(){
+  // Fire side panels in parallel — don't block the feed
+  loadSidePanels();
   try{
-    allLogs=await fetchLogs();
-    ts=await resolveTimestamps(allLogs.slice(-BATCH));
+    allEvents=await fetch('/api/recent-transfers').then(r=>r.json());
     updateStats();
     renderFeed(true);
   }catch(e){
     document.getElementById('feed').innerHTML='<div class="fstate">Feed unavailable: '+esc(e.message)+'</div>';
   }
-  loadSidePanels();
 })();
 </script>
 </body>

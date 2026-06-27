@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Operator Profile — Mantis Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1617,8 +1619,10 @@ function loadMoreCA(){_caShown+=CA_PAGE;renderCATxns();}
 
 // ── REFERRAL INTELLIGENCE ────────────────────────────────────────────────────
 async function loadReferrals(addr, opData){
-  // Per-wallet stats come from opData (already fetched in profile)
-  const ref = opData.referral || {};
+  // Fetch referral data independently — not bundled in profile to keep profile fast
+  let ref = {};
+  try{ ref = await fetch('/api/referral-data?addr='+encodeURIComponent(addr)).then(r=>r.json()); }catch(_){}
+  opData.referral = ref; // cache on opData for any future use
   document.getElementById('ref-total').textContent = ref.total_referees ?? '0';
   document.getElementById('ref-codes-count').textContent = (ref.codes||[]).length || '0';
 

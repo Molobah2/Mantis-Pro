@@ -857,29 +857,33 @@ def _loyalty_data(addr):
             timeout=12).json().get("result")
 
     try:
+        from concurrent.futures import ThreadPoolExecutor as _TPE
         latest_hex = _rpc("eth_blockNumber", []) or "0x0"
         latest_num = int(latest_hex, 16)
-        latest_blk = _rpc("eth_getBlockByNumber", [latest_hex, False]) or {}
-        latest_ts  = int(latest_blk.get("timestamp", "0x0"), 16)
+        ref_n      = max(1, latest_num - 1_000_000)
+
+        # Parallel: latest block ts, ref block ts, and sent logs — was 4 serial calls
+        with _TPE(max_workers=3) as ex:
+            f_lat  = ex.submit(_rpc, "eth_getBlockByNumber", [latest_hex, False])
+            f_ref  = ex.submit(_rpc, "eth_getBlockByNumber", [hex(ref_n), False])
+            f_sent = ex.submit(_rpc, "eth_getLogs", [{
+                "address": CARDS_ADDR, "topics": [TT, padded, None],
+                "fromBlock": "0x0", "toBlock": latest_hex
+            }])
+        latest_blk = f_lat.result()  or {}
+        ref_blk    = f_ref.result()  or {}
+        sent_raw   = f_sent.result() or []
+
+        latest_ts = int(latest_blk.get("timestamp", "0x0"), 16)
+        ref_ts    = int(ref_blk.get("timestamp",    "0x0"), 16)
         if latest_ts == 0 or latest_num == 0:
             return 0.0
 
-        # Derive seconds-per-block from a reference block 1 M blocks back
-        ref_n   = max(1, latest_num - 1_000_000)
-        ref_blk = _rpc("eth_getBlockByNumber", [hex(ref_n), False]) or {}
-        ref_ts  = int(ref_blk.get("timestamp", "0x0"), 16)
         secs_pb = (latest_ts - ref_ts) / max(1, latest_num - ref_n) if ref_ts > 0 else 2.0
         secs_pb = max(0.5, min(60.0, secs_pb))
 
         def block_age_days(bn):
             return (latest_num - bn) * secs_pb / 86400
-
-        # Sent Transfer logs — potential sells
-        sent_raw = _rpc("eth_getLogs", [{
-            "address": CARDS_ADDR,
-            "topics": [TT, padded, None],
-            "fromBlock": "0x0", "toBlock": latest_hex
-        }]) or []
 
         # Filter: non-burn, non-self transfers = market sells
         sell_ages = []
@@ -962,21 +966,19 @@ def _referral_data(addr):
 def _compute_profile(addr):
     """Fan out all upstream calls and return the assembled profile dict."""
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=7) as ex:
+    with ThreadPoolExecutor(max_workers=6) as ex:
         f_idn     = ex.submit(resolve_identity, addr, True)
         f_mesh    = ex.submit(_mesh_get, f"/wallet/{addr}")
         f_lb      = ex.submit(_mesh_leaderboard)
         f_nfts    = ex.submit(_server_owned_cards, addr)
         f_hollows = ex.submit(_hollow_balance, addr)
         f_loyalty = ex.submit(_loyalty_data, addr)
-        f_ref     = ex.submit(_referral_data, addr)
     identity      = f_idn.result()     or {}
     mesh_data     = f_mesh.result()
     lb_raw        = f_lb.result()      or {}
     owned         = f_nfts.result()    or []
     hollow_count  = f_hollows.result() or 0
     loyalty_bonus = f_loyalty.result() or 0.0
-    referral      = f_ref.result()     or {}
     floor         = _server_floor()
     genesis       = _genesis_global_stats()
     lb_entries = lb_raw.get("entries", []) if isinstance(lb_raw, dict) else []
@@ -999,7 +1001,6 @@ def _compute_profile(addr):
         "hollow_count":  hollow_count,
         "genesis_stats": genesis,
         "loyalty_bonus": loyalty_bonus,
-        "referral":      referral,
     }
 
 def _bg_refresh(addr):
@@ -1078,6 +1079,116 @@ def hollow_global():
     resp = jsonify(data)
     resp.headers["Cache-Control"] = "public, max-age=60"
     return resp
+
+@app.route("/api/referral-data")
+def referral_data_endpoint():
+    from flask import request as freq
+    addr = (freq.args.get("addr") or "").strip().lower()
+    if not (addr.startswith("0x") and len(addr) == 42):
+        return jsonify({"error": "bad address"}), 400
+    data = _referral_data(addr)
+    resp = jsonify(data)
+    resp.headers["Cache-Control"] = "public, max-age=120"
+    return resp
+
+_rt_cache = {"ts": 0, "data": []}
+_RT_TTL   = 120   # 2-minute cache for recent transfers
+
+@app.route("/api/recent-transfers")
+def recent_transfers():
+    from concurrent.futures import ThreadPoolExecutor
+    now = time.time()
+    if now - _rt_cache["ts"] < _RT_TTL and _rt_cache["data"]:
+        resp = jsonify(_rt_cache["data"])
+        resp.headers["Cache-Control"] = "public, max-age=60"
+        return resp
+    try:
+        def _rpc_rt(method, params):
+            r = requests.post(RPC_URL,
+                json={"jsonrpc":"2.0","id":1,"method":method,"params":params},
+                timeout=15).json()
+            if r.get("error"): raise ValueError(r["error"].get("message","rpc error"))
+            return r.get("result")
+
+        TT    = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+        ZERO  = "0x0000000000000000000000000000000000000000"
+        NEED  = 200
+        CHUNK = 20_000
+
+        latest_hex = _rpc_rt("eth_blockNumber", []) or "0x0"
+        latest_blk = int(latest_hex, 16)
+
+        # Parallel chunk scan backwards until we have NEED events
+        ranges, to = [], latest_blk
+        for _ in range(30):
+            fb = max(0, to - CHUNK + 1)
+            ranges.append((fb, to))
+            to = fb - 1
+            if to < 0: break
+
+        all_logs = []
+        for batch_start in range(0, len(ranges), 6):
+            batch = ranges[batch_start:batch_start+6]
+            with ThreadPoolExecutor(max_workers=len(batch)) as ex:
+                futs = {ex.submit(_rpc_rt, "eth_getLogs", [{
+                    "address": CARDS_ADDR, "topics": [TT],
+                    "fromBlock": hex(fb), "toBlock": hex(tb)
+                }]): (fb, tb) for fb, tb in batch}
+                for f in futs:
+                    try:
+                        result = f.result()
+                        if result: all_logs.extend(result)
+                    except: pass
+            if len(all_logs) >= NEED:
+                break
+
+        all_logs.sort(key=lambda l: (int(l["blockNumber"],16), int(l.get("logIndex","0x0"),16)))
+        recent = all_logs[-NEED:]
+
+        # Fetch block timestamps for unique blocks in parallel
+        unique_blks = list(set(int(l["blockNumber"],16) for l in recent))
+        blk_ts = {}
+        def _get_ts(bn):
+            try:
+                b = _rpc_rt("eth_getBlockByNumber", [hex(bn), False])
+                return bn, int(b["timestamp"],16) if b and b.get("timestamp") else None
+            except: return bn, None
+        with ThreadPoolExecutor(max_workers=min(12, len(unique_blks))) as ex:
+            for bn, ts in ex.map(_get_ts, unique_blks):
+                if ts: blk_ts[bn] = ts
+
+        events = []
+        for l in recent:
+            topics = l.get("topics",[])
+            if len(topics) < 3: continue
+            frm   = "0x" + topics[1][-40:]
+            to_a  = "0x" + topics[2][-40:]
+            tok   = str(int(topics[3],16)) if len(topics)>3 else "?"
+            blkn  = int(l["blockNumber"],16)
+            is_m  = frm.lower() == ZERO
+            is_b  = to_a.lower() == ZERO
+            action= "Minted" if is_m else ("Burned" if is_b else "Transferred")
+            events.append({
+                "tx":     l.get("transactionHash",""),
+                "block":  blkn,
+                "ts":     blk_ts.get(blkn),
+                "from":   frm,
+                "to":     to_a,
+                "token":  tok,
+                "action": action,
+            })
+
+        events.reverse()
+        _rt_cache["ts"]   = now
+        _rt_cache["data"] = events
+        resp = jsonify(events)
+        resp.headers["Cache-Control"] = "public, max-age=60"
+        return resp
+    except Exception as e:
+        print(f"recent_transfers: {e}")
+        resp = jsonify(_rt_cache["data"] or [])
+        resp.headers["Cache-Control"] = "public, max-age=30"
+        return resp
 
 @app.route("/api/referral-leaderboard")
 def referral_leaderboard():
