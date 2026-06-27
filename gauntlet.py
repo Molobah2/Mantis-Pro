@@ -611,21 +611,31 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     raise RuntimeError("Page crashed during hydration")
 
                 content = await _body_text(page)
-                log(f"Dashboard text (full): {content[:800].strip()!r}")
+                log(f"Dashboard text: {content[:600].strip()!r}")
                 log(f"Current URL: {page.url}")
                 log(f"Authed: {await _is_authed(page)}")
 
-                # Read localStorage to diagnose what the app actually stores
+                # Get full HTML to see what's on page even if innerText is empty
+                try:
+                    html_snippet = await asyncio.wait_for(
+                        page.evaluate("document.body ? document.body.innerHTML.slice(0,800) : ''"),
+                        timeout=5.0,
+                    )
+                    log(f"Body HTML: {html_snippet!r}")
+                except Exception as e:
+                    log(f"HTML err: {e}")
+
+                # Read ALL localStorage keys to find demo state key
                 try:
                     ls = await asyncio.wait_for(
                         page.evaluate("""
                             Object.entries(localStorage)
-                                .map(([k,v]) => k + '=' + String(v).slice(0,120))
-                                .join(' | ')
+                                .map(([k,v]) => k + '=' + String(v).slice(0,150))
+                                .join(' || ')
                         """),
                         timeout=5.0,
                     )
-                    log(f"localStorage: {ls[:600]}")
+                    log(f"localStorage: {ls[:800]}")
                 except Exception as e:
                     log(f"localStorage err: {e}")
 
