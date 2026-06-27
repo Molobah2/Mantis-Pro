@@ -930,11 +930,36 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         result = "defeat"
                         break
 
-                    # Click stage advance buttons if present
+                    # Click stage advance buttons — use Playwright text locator
+                    # so we find div/span "buttons" not just <button>/<a> elements.
+                    # _click_kw only queries button+a and silently fails on div-buttons.
                     for btn_kw in ["BEGIN STAGE", "BEGIN CRAWL", "START STAGE"]:
                         if btn_kw in u:
-                            await _click_kw(page, btn_kw)
-                            log(f"Clicked {btn_kw}")
+                            try:
+                                loc = page.locator(f"text={btn_kw}")
+                                cnt = await loc.count()
+                                if cnt > 0:
+                                    await loc.first().click()
+                                    log(f"Clicked {btn_kw} ({cnt} matches)")
+                                else:
+                                    log(f"{btn_kw} in bodyText but not found by locator")
+                            except Exception as ex:
+                                log(f"{btn_kw} click error: {ex}")
+                            if js_errors:
+                                log(f"JS after click: {' | '.join(js_errors[-3:])}")
+                                js_errors.clear()
+                            break
+
+                    # Also try advance-stage buttons for games that use different labels
+                    for adv_kw in ["CONTINUE", "NEXT STAGE", "PROCEED", "VIEW RESULTS"]:
+                        if adv_kw in u:
+                            try:
+                                loc = page.locator(f"text={adv_kw}")
+                                if await loc.count() > 0:
+                                    await loc.first().click()
+                                    log(f"Advance-clicked {adv_kw}")
+                            except Exception:
+                                pass
                             break
 
                     # Still on prep after many ticks = entry failed / no hollow
