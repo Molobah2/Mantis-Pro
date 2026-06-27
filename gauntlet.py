@@ -364,53 +364,19 @@ def _wagmi_seed_js(address: str) -> str:
     try {{ localStorage.setItem('store', JSON.stringify(wagmiState)); }}
     catch(e) {{ console.warn('[Mantis] wagmi seed failed', e); }}
 
-    // Seed the Litany demo game state with a hollow pre-equipped.
-    // Key: "litany_demo_" + address (lower-case), version must be 3.
-    const hollow = {{
-        id: 1, name: 'Mantis', type1: 0, type2: 0,
-        level: 1, xp: 0,
-        currentHP: 120, maxHP: 120,
-        bonusHP: 5, bonusATK: 3, bonusDEF: 3, bonusSPD: 3,
-        execPart: null, wardPart: null, fluxPart: null, kernelPart: null,
-        execRecessive: null, wardRecessive: null,
-        fluxRecessive: null, kernelRecessive: null,
-        execMinorRecessive: null, wardMinorRecessive: null,
-        fluxMinorRecessive: null, kernelMinorRecessive: null,
-        lastHPUpdate: NOW, synthCount: 0,
-        isAlive: true, lastCrawlAt: 0, crawlsSinceRest: 0,
-        flavorText: 'Forged in the Protocol.'
-    }};
-    const demoState = {{
-        version: 3,
-        walletAddress: ADDR,
-        createdAt: NOW, lastPlayedAt: NOW,
-        demoETH: 0.19, demoPEARL: 0,
-        hollows: [hollow],
-        nextHollowId: 2,
-        firmwareAssignments: {{}}, consumables: {{}},
-        dailySeed: 1, driftCompletedToday: false,
-        sectorRunsToday: {{}}, deepProgress: null,
-        pendingCompilations: [],
-        totalCrawlsCompleted: 0, totalKOs: 0,
-        deepestDeepStage: 0, totalSyntheses: 0,
-        crawlHistory: [],
-        tutorial: {{
-            boughtFirstHollow: true, assignedFirstFirmware: true,
-            completedFirstCrawl: true, completedFirstSynthesis: true
-        }},
-        marketPurchasedIds: [],
-        streaks: {{}}, dailyQuests: [], dailyQuestSeed: '',
-        achievements: {{}},
-        achievementCounters: {{
-            totalKOs: 0, hollowsBred: 0,
-            hollowsPurchased: 1, driftClears: 0
-        }},
-        exchange: {{}}, tradeHistory: [],
-        weeklyBoss: null, gauntletBest: 0, gauntletHistory: []
-    }};
-    try {{
-        localStorage.setItem('litany_demo_' + ADDR, JSON.stringify(demoState));
-    }} catch(e) {{ console.warn('[Mantis] demo state seed failed', e); }}
+    // Mark all tutorials complete so no overlay appears on prep page.
+    // Do NOT inject fake hollow data — the game reads the wallet's real hollows.
+    const existingRaw = localStorage.getItem('litany_demo_' + ADDR);
+    if (existingRaw) {{
+        try {{
+            const existing = JSON.parse(existingRaw);
+            if (existing.tutorial) {{
+                existing.tutorial.completedFirstCrawl  = true;
+                existing.tutorial.completedFirstSynthesis = true;
+            }}
+            localStorage.setItem('litany_demo_' + ADDR, JSON.stringify(existing));
+        }} catch(e) {{}}
+    }}
 
     // Fire connection events so wagmi re-reads our injected provider
     window.addEventListener('load', function() {{
@@ -848,17 +814,43 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         return False
 
                 # ── select hollow ──────────────────────────────────────────
-                for hollow in ["Mantis"] + sector["hollows"]:
+                # Parse actual hollow names from the prep page — never hardcode.
+                # The SELECT TEAM section lists each hollow by name.
+                _SKIP = {"LEVEL", "HP", "TYPE", "FW", "ATK", "DEF", "SPD",
+                         "SELECT", "TEAM", "SLOTS", "NONE", "DEFAULT", "AI",
+                         "INVENTORY", "EMPTY", "LOADOUT", "ITEMS", "STAGE",
+                         "ENTRY", "FEE", "ETH", "RESETS", "SIZE"}
+                available_hollows = []
+                section = prep_content
+                if "SELECT TEAM" in prep_content:
+                    s = prep_content.find("SELECT TEAM")
+                    e = prep_content.find("LOADOUT", s)
+                    section = prep_content[s:e] if e > s else prep_content[s:s+600]
+                for line in section.split("\n"):
+                    w = line.strip()
+                    # Hollow names: 3-20 chars, no digits, not a known header word
+                    if (3 <= len(w) <= 20
+                            and not any(c.isdigit() for c in w)
+                            and w.upper() not in _SKIP
+                            and w.replace(" ", "").isalpha()):
+                        available_hollows.append(w)
+                log(f"Hollows found on prep page: {available_hollows}")
+
+                for hollow in available_hollows:
                     try:
-                        await page.get_by_text(hollow, exact=False).first.click(timeout=3000)
-                        log(f"Hollow clicked: {hollow!r}")
+                        await page.get_by_text(hollow, exact=True).first.click(timeout=3000)
                         hollow_used = hollow
+                        log(f"Selected hollow: {hollow!r}")
                         await asyncio.sleep(2)
-                        body = await _body_text(page)
-                        log(f"After hollow click: {body[200:500]!r}")
                         break
                     except Exception as ex:
-                        log(f"Hollow {hollow!r} not found: {ex}")
+                        log(f"Could not click {hollow!r}: {ex}")
+
+                if not hollow_used:
+                    body_now = await _body_text(page)
+                    log(f"No hollow selected. Page: {body_now[:400]!r}")
+                    raise RuntimeError("No hollow available to select on prep page")
+
                 _set_run_state(hollow=hollow_used)
 
                 # ── enter sector ───────────────────────────────────────────
