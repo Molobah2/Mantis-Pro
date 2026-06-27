@@ -612,6 +612,18 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 log(f"Page snippet: {content[:400].strip()!r}")
                 log(f"Authed: {await _is_authed(page)}")
 
+                # Dump all localStorage keys so we can identify the right auth key
+                try:
+                    ls = await asyncio.wait_for(
+                        page.evaluate(
+                            "Object.entries(localStorage).map(([k,v]) => k + '=' + v.slice(0,80))"
+                        ),
+                        timeout=4.0,
+                    )
+                    log(f"localStorage: {ls}")
+                except Exception as e:
+                    log(f"localStorage read failed: {e}")
+
                 try:
                     ns = await context.storage_state()
                     _state_put("storage_state", json.dumps(ns))
