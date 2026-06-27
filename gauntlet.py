@@ -453,17 +453,22 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     "--disable-background-timer-throttling",
                     "--disable-renderer-backgrounding",
                     "--disable-features=TranslateUI,VizDisplayCompositor",
-                    "--single-process",
                 ],
             )
             context = await browser.new_context(**ctx_kwargs)
             await context.add_init_script(_provider_js(GAUNTLET_ADDR))
 
-            page = await context.new_page()
+            # Auto-inject signing bridge into any popup the site opens
+            async def _setup_page(p):
+                try:
+                    await p.expose_function("__pwSignPersonal", _sign_personal)
+                    await p.expose_function("__pwSignTyped",    _sign_typed)
+                except Exception:
+                    pass
+            context.on("page", lambda p: asyncio.ensure_future(_setup_page(p)))
 
-            # Expose Python signing functions to the page's JS context
-            await page.expose_function("__pwSignPersonal", _sign_personal)
-            await page.expose_function("__pwSignTyped",    _sign_typed)
+            page = await context.new_page()
+            await _setup_page(page)
 
             # Intercept network for API discovery (logged, not acted on)
             intercepted = []
@@ -472,16 +477,20 @@ async def run_battle(sector_key: str = "surge") -> dict:
 
             try:
                 # ── auth phase ──────────────────────────────────────────────
+                # Navigate to landing and wait for the SPA to boot and
+                # auto-call eth_requestAccounts via the injected provider.
+                # Do NOT click "Connect" buttons — they open AGW popups that
+                # kill the page context. The injected window.ethereum responds
+                # automatically when the dApp calls request({method:'eth_requestAccounts'}).
                 log("Navigating to demo landing...")
                 await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
-                await page.wait_for_timeout(4000)
+                log("Waiting for SPA + wallet auto-connect...")
+                await page.wait_for_timeout(12000)
 
-                if not await _is_authed(page):
-                    log("Not authenticated — attempting wallet connect...")
-                    await _maybe_connect_wallet(page)
-                    await page.wait_for_timeout(5000)
+                content = await page.inner_text("body")
+                log(f"Page text snippet: {content[:200].strip()!r}")
 
-                # Save auth state after connection attempt
+                # Save whatever auth state we have (cookies/localStorage)
                 try:
                     ns = await context.storage_state()
                     _state_put("storage_state", json.dumps(ns))
