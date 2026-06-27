@@ -451,9 +451,28 @@ async def _click_kw(page, keyword: str) -> bool:
     return False
 
 async def _extract_pearl(page) -> int:
-    """Read PEARL count from result screen text."""
+    """Read PEARL count from CRAWL REPORT screen.
+
+    CRAWL REPORT layout:
+        NET GAINS
+        +0.002 ETH
+        +741        ← PEARL (standalone integer between ETH line and XP line)
+        +50 XP
+    """
     try:
         text = await _body_text(page)
+        # Primary: find the +N sandwiched between ETH and XP in NET GAINS
+        m = re.search(
+            r'NET GAINS.*?\+[\d.]+\s*ETH\s*\+(\d+)',
+            text, re.I | re.DOTALL
+        )
+        if m:
+            return int(m.group(1))
+        # Secondary: ×N from per-stage demo_pearl display (e.g. "demo_pearl ×246")
+        m = re.search(r'×(\d+)', text)
+        if m:
+            return int(m.group(1))
+        # Fallback legacy patterns
         for pat in [r"(\d+)\s*PEARL", r"PEARL[:\s]+(\d+)", r"earned[:\s]+(\d+)"]:
             m = re.search(pat, text, re.I)
             if m:
@@ -877,15 +896,37 @@ async def run_battle(sector_key: str = "surge") -> dict:
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await asyncio.sleep(1)
 
-                # Build enter-button keyword list from sector name + fallbacks
+                # Click ANY element (div/button/a) by text — CDP-level, trusted.
+                # Used for all UI interactions where the element tag is unknown.
+                async def _click_any(keyword: str) -> bool:
+                    try:
+                        handles = await page.query_selector_all(
+                            "button, div, span, a, p, li"
+                        )
+                        for h in handles:
+                            try:
+                                t = (await asyncio.wait_for(
+                                    h.inner_text(), timeout=0.3)).strip()
+                                if keyword.upper() in t.upper() and len(t) < 120:
+                                    await h.click()
+                                    log(f"_click_any({keyword!r}): clicked {t[:60]!r}")
+                                    return True
+                            except Exception:
+                                continue
+                    except Exception as ex:
+                        log(f"_click_any({keyword!r}) err: {ex}")
+                    return False
+
+                # Build enter-button keyword list from sector name + fallbacks.
+                # `_click_any` covers div-buttons that `_click_kw` (button/a only) misses.
                 entered = False
                 enter_kws = [
                     f"ENTER {sector['name'].upper()}",   # e.g. ENTER SURGE SECTOR
-                    f"ENTER {sector['enter_kw']}",        # e.g. ENTER SECTOR
+                    f"ENTER {sector['enter_kw']}",
                     "ENTER DRIFT", "ENTER SECTOR", "▸ ENTER", "ENTER",
                 ]
                 for kw in enter_kws:
-                    if await _click_kw(page, kw):
+                    if await _click_any(kw):
                         log(f"Entered sector via '{kw}'")
                         entered = True
                         break
@@ -893,10 +934,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
                     log("WARNING: enter button not found — proceeding")
 
                 # ── wait for battle / auto-battle to resolve ────────────────
-                # Combat is autonomous: after entering the sector the game
-                # simulates all stages and shows results. We watch for URL
-                # changes and text signals, clicking any "BEGIN STAGE" /
-                # "CONTINUE" prompts if the game requires manual advances.
+                # The demo resolves ALL stages at once after clicking BEGIN STAGE.
+                # After battle: "STAGE 3/3 STAGE CLEARED ... ▸ CRAWL COMPLETE — VIEW RESULTS"
+                # Then: CRAWL REPORT with "NET GAINS +ETH +PEARL +XP"
                 for tick in range(30):
                     await asyncio.sleep(5)
 
@@ -922,8 +962,9 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         log(f"WIN detected: url={url.split('/')[-1]!r}")
                         stages_won = sector["stages"]
                         result     = "win"
-                        await _click_kw(page, "VIEW RESULTS")
-                        await asyncio.sleep(3)
+                        # Button is "▸ CRAWL COMPLETE — VIEW RESULTS" (div, not <button>)
+                        await _click_any("VIEW RESULTS")
+                        await asyncio.sleep(5)
                         break
 
                     if "VICTORY" in u:
@@ -942,29 +983,6 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         log("DEFEAT")
                         result = "defeat"
                         break
-
-                    # Click stage-advance / advance buttons via ElementHandle.click()
-                    # (CDP-level mouse event — trusted, triggers React synthetic handlers).
-                    # dispatchEvent(MouseEvent) is untrusted and React may ignore it.
-                    async def _click_any(keyword: str) -> bool:
-                        """Click first element (any tag) whose innerText contains keyword."""
-                        try:
-                            handles = await page.query_selector_all(
-                                "button, div, span, a, p, li"
-                            )
-                            for h in handles:
-                                try:
-                                    t = (await asyncio.wait_for(
-                                        h.inner_text(), timeout=0.3)).strip()
-                                    if keyword.upper() in t.upper() and len(t) < 100:
-                                        await h.click()
-                                        log(f"Clicked [{keyword}] via handle: {t[:50]!r}")
-                                        return True
-                                except Exception:
-                                    continue
-                        except Exception as ex:
-                            log(f"_click_any({keyword!r}) err: {ex}")
-                        return False
 
                     for btn_kw in ["BEGIN STAGE", "BEGIN CRAWL", "START STAGE"]:
                         if btn_kw in u:
@@ -989,11 +1007,16 @@ async def run_battle(sector_key: str = "surge") -> dict:
                         await asyncio.sleep(2)
 
                 # ── extract PEARL ─────────────────────────────────────────
-                await asyncio.sleep(3)
+                # Give CRAWL REPORT time to render before reading
+                await asyncio.sleep(5)
+                # Log full results page for diagnostics
+                results_txt = await _body_text(page)
+                log(f"Results page: {results_txt[:800].strip()!r}")
                 pearl = await _extract_pearl(page)
                 log(f"PEARL earned: {pearl}")
 
-                await _click_kw(page, "RETURN TO DASHBOARD")
+                # "▸ RETURN TO DASHBOARD" is a div-button
+                await _click_any("RETURN TO DASHBOARD")
                 await asyncio.sleep(3)
 
                 try:
