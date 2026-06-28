@@ -503,159 +503,52 @@ async def _is_authed(page) -> bool:
 
 async def run_battle(sector_key: str = "surge") -> dict:
     """
-    Play one full gauntlet run in the given sector.
+    Play one full gauntlet run. Mirrors working_battle.py flow exactly.
     Returns dict: {result, stages_won, pearl, hollow, sector}.
-    Hard 90-second timeout prevents hung browser from blocking forever.
     """
     from playwright.async_api import async_playwright
 
     sector      = SECTORS.get(sector_key, SECTORS["surge"])
-    hollow_used = sector["hollows"][0]
+    hollow_used = ""
     logs        = []
     result      = "error"
     stages_won  = 0
     pearl       = 0
 
     def log(msg: str):
-        print(f"  [gauntlet:{sector_key}] {msg}")
+        print(f"  [gauntlet] {msg}")
         logs.append(msg)
         _set_run_state(last_log=msg)
 
     if not GAUNTLET_ADDR:
         return {"result": "error", "stages_won": 0, "pearl": 0,
-                "hollow": hollow_used, "sector": sector_key}
+                "hollow": "", "sector": sector_key}
 
-    _set_run_state(running=True, sector=sector_key, hollow=hollow_used,
+    _set_run_state(running=True, sector=sector_key, hollow="",
                    stage=0, started=time.time(), last_log="Starting...")
 
     async def _run():
         nonlocal result, stages_won, pearl, hollow_used
 
         async with async_playwright() as pw:
-            ctx_kwargs = {"viewport": {"width": 1280, "height": 800}}
-            saved = _state_get("storage_state")
-            if saved:
-                try:
-                    ctx_kwargs["storage_state"] = json.loads(saved)
-                    log("Restored auth state from DB")
-                except Exception:
-                    pass
-
             log("Launching browser...")
             browser = await pw.chromium.launch(
                 headless=HEADLESS,
                 args=[
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
+                    "--no-sandbox", "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage", "--disable-gpu",
                     "--disable-software-rasterizer",
-                    "--disable-webgl",
-                    "--disable-webgl2",
-                    "--disable-3d-apis",
-                    "--disable-accelerated-2d-canvas",
-                    "--disable-accelerated-video-decode",
                     "--disable-extensions",
                     "--disable-background-networking",
-                    "--disable-background-timer-throttling",
-                    "--disable-renderer-backgrounding",
-                    "--disable-features=TranslateUI,VizDisplayCompositor",
-                    # Removed --js-flags memory cap — it caused hard V8 OOM crashes
-                    # because wagmi+rainbowkit alone need >256 MB of compiled heap.
                 ],
             )
-            log("Browser launched")
-            context = await browser.new_context(**ctx_kwargs)
-
-            await context.route(
-                re.compile(
-                    r"\.(png|jpg|jpeg|gif|webp|mp4|webm|ogg|mp3|wav|woff2?|ttf|otf)(\?.*)?$",
-                    re.I,
-                ),
-                lambda route: route.abort(),
-            )
-            # Replace the 280KB RainbowKit chunk with a proper Turbopack-format stub.
-            # Correct format: .push([scriptRef, id1,id2,...idN, factory])
-            # factory calls e.s(["name",0,value], moduleId) for each module.
-            # All 24 module IDs from the original chunk are registered here.
-            # 110163 (viem http) is NOT in the original chunk — left unblocked.
-            _rk_stub = (
-                "(function(){"
-                "var _R=globalThis.React;"
-                "function _pt(p){return _R?_R.createElement(_R.Fragment,null,p&&p.children):p&&p.children||null;}"
-                "function _noop(){}"
-                "function _hook(){return{data:undefined,isLoading:false,error:null};}"
-                f"var _A='{GAUNTLET_ADDR}',_CID=2741,_UID='injected';"
-                "function _cfg(opts){"
-                "var _ssr=!!(opts&&opts.ssr);"
-                "var _map=new Map([[_UID,{accounts:[_A],chainId:_CID,connector:{id:_UID,name:'MetaMask',type:'injected',uid:_UID}}]]);"
-                "var _st={connections:_map,chainId:_CID,current:_UID,status:'connected'};"
-                "return{chains:(opts&&opts.chains)||[],connectors:[],"
-                "storage:{getItem:function(){return null;},setItem:_noop,removeItem:_noop},"
-                "ssr:_ssr,"
-                "_internal:{ssr:_ssr,"
-                "connectors:{setup:function(){return{id:_UID,type:'injected',uid:_UID,name:'MetaMask',emitter:{on:_noop,off:_noop,emit:_noop}};},"
-                "getState:function(){return[];},setState:_noop,subscribe:function(){return _noop;}},"
-                "events:{conn:{onConnect:_noop,onDisconnect:_noop},change:_noop,disconnect:_noop},"
-                "chains:{getState:function(){return _st;},subscribe:function(){return _noop;}}},"
-                "get state(){return _st;},"
-                "getState:function(){return _st;},"
-                "setState:function(fn){if(typeof fn==='function')_st=fn(_st);},"
-                "subscribe:function(l){return _noop;},"
-                "getClient:function(){return{request:async function(){return null;},chain:{id:_CID}};},"
-                "reconnect:_noop};}"
-                "(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["
-                "typeof document!=='undefined'?document.currentScript:void 0,"
-                "103111,289600,485738,196943,885157,151794,356327,"
-                "160518,557073,373403,712369,700510,249994,985369,"
-                "174960,979454,377349,604140,689862,794702,200057,"
-                "627152,518714,722652,"
-                "function(e){"
-                "e.s(['darkTheme',0,function(){return{};}],103111);"
-                "e.s(['lightTheme',0,function(){return{};}],289600);"
-                "e.s(['midnightTheme',0,function(){return{};}],485738);"
-                "e.s(['createMapValueFn',0,function(){return function(){return null;};}],196943);"
-                "e.s(['createSprinkles',0,function(){return function(){return{};};}],885157);"
-                "e.s(['useAccountEffect',0,_noop],151794);"
-                "e.s(['default',0,_noop],356327);"
-                "e.s(['useBalance',0,_hook],160518);"
-                "e.s(['normalize',0,function(v){return v;}],557073);"
-                "e.s(['useEnsAvatar',0,_hook],373403);"
-                "e.s(['useEnsName',0,_hook],712369);"
-                "e.s(['usePublicClient',0,function(){return undefined;}],700510);"
-                "e.s(['useDisconnect',0,function(){return{disconnect:_noop};}],249994);"
-                "e.s(['RemoveScroll',0,_pt],985369);"
-                "e.s(['assignInlineVars',0,function(){return{};}],174960);"
-                "e.s(['useConnect',0,function(){return{connect:_noop,connectors:[],status:'disconnected'};}],979454);"
-                "e.s(['ProviderNotFoundError',0,function ProvNotFound(){},'SwitchChainNotSupportedError',0,function SwitchNotSupported(){}],377349);"
-                "e.s(['useSwitchChain',0,function(){return{switchChain:_noop};}],604140);"
-                "e.s(['createConnector',0,function(fn){return fn;}],689862);"
-                "e.s(['injected',0,function(){return{id:'injected',type:'injected'};}],794702);"
-                "e.s(['createConfig',0,_cfg],200057);"
-                "e.s(['walletConnect',0,function(){return{id:'walletConnect'};}],627152);"
-                "e.s(['metaMask',0,function(){return{id:'metaMask'};}],518714);"
-                "e.s(['RainbowKitProvider',0,_pt],722652);"
-                "}]);})();"
-            )
-            await context.route(
-                re.compile(r"/chunks/0v449np~zp91v\.js", re.I),
-                lambda route: route.fulfill(
-                    status=200, body=_rk_stub,
-                    content_type="application/javascript"
-                ),
+            context = await browser.new_context(
+                viewport={"width": 1280, "height": 800}
             )
 
-            # Inject window.ethereum provider + wagmi state seed before any JS runs
+            # Inject wallet provider so the demo sees us as connected
             await context.add_init_script(_provider_js(GAUNTLET_ADDR))
             await context.add_init_script(_wagmi_seed_js(GAUNTLET_ADDR))
-            await context.add_init_script("""
-                const s = document.createElement('style');
-                s.textContent = `*, *::before, *::after {
-                    animation-duration: 0.001s !important;
-                    transition-duration: 0.001s !important;
-                }`;
-                document.addEventListener('DOMContentLoaded', () => document.head.appendChild(s));
-            """)
 
             async def _setup_page(p):
                 try:
@@ -668,306 +561,187 @@ async def run_battle(sector_key: str = "surge") -> dict:
             page = await context.new_page()
             await _setup_page(page)
 
-            intercepted = []
-            page.on("request", lambda req: intercepted.append(req.url)
-                    if "/api/" in req.url else None)
-
-            # Crash detection: raise immediately instead of hanging on next eval
-            _crashed = asyncio.Event()
-            page.on("crash", lambda: _crashed.set())
-
-            # Capture JS console errors for diagnostics
-            js_errors = []
-            page.on("console", lambda msg: js_errors.append(f"[{msg.type}] {msg.text[:200]}")
-                    if msg.type in ("error", "warning") else None)
-            page.on("pageerror", lambda err: js_errors.append(f"[pageerror] {str(err)[:200]}"))
-
-            async def _safe_eval(js: str, t: float = 5.0) -> str:
-                eval_task  = asyncio.ensure_future(page.evaluate(js))
-                crash_task = asyncio.ensure_future(_crashed.wait())
-                done, pending = await asyncio.wait(
-                    [eval_task, crash_task],
-                    return_when=asyncio.FIRST_COMPLETED,
-                    timeout=t,
-                )
-                for task in pending:
-                    task.cancel()
-                if _crashed.is_set():
-                    raise RuntimeError("Page crashed")
-                if eval_task in done:
-                    return eval_task.result()
-                raise RuntimeError(f"eval timed out after {t}s")
-
-            try:
-                # ── auth phase ──────────────────────────────────────────────
-                # Navigate to /demo first (SSR content renders immediately).
-                # The wagmi seed + window.ethereum make the app see us as
-                # connected. After hydration (~10s) it should redirect to
-                # /demo/dashboard. We then wait there for full render (~20s).
-                log("Navigating to demo landing...")
-                await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
-                log("Waiting 8s for hydration + auto-redirect...")
-                await asyncio.sleep(8)
-
-                if _crashed.is_set():
-                    raise RuntimeError("Page crashed during hydration")
-
-                log(f"URL after landing wait: {page.url}")
-                content = await _body_text(page)
-                log(f"Landing text: {content[:300].strip()!r}")
-
-                # If still on landing (not redirected), go to dashboard directly
-                if "dashboard" not in page.url:
-                    log("No auto-redirect — navigating to dashboard directly...")
-                    await page.goto(DASHBOARD_URL, wait_until="domcontentloaded", timeout=30000)
-                    log("Waiting 12s for React hydration on dashboard...")
-                    await asyncio.sleep(12)
-
-                if _crashed.is_set():
-                    raise RuntimeError("Page crashed on dashboard")
-
-                content = await _body_text(page)
-                log(f"Dashboard text: {content[:600].strip()!r}")
-                log(f"URL: {page.url}")
-                log(f"Authed: {await _is_authed(page)}")
-                if js_errors:
-                    log(f"JS errors (dashboard): {' | '.join(js_errors[-6:])}")
-
-                # Capture all localStorage keys for diagnostics
+            # ── click_btn mirrors working_battle.py exactly ────────────────
+            async def click_btn(keyword):
                 try:
-                    ls = await asyncio.wait_for(
-                        page.evaluate("""
-                            Object.entries(localStorage)
-                                .map(([k,v]) => k + '=' + String(v).slice(0,120))
-                                .join(' || ')
-                        """),
-                        timeout=5.0,
-                    )
-                    log(f"localStorage: {ls[:600]}")
-                except Exception as e:
-                    log(f"localStorage err: {e}")
-
-                try:
-                    ns = await context.storage_state()
-                    _state_put("storage_state", json.dumps(ns))
-                    log("State saved")
+                    buttons = await page.query_selector_all("button, a")
+                    for btn in buttons:
+                        text = await btn.inner_text()
+                        if keyword.upper() in text.upper():
+                            await btn.click()
+                            await asyncio.sleep(2)
+                            return True
                 except Exception:
                     pass
+                return False
 
-                # ── navigate to sector prep ─────────────────────────────────
-                log(f"Navigating to {sector['name']}...")
+            try:
+                # ── landing / first-run onboarding ────────────────────────
+                log("Navigating to demo landing...")
+                await page.goto(DEMO_BASE, wait_until="domcontentloaded", timeout=30000)
+                log("Waiting 15s for wallet connect...")
+                await asyncio.sleep(15)
+
+                content = await page.inner_text("body")
+                log(f"Landing: {content[:300].strip()!r}")
+
+                if "ENTER THE GAUNTLET" in content.upper():
+                    log("First-run: clicking ENTER THE GAUNTLET")
+                    await asyncio.sleep(5)
+                    await click_btn("ENTER THE GAUNTLET")
+                    await asyncio.sleep(5)
+
+                # ── run one battle (working_battle.py: run_one_battle) ─────
+                log(f"\nNavigating to {sector['name']}...")
                 await page.goto(sector["url"], wait_until="domcontentloaded", timeout=30000)
-                log(f"Prep URL: {page.url}")
-                # Wait for React to hydrate on prep page
-                await asyncio.sleep(12)
+                await asyncio.sleep(5)
 
-                if _crashed.is_set():
-                    raise RuntimeError("Page crashed on prep page")
-
-                prep_content = await _body_text(page)
-                log(f"Prep page: {prep_content[:800].strip()!r}")
-
-                if js_errors:
-                    log(f"JS errors: {' | '.join(js_errors[-8:])}")
-
-                # Also log localStorage demo state to confirm our hollow seed was read
+                # Close tutorial if present
                 try:
-                    demo_ls = await asyncio.wait_for(
-                        page.evaluate(f"localStorage.getItem('litany_demo_{GAUNTLET_ADDR}')"),
-                        timeout=5.0,
-                    )
-                    if demo_ls:
-                        import json as _j
-                        ds = _j.loads(demo_ls)
-                        log(f"Demo state: {len(ds.get('hollows',[]))} hollow(s), "
-                            f"demoETH={ds.get('demoETH')}, ver={ds.get('version')}")
-                    else:
-                        log("Demo state: not found in localStorage")
-                except Exception as e:
-                    log(f"Demo state read err: {e}")
-
-                # Dismiss any tutorial/modal overlay before hollow selection.
-                # The close button text is "×" (U+00D7), not the letter "x".
-                try:
-                    for el in await page.query_selector_all("button, div, span"):
-                        t = (await el.inner_text()).strip()
-                        if t in ("×", "x", "X", "✕", "close", "Close", "CLOSE"):
-                            await el.click()
+                    buttons = await page.query_selector_all("button")
+                    for btn in buttons:
+                        text = await btn.inner_text()
+                        if text.strip().lower() in ("x", "×", "✕"):
+                            await btn.click()
                             await asyncio.sleep(1)
                             break
                 except Exception:
                     pass
 
-                # ── helpers (proven pattern from working_battle.py) ────────
-                log(f"Prep page:\n{prep_content[:800].strip()}")
+                # Read prep page and select first available hollow
+                prep_text = await page.inner_text("body")
+                log(f"Prep page:\n{prep_text[:800]}")
 
-                async def _gbt(text: str, timeout_ms: int = 5000) -> bool:
-                    """Click via page.get_by_text — proven to find any element by text."""
-                    try:
-                        await page.get_by_text(text, exact=False).first.click(
-                            timeout=timeout_ms
-                        )
-                        log(f"gbt_click({text!r}) OK")
-                        return True
-                    except Exception as ex:
-                        log(f"gbt_click({text!r}) failed: {ex}")
-                        return False
-
-                # ── select hollow ──────────────────────────────────────────
-                # Parse actual hollow names from the prep page — never hardcode.
-                # The SELECT TEAM section lists each hollow by name.
-                _SKIP = {"LEVEL", "HP", "TYPE", "FW", "ATK", "DEF", "SPD",
-                         "SELECT", "TEAM", "SLOTS", "NONE", "DEFAULT", "AI",
-                         "INVENTORY", "EMPTY", "LOADOUT", "ITEMS", "STAGE",
-                         "ENTRY", "FEE", "ETH", "RESETS", "SIZE"}
-                available_hollows = []
-                section = prep_content
-                if "SELECT TEAM" in prep_content:
-                    s = prep_content.find("SELECT TEAM")
-                    e = prep_content.find("LOADOUT", s)
-                    section = prep_content[s:e] if e > s else prep_content[s:s+600]
-                for line in section.split("\n"):
-                    w = line.strip()
-                    # Hollow names: 3-20 chars, no digits, not a known header word
-                    if (3 <= len(w) <= 20
-                            and not any(c.isdigit() for c in w)
-                            and w.upper() not in _SKIP
-                            and w.replace(" ", "").isalpha()):
-                        available_hollows.append(w)
-                log(f"Hollows found on prep page: {available_hollows}")
-
-                for hollow in available_hollows:
-                    try:
-                        await page.get_by_text(hollow, exact=True).first.click(timeout=3000)
-                        hollow_used = hollow
-                        log(f"Selected hollow: {hollow!r}")
-                        await asyncio.sleep(2)
-                        break
-                    except Exception as ex:
-                        log(f"Could not click {hollow!r}: {ex}")
+                # Use get_by_text like working_battle.py for hollow selection
+                try:
+                    await page.get_by_text("Monolith", exact=False).first.click(timeout=3000)
+                    hollow_used = "Monolith"
+                    log("Monolith selected!")
+                    await asyncio.sleep(2)
+                except Exception:
+                    pass
 
                 if not hollow_used:
-                    body_now = await _body_text(page)
-                    log(f"No hollow selected. Page: {body_now[:400]!r}")
-                    raise RuntimeError("No hollow available to select on prep page")
+                    # Try every hollow name visible in SELECT TEAM section
+                    _SKIP = {"LEVEL", "HP", "TYPE", "FW", "ATK", "DEF", "SPD",
+                             "SELECT", "TEAM", "SLOTS", "NONE", "DEFAULT", "AI",
+                             "INVENTORY", "EMPTY", "LOADOUT", "ITEMS",
+                             "ENTRY", "FEE", "ETH", "RESETS", "SIZE", "SURGE",
+                             "RIGID", "VOID", "DRIFT"}
+                    section = prep_text
+                    if "SELECT TEAM" in prep_text:
+                        s = prep_text.find("SELECT TEAM")
+                        e = prep_text.find("LOADOUT", s)
+                        section = prep_text[s:e] if e > s else prep_text[s:s+600]
+                    for line in section.split("\n"):
+                        w = line.strip()
+                        if (3 <= len(w) <= 20 and not any(c.isdigit() for c in w)
+                                and w.upper() not in _SKIP and w.replace(" ","").isalpha()):
+                            try:
+                                await page.get_by_text(w, exact=True).first.click(timeout=3000)
+                                hollow_used = w
+                                log(f"Selected hollow: {w!r}")
+                                await asyncio.sleep(2)
+                                break
+                            except Exception:
+                                continue
 
-                _set_run_state(hollow=hollow_used)
+                _set_run_state(hollow=hollow_used or "unknown")
+                log(f"Hollow used: {hollow_used!r}")
 
-                # ── enter sector ───────────────────────────────────────────
+                # Scroll and click Enter
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await asyncio.sleep(1)
+                try:
+                    buttons = await page.query_selector_all("button")
+                    for btn in buttons:
+                        text = await btn.inner_text()
+                        if "ENTER" in text.upper() and "SECTOR" in text.upper():
+                            await btn.click()
+                            log("Entered sector!")
+                            await asyncio.sleep(5)
+                            break
+                except Exception:
+                    log("Could not click Enter via button — trying get_by_text")
+                    try:
+                        await page.get_by_text("ENTER", exact=False).first.click(timeout=3000)
+                        await asyncio.sleep(5)
+                    except Exception as ex:
+                        log(f"Enter failed: {ex}")
 
-                entered = False
-                for kw in [sector["name"], "ENTER SURGE SECTOR",
-                            "ENTER SECTOR", "ENTER DRIFT", "ENTER"]:
-                    if await _gbt(kw, timeout_ms=3000):
-                        entered = True
-                        break
-                log(f"Enter clicked: {entered} — waiting for battle page...")
-
-                # Wait up to 15s for URL to become '/battle'
-                for _ in range(15):
-                    await asyncio.sleep(1)
-                    if "battle" in page.url:
-                        log(f"On battle page: {page.url}")
-                        break
-                else:
-                    body_now = await _body_text(page)
-                    log(f"Not on battle after 15s. URL={page.url!r} body={body_now[:300]!r}")
-                    raise RuntimeError("Never navigated to battle page after ENTER")
-
-                # ── battle loop (mirrors working_battle.py) ─────────────────
-                _WIN_KWS  = ("CRAWL COMPLETE", "STAGE CLEAR", "SECTOR COMPLETE",
-                             "STAGE COMPLETE", "YOU WIN", "HOLLOWS WIN")
-                _LOSE_KWS = ("DEFEAT", "GAME OVER", "YOU LOSE")
-
-                for stage in range(1, sector["stages"] + 2):
-                    log(f"Stage {stage}...")
-
-                    await _gbt("BEGIN STAGE", timeout_ms=5000)
-                    log("BEGIN STAGE clicked — waiting 10s for battle to resolve...")
-                    await asyncio.sleep(10)
-
-                    if _crashed.is_set():
-                        log("Page crashed during battle")
-                        result = "error"
-                        break
-
-                    txt = await _body_text(page)
-                    u   = txt.upper()
-                    log(f"  After battle: {txt[100:500].strip()!r}")
+                # ── 3-stage battle loop (working_battle.py) ───────────────
+                for stage in range(1, sector["stages"] + 1):
+                    log(f"  Stage {stage}...")
                     _set_run_state(stage=stage)
 
-                    if any(k in u for k in _WIN_KWS):
-                        log("WIN detected — clicking VIEW RESULTS")
+                    await click_btn("BEGIN STAGE")
+                    log("  Battle running...")
+                    await asyncio.sleep(10)
+
+                    content = await page.inner_text("body")
+                    log(f"  After battle: {content[100:500].strip()!r}")
+
+                    if "CRAWL COMPLETE" in content.upper():
+                        log("  CRAWL COMPLETE!")
                         stages_won = sector["stages"]
                         result = "win"
                         await asyncio.sleep(2)
-                        await _gbt("VIEW RESULTS", timeout_ms=5000)
-                        await asyncio.sleep(5)
+                        await click_btn("VIEW RESULTS")
+                        await asyncio.sleep(3)
                         break
 
-                    if "VICTORY" in u:
+                    elif "VICTORY" in content.upper():
                         stages_won += 1
-                        log(f"VICTORY stage {stage} — stages_won={stages_won}")
-                        await _gbt("CONTINUE", timeout_ms=3000)
+                        log(f"  Stage {stage} VICTORY!")
+                        await click_btn("CONTINUE")
                         await asyncio.sleep(3)
-                        txt2 = await _body_text(page)
-                        if any(k in txt2.upper() for k in _WIN_KWS):
-                            result = "win"
+
+                        content = await page.inner_text("body")
+                        if "CRAWL COMPLETE" in content.upper():
+                            log("  CRAWL COMPLETE after CONTINUE!")
                             stages_won = sector["stages"]
-                            await _gbt("VIEW RESULTS", timeout_ms=5000)
-                            await asyncio.sleep(5)
+                            result = "win"
+                            await asyncio.sleep(2)
+                            await click_btn("VIEW RESULTS")
+                            await asyncio.sleep(3)
                             break
+
                         if stage < sector["stages"]:
                             await asyncio.sleep(3)
-                            await page.evaluate("window.scrollTo(0,0)")
+                            await page.evaluate("window.scrollTo(0, 0)")
                             await asyncio.sleep(1)
-                            await page.evaluate("window.scrollTo(0,document.body.scrollHeight)")
+                            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                             await asyncio.sleep(1)
-                            await _gbt("NEXT STAGE", timeout_ms=3000)
+                            await click_btn("NEXT STAGE")
                             await asyncio.sleep(5)
                         else:
-                            result = "win"
                             stages_won = sector["stages"]
-                            await _gbt("VIEW RESULTS", timeout_ms=5000)
-                            await asyncio.sleep(5)
+                            result = "win"
+                            content = await page.inner_text("body")
+                            if "CRAWL COMPLETE" in content.upper():
+                                await click_btn("VIEW RESULTS")
+                            else:
+                                await click_btn("RESULT")
+                            await asyncio.sleep(3)
                             break
-                        continue
 
-                    if any(k in u for k in _LOSE_KWS):
-                        log("DEFEAT")
+                    elif "DEFEAT" in content.upper():
+                        log(f"  Stage {stage} DEFEAT!")
                         result = "defeat"
                         break
 
-                    # Still on prep after many ticks = entry failed / no hollow
-                    if "prep" in url and tick >= 4:
-                        log(f"Still on prep at tick {tick} — retrying enter")
-                        await _click_kw(page, "ENTER")
-                        await asyncio.sleep(2)
-
-                # ── extract PEARL ─────────────────────────────────────────
-                # Give CRAWL REPORT time to render before reading
-                await asyncio.sleep(5)
-                # Log full results page for diagnostics
-                results_txt = await _body_text(page)
-                log(f"Results page: {results_txt[:800].strip()!r}")
+                # ── extract PEARL ──────────────────────────────────────────
+                await asyncio.sleep(4)
+                content = await page.inner_text("body")
+                log(f"Results page:\n{content[:600]}")
                 pearl = await _extract_pearl(page)
                 log(f"PEARL earned: {pearl}")
 
-                if not await _gbt("RETURN TO DASHBOARD", timeout_ms=5000):
-                    await page.goto(DASHBOARD_URL)
+                # Return to dashboard
+                if not await click_btn("RETURN TO DASHBOARD"):
+                    log("Going to dashboard manually...")
+                    await page.goto(DASHBOARD_URL, wait_until="domcontentloaded", timeout=30000)
                 await asyncio.sleep(3)
-
-                try:
-                    fs = await context.storage_state()
-                    _state_put("storage_state", json.dumps(fs))
-                except Exception:
-                    pass
-
-                api_calls = list(set(intercepted))
-                if api_calls:
-                    log(f"API calls: {', '.join(api_calls[:10])}")
 
             except Exception as e:
                 log(f"Battle error: {e}")
