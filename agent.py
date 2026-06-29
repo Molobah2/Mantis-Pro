@@ -1114,8 +1114,11 @@ def referral_data_endpoint():
     resp.headers["Cache-Control"] = "public, max-age=120"
     return resp
 
-_rt_cache = {"ts": 0, "data": []}
-_RT_TTL   = 120   # 2-minute cache for recent transfers
+_rt_cache      = {"ts": 0, "data": []}
+_RT_TTL        = 120   # 2-minute cache for recent transfers
+
+_holders_cache = {"ts": 0.0, "data": None}
+_HOLDERS_TTL   = 600   # 10-minute cache for full holder snapshot
 
 @app.route("/api/recent-transfers")
 def recent_transfers():
@@ -1212,6 +1215,199 @@ def recent_transfers():
         resp = jsonify(_rt_cache["data"] or [])
         resp.headers["Cache-Control"] = "public, max-age=30"
         return resp
+
+@app.route("/holders")
+def holders_intelligence():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "holders.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+@app.route("/api/holders-overview")
+def holders_overview():
+    from concurrent.futures import ThreadPoolExecutor
+    from flask import jsonify
+    now = time.time()
+    if now - _holders_cache["ts"] < _HOLDERS_TTL and _holders_cache["data"]:
+        resp = jsonify(_holders_cache["data"])
+        resp.headers["Cache-Control"] = "public, max-age=300"
+        return resp
+    try:
+        TT   = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+        ZERO = "0x0000000000000000000000000000000000000000"
+
+        def _rpc_h(method, params):
+            r = requests.post(RPC_URL,
+                json={"jsonrpc":"2.0","id":1,"method":method,"params":params},
+                timeout=20).json()
+            if r.get("error"):
+                raise ValueError(r["error"].get("message","rpc error"))
+            return r.get("result")
+
+        latest_hex = _rpc_h("eth_blockNumber", []) or "0x0"
+        latest_blk = int(latest_hex, 16)
+        CHUNK = 50_000
+        ranges = [(max(0, i - CHUNK + 1), i) for i in range(latest_blk, -1, -CHUNK)]
+
+        def _fetch_chunk(fb, tb):
+            return _rpc_h("eth_getLogs", [{
+                "address": CARDS_ADDR, "topics": [TT],
+                "fromBlock": hex(fb), "toBlock": hex(tb)
+            }])
+
+        all_logs = []
+        with ThreadPoolExecutor(max_workers=14) as ex:
+            futs = [ex.submit(_fetch_chunk, fb, tb) for fb, tb in ranges]
+            for f in futs:
+                try:
+                    r = f.result()
+                    if r: all_logs.extend(r)
+                except: pass
+
+        all_logs.sort(key=lambda l: (int(l["blockNumber"],16), int(l.get("logIndex","0x0"),16)))
+
+        # Build holder balance map (net received - sent)
+        recv_map, sent_map = {}, {}
+        for lg in all_logs:
+            tops = lg.get("topics", [])
+            if len(tops) < 4: continue
+            frm = "0x" + tops[1][-40:].lower()
+            to  = "0x" + tops[2][-40:].lower()
+            if frm != ZERO: sent_map[frm] = sent_map.get(frm, 0) + 1
+            if to  != ZERO: recv_map[to]  = recv_map.get(to, 0) + 1
+
+        holders = {}
+        for addr in (set(recv_map) | set(sent_map)):
+            net = recv_map.get(addr, 0) - sent_map.get(addr, 0)
+            if net > 0:
+                holders[addr] = net
+
+        total_holders = len(holders)
+        total_cards   = sum(holders.values())
+        sorted_by_count = sorted(holders.items(), key=lambda x: x[1], reverse=True)
+
+        # Tier thresholds
+        tiers = {"micro":{"min":1,"max":2,"count":0,"cards":0},
+                 "collector":{"min":3,"max":9,"count":0,"cards":0},
+                 "advanced":{"min":10,"max":24,"count":0,"cards":0},
+                 "elite":{"min":25,"max":49,"count":0,"cards":0},
+                 "whale":{"min":50,"max":99999,"count":0,"cards":0}}
+        for _, cnt in sorted_by_count:
+            if cnt <= 2:   t="micro"
+            elif cnt <= 9: t="collector"
+            elif cnt <= 24:t="advanced"
+            elif cnt <= 49:t="elite"
+            else:          t="whale"
+            tiers[t]["count"]+=1; tiers[t]["cards"]+=cnt
+
+        whale_count = tiers["whale"]["count"]
+
+        # Concentration: top N holders % of total supply
+        def _conc(n):
+            top_n = sum(c for _,c in sorted_by_count[:n])
+            return round(top_n / max(1, total_cards) * 100, 2)
+
+        concentration = {
+            "top1":   _conc(1),   "top5":   _conc(5),
+            "top10":  _conc(10),  "top25":  _conc(25),
+            "top50":  _conc(50),  "top100": _conc(100),
+            "top500": _conc(500), "top1000":_conc(1000),
+        }
+
+        # Recent 24h activity — look at last ~43200 blocks (~24h at 2s/block)
+        BLOCKS_24H = 43_200
+        cutoff_blk = max(0, latest_blk - BLOCKS_24H)
+        recent_logs = [l for l in all_logs if int(l["blockNumber"],16) >= cutoff_blk]
+        active_addrs_24h = set()
+        new_recv_24h = set()
+        for lg in recent_logs:
+            tops = lg.get("topics", [])
+            if len(tops) < 3: continue
+            frm = "0x" + tops[1][-40:].lower()
+            to  = "0x" + tops[2][-40:].lower()
+            if frm != ZERO: active_addrs_24h.add(frm)
+            if to  != ZERO:
+                active_addrs_24h.add(to)
+                new_recv_24h.add(to)
+        # "New 24h" = addresses that received a card in 24h and weren't in pre-24h snapshot
+        pre24_recv = set()
+        for lg in all_logs:
+            if int(lg["blockNumber"],16) < cutoff_blk:
+                tops = lg.get("topics",[])
+                if len(tops) >= 3:
+                    pre24_recv.add("0x" + tops[2][-40:].lower())
+        new_holders_24h = len(new_recv_24h - pre24_recv)
+        active_24h = len(active_addrs_24h)
+
+        # Top holders list (top 100, resolve identities for top 50)
+        top_50_addrs = [addr for addr, _ in sorted_by_count[:50]]
+        id_map = {}
+        try:
+            id_map = {a: id_get(a) or {} for a in top_50_addrs}
+        except: pass
+
+        top_holders = []
+        for rank, (addr, cnt) in enumerate(sorted_by_count[:100], 1):
+            idn = id_map.get(addr) or {}
+            top_holders.append({
+                "rank":    rank,
+                "address": addr,
+                "cards":   cnt,
+                "pct":     round(cnt / max(1, total_cards) * 100, 2),
+                "name":    idn.get("name"),
+                "twitter": idn.get("twitter"),
+                "faction": None,
+            })
+
+        # Whale moves: recent large transfers (5+ cards from same sender in 24h)
+        whale_sender_counts = {}
+        whale_events = {}
+        for lg in recent_logs:
+            tops = lg.get("topics", [])
+            if len(tops) < 4: continue
+            frm = "0x" + tops[1][-40:].lower()
+            to  = "0x" + tops[2][-40:].lower()
+            if frm == ZERO or to == ZERO: continue
+            whale_sender_counts[frm] = whale_sender_counts.get(frm, 0) + 1
+            if frm not in whale_events:
+                whale_events[frm] = {"from": frm, "to": to, "count": 0,
+                                      "block": int(lg["blockNumber"],16),
+                                      "tx": lg.get("transactionHash","")}
+            whale_events[frm]["count"] += 1
+
+        whale_moves = sorted(
+            [{"from":frm,"count":whale_events[frm]["count"],
+              "block":whale_events[frm]["block"],"tx":whale_events[frm]["tx"]}
+             for frm,cnt in whale_sender_counts.items() if cnt >= 3],
+            key=lambda x: x["count"], reverse=True
+        )[:20]
+
+        result = {
+            "indexed_block":   latest_blk,
+            "indexed_ts":      int(now),
+            "total_holders":   total_holders,
+            "total_cards":     total_cards,
+            "active_24h":      active_24h,
+            "new_holders_24h": new_holders_24h,
+            "whale_count":     whale_count,
+            "top10_conc":      concentration["top10"],
+            "tiers":           tiers,
+            "concentration":   concentration,
+            "top_holders":     top_holders,
+            "whale_moves":     whale_moves,
+        }
+        _holders_cache["ts"]   = now
+        _holders_cache["data"] = result
+        resp = jsonify(result)
+        resp.headers["Cache-Control"] = "public, max-age=300"
+        return resp
+    except Exception as e:
+        print(f"holders_overview: {e}")
+        if _holders_cache["data"]:
+            return jsonify(_holders_cache["data"])
+        return jsonify({"error": str(e), "total_holders": 0}), 500
 
 @app.route("/api/referral-leaderboard")
 def referral_leaderboard():

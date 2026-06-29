@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Holder Intelligence — Mantis Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#040806;--bg1:#070e0a;--bg2:#0a1410;--bg3:#0e1a12;
+  --p0:rgba(255,255,255,.016);--p1:rgba(255,255,255,.032);--p2:rgba(255,255,255,.054);--p3:rgba(255,255,255,.08);
+  --l0:rgba(255,255,255,.055);--l1:rgba(255,255,255,.09);--l2:rgba(255,255,255,.16);
+  --ink:#eaf2ec;--ink2:rgba(234,242,236,.78);--ink3:rgba(234,242,236,.52);--ink4:rgba(234,242,236,.32);--ink5:rgba(234,242,236,.14);
+  --green:#23e07a;--green2:#10a050;--green3:#077a39;
+  --glow:rgba(35,224,122,.12);--glow2:rgba(35,224,122,.05);
+  --gold:#d4af60;--blue:#3b82f6;--red:#ef4444;--purple:#a855f7;--cyan:#22d3ee;--orange:#f97316;
+  --up:#23e07a;--dn:#ef4444;
+  --sb:200px;--rb:30px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+a{color:inherit;text-decoration:none}
+::-webkit-scrollbar{width:3px;height:3px}::-webkit-scrollbar-thumb{background:var(--l0);border-radius:2px}
+::selection{background:rgba(35,224,122,.2)}
+
+/* RIBBON */
+.ribbon{height:var(--rb);background:var(--bg1);border-bottom:1px solid var(--l0);display:flex;align-items:center;overflow:hidden;flex-shrink:0;z-index:100}
+.ribbon-label{flex-shrink:0;padding:0 12px;font-size:7.5px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--green);background:var(--bg1);border-right:1px solid var(--l0);height:100%;display:flex;align-items:center;gap:6px;z-index:2}
+.ribbon-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:beat 2s infinite;flex-shrink:0}
+.ribbon-track{flex:1;overflow:hidden;position:relative}
+.ribbon-inner{display:flex;white-space:nowrap}
+.ribbon-item{display:inline-flex;align-items:center;gap:8px;padding:0 18px;border-right:1px solid var(--l0);height:var(--rb);flex-shrink:0}
+.rk{font-size:7.5px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--ink4)}
+.rv{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:10.5px;color:var(--ink2)}
+.rv.g{color:var(--green)}
+
+/* SHELL */
+.shell{flex:1;display:flex;overflow:hidden}
+
+/* SIDEBAR */
+.sb{width:var(--sb);min-width:var(--sb);height:100%;background:rgba(4,8,6,.98);border-right:1px solid var(--l0);display:flex;flex-direction:column;flex-shrink:0}
+.sb-logo{padding:14px 14px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--l0)}
+.sb-mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--green),var(--green3));display:grid;place-items:center;color:#021008;font-size:14px;font-weight:900;box-shadow:0 4px 14px rgba(35,224,122,.28);flex-shrink:0}
+.sb-brand{font-weight:900;font-size:11px;letter-spacing:-.1px}
+.sb-brand small{display:block;font-size:7px;letter-spacing:2px;text-transform:uppercase;color:var(--ink5);font-weight:700;margin-top:1px}
+.sb-nav{flex:1;padding:8px 0;overflow-y:auto}
+.sb-g{font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--ink5);padding:0 14px;margin:12px 0 4px}
+.sb-a{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:11.5px;font-weight:600;color:var(--ink3);transition:color .12s,background .12s;border-left:2px solid transparent;cursor:pointer}
+.sb-a:hover{color:var(--ink);background:var(--p1)}
+.sb-a.on{color:var(--green);background:rgba(35,224,122,.05);border-left-color:var(--green)}
+.sb-a .si{width:13px;text-align:center;font-size:11px;flex-shrink:0}
+.sb-eco{padding:10px 14px;border-top:1px solid var(--l0)}
+.sb-eco-t{font-size:7px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--ink5);margin-bottom:7px}
+.sb-row{display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px}
+.sb-k{color:var(--ink4)}.sb-v{font-family:'JetBrains Mono',monospace;font-weight:600}
+.sb-v.live{color:var(--green)}
+.sb-agent{padding:10px 14px;border-top:1px solid var(--l0);display:flex;align-items:center;gap:8px}
+.sb-agent img{width:32px;height:32px;border-radius:8px;border:1px solid var(--l0);flex-shrink:0}
+.sb-al{font-size:9.5px;font-weight:800;letter-spacing:.2px}.sb-as{font-size:9px;color:var(--ink4)}
+.odot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:beat 2s infinite;margin-left:auto;flex-shrink:0}
+
+/* MAIN */
+.main{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;overflow:hidden}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;gap:10px;padding:0 20px;height:46px;background:rgba(4,8,6,.96);border-bottom:1px solid var(--l0);flex-shrink:0}
+.topbar-title{font-size:12px;font-weight:900;letter-spacing:-.2px;color:var(--ink2);white-space:nowrap}
+.tsearch{position:relative;flex:1;max-width:300px;display:flex;align-items:center;background:var(--p1);border:1px solid var(--l0);border-radius:9px;transition:border-color .18s,box-shadow .18s}
+.tsearch:focus-within{border-color:rgba(35,224,122,.4);box-shadow:0 0 0 3px rgba(35,224,122,.07)}
+.tsearch-icon{position:absolute;left:10px;color:var(--ink4);font-size:12px;pointer-events:none}
+.tsearch input{flex:1;background:none;border:none;outline:none;color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:11px;padding:8px 8px 8px 30px}
+.tsearch input::placeholder{color:var(--ink4)}
+.ts-ac{position:absolute;top:calc(100% + 5px);left:0;right:0;background:var(--bg2);border:1px solid rgba(35,224,122,.2);border-radius:9px;box-shadow:0 16px 48px rgba(0,0,0,.7);z-index:500;overflow:hidden;max-height:240px;overflow-y:auto}
+.ts-ac-item{display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;font-size:11.5px;border-bottom:1px solid var(--l0);transition:background .12s}
+.ts-ac-item:hover{background:var(--glow2)}
+.ts-ac-nm{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ts-ac-ad{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink4);flex-shrink:0}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.live-pill{display:flex;align-items:center;gap:5px;font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--green);padding:3px 9px;border:1px solid rgba(35,224,122,.2);border-radius:6px;background:rgba(35,224,122,.04)}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:beat 1.6s infinite}
+.blk-badge{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink3);padding:3px 9px;border:1px solid var(--l0);border-radius:6px}
+.export-btn{display:flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:var(--ink3);padding:4px 11px;border:1px solid var(--l0);border-radius:6px;background:var(--p1);cursor:pointer;transition:color .12s,border-color .12s}
+.export-btn:hover{color:var(--green);border-color:rgba(35,224,122,.3)}
+
+/* SCROLL BODY */
+.scroll-body{flex:1;overflow-y:auto;overflow-x:hidden}
+
+/* HERO */
+.hero-header{padding:28px 28px 20px;background:linear-gradient(140deg,rgba(35,224,122,.028) 0%,transparent 55%);border-bottom:1px solid var(--l0);position:relative;overflow:hidden}
+.hero-header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--green) 0%,transparent 55%);opacity:.5}
+.hero-header::after{content:'';position:absolute;top:-80px;right:-80px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(35,224,122,.06) 0%,transparent 65%);pointer-events:none}
+.hero-eyebrow{font-size:7.5px;font-weight:900;letter-spacing:2.5px;text-transform:uppercase;color:var(--green);display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.eyebrow-dot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:beat 2s infinite}
+.hero-title{font-size:clamp(24px,2.8vw,38px);font-weight:900;letter-spacing:-1.5px;line-height:1.02;margin-bottom:10px}
+.hero-title .accent{color:var(--green)}
+.hero-sub{font-size:12px;color:var(--ink3);line-height:1.65;max-width:520px;margin-bottom:16px}
+.hero-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.meta-chip{display:flex;align-items:center;gap:5px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--ink4);padding:3px 10px;border:1px solid var(--l0);border-radius:5px;background:var(--p0)}
+.meta-chip .mc-lbl{color:var(--ink5);font-size:8.5px;letter-spacing:.5px;text-transform:uppercase;margin-right:3px}
+
+/* TABS */
+.tab-nav{display:flex;gap:0;border-bottom:1px solid var(--l0);background:var(--bg1);padding:0 24px;flex-shrink:0;overflow-x:auto}
+.tab-btn{display:flex;align-items:center;gap:6px;padding:12px 16px;font-size:11.5px;font-weight:700;color:var(--ink4);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit}
+.tab-btn:hover{color:var(--ink2)}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green)}
+.tab-badge{font-size:8px;font-weight:900;padding:1px 5px;border-radius:3px;background:rgba(35,224,122,.12);color:var(--green)}
+.tab-soon{font-size:7.5px;font-weight:900;padding:1px 5px;border-radius:3px;background:var(--p2);color:var(--ink5);letter-spacing:.3px}
+
+/* KPI ROW */
+.kpi-row{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid var(--l0)}
+.kpi{padding:16px 18px;border-right:1px solid var(--l0);position:relative;overflow:hidden;transition:background .15s;cursor:default}
+.kpi:last-child{border-right:none}
+.kpi:hover{background:var(--p0)}
+.kpi-eyebrow{font-size:7px;font-weight:900;letter-spacing:1.8px;text-transform:uppercase;color:var(--ink4);margin-bottom:8px;display:flex;align-items:center;gap:5px}
+.kpi-val{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:900;letter-spacing:-1.5px;line-height:1;color:var(--ink);margin-bottom:5px}
+.kpi-val.g{color:var(--green)}
+.kpi-val.gold{color:var(--gold)}
+.kpi-delta{font-size:9.5px;font-family:'JetBrains Mono',monospace;color:var(--ink4);display:flex;align-items:center;gap:5px}
+.kpi-delta .up{color:var(--up)}.kpi-delta .dn{color:var(--dn)}
+.kpi-sparkline{margin-top:10px;opacity:.5}
+.kpi-tip{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--l0);border-radius:6px;padding:6px 10px;font-size:10px;color:var(--ink3);white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:10}
+.kpi:hover .kpi-tip{opacity:1}
+
+/* SKELETON */
+.skel{background:linear-gradient(90deg,var(--p1) 25%,var(--p2) 50%,var(--p1) 75%);background-size:200% 100%;animation:shimmer 1.6s infinite;border-radius:4px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* MAIN GRID */
+.main-grid{display:grid;grid-template-columns:1fr 380px;border-bottom:1px solid var(--l0)}
+.mg-left{border-right:1px solid var(--l0)}
+.mg-right{}
+
+/* PANEL HEADER */
+.panel-hd{display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--l0)}
+.panel-lbl{font-size:7.5px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--ink4)}
+.panel-badge{font-size:7px;font-weight:900;padding:2px 6px;border-radius:3px}
+.b-live{color:var(--green);background:rgba(35,224,122,.1);border:1px solid rgba(35,224,122,.18)}
+.b-gold{color:var(--gold);background:rgba(212,175,96,.1);border:1px solid rgba(212,175,96,.18)}
+.b-blue{color:var(--blue);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.18)}
+.panel-action{margin-left:auto;font-size:9.5px;color:var(--green);font-weight:700;cursor:pointer}
+.panel-action:hover{text-decoration:underline}
+
+/* DONUT CHART */
+.donut-wrap{padding:24px;display:flex;align-items:center;gap:24px}
+.donut-svg-wrap{position:relative;flex-shrink:0}
+.donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+.donut-center-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:900;letter-spacing:-1px;color:var(--ink);line-height:1}
+.donut-center-lbl{font-size:8px;color:var(--ink4);font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-top:3px}
+.donut-legend{flex:1;display:flex;flex-direction:column;gap:8px}
+.dl-row{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s}
+.dl-row:hover{background:var(--p1)}
+.dl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dl-name{font-size:11px;font-weight:700;flex:1}
+.dl-count{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink3)}
+.dl-pct{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;width:36px;text-align:right}
+.dl-bar{margin-top:4px;height:2px;background:var(--l0);border-radius:1px;overflow:hidden}
+.dl-bar-fill{height:100%;border-radius:1px;transition:width 1.2s cubic-bezier(.2,.8,.2,1);width:0}
+
+/* TOP HOLDERS TABLE */
+.holders-tbl-wrap{overflow-x:auto}
+.holders-tbl{width:100%;border-collapse:collapse}
+.holders-tbl thead th{text-align:left;font-size:7.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink4);font-weight:900;padding:10px 14px;border-bottom:1px solid var(--l0);white-space:nowrap;cursor:pointer;user-select:none;transition:color .12s}
+.holders-tbl thead th:hover{color:var(--ink)}
+.holders-tbl thead th.sorted{color:var(--green)}
+.holders-tbl tbody tr{border-bottom:1px solid var(--l0);transition:background .12s;cursor:pointer}
+.holders-tbl tbody tr:last-child{border-bottom:none}
+.holders-tbl tbody tr:hover{background:rgba(35,224,122,.03)}
+.holders-tbl td{padding:9px 14px;font-size:11.5px;vertical-align:middle}
+.h-rank{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--green);width:32px;text-align:center;font-size:10.5px}
+.h-rank.t3{color:var(--gold)}
+.h-av{width:30px;height:30px;border-radius:50%;background:var(--bg3);border:1px solid var(--l0);object-fit:cover;flex-shrink:0}
+.h-name{font-weight:700;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-addr{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink4)}
+.h-cards{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;color:var(--ink2)}
+.h-pct{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink4)}
+.tier-badge{display:inline-flex;align-items:center;font-size:7px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;padding:2px 6px;border-radius:3px}
+.tier-whale{color:var(--purple);background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.2)}
+.tier-elite{color:var(--gold);background:rgba(212,175,96,.12);border:1px solid rgba(212,175,96,.2)}
+.tier-advanced{color:var(--blue);background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2)}
+.tier-collector{color:var(--green);background:rgba(35,224,122,.1);border:1px solid rgba(35,224,122,.18)}
+.tier-micro{color:var(--ink3);background:var(--p2);border:1px solid var(--l0)}
+
+/* CONCENTRATION */
+.conc-table{width:100%}
+.conc-row{display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--l0);transition:background .12s}
+.conc-row:last-child{border-bottom:none}
+.conc-row:hover{background:var(--p0)}
+.conc-label{font-size:11px;font-weight:700;width:72px;flex-shrink:0}
+.conc-bar-wrap{flex:1;height:4px;background:var(--l0);border-radius:2px;overflow:hidden}
+.conc-bar-fill{height:100%;border-radius:2px;transition:width 1.3s cubic-bezier(.2,.8,.2,1);width:0}
+.conc-pct{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;width:44px;text-align:right;flex-shrink:0}
+.conc-note{font-size:9px;color:var(--ink5);width:60px;text-align:right;flex-shrink:0}
+
+/* TIER BREAKDOWN */
+.tier-grid{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--l0)}
+.tier-cell{padding:16px 14px;border-right:1px solid var(--l0);transition:background .15s}
+.tier-cell:last-child{border-right:none}
+.tier-cell:hover{background:var(--p0)}
+.tier-icon{font-size:18px;margin-bottom:8px}
+.tier-name{font-size:9px;font-weight:900;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+.tier-range{font-size:9px;color:var(--ink4);font-family:'JetBrains Mono',monospace;margin-bottom:10px}
+.tier-count{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:900;letter-spacing:-1px;line-height:1;margin-bottom:3px}
+.tier-sub{font-size:9.5px;color:var(--ink4)}
+.tier-bar-wrap{margin-top:10px;height:3px;background:var(--l0);border-radius:2px;overflow:hidden}
+.tier-bar-fill{height:100%;border-radius:2px;transition:width 1.4s cubic-bezier(.2,.8,.2,1);width:0}
+
+/* WHALE WATCH */
+.whale-list{display:flex;flex-direction:column}
+.whale-row{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--l0);transition:background .12s;cursor:pointer}
+.whale-row:last-child{border-bottom:none}
+.whale-row:hover{background:rgba(168,85,247,.04)}
+.whale-av{width:32px;height:32px;border-radius:50%;background:var(--bg3);border:1px solid rgba(168,85,247,.25);object-fit:cover;flex-shrink:0}
+.whale-name{font-weight:700;font-size:11.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.whale-addr{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink4)}
+.whale-cards{font-family:'JetBrains Mono',monospace;font-weight:900;font-size:14px;color:var(--purple)}
+.whale-cards-lbl{font-size:8px;color:var(--ink4);text-transform:uppercase;letter-spacing:.5px}
+
+/* ACTIVITY FEED */
+.feed-list{display:flex;flex-direction:column}
+.feed-row{display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid var(--l0);transition:background .12s;cursor:pointer}
+.feed-row:hover{background:var(--p0)}
+.feed-av{width:30px;height:30px;border-radius:50%;background:var(--bg3);border:1px solid var(--l0);object-fit:cover;flex-shrink:0}
+.feed-body{flex:1;min-width:0}
+.feed-top{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.feed-name{font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-act{font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-ts{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--ink4);flex-shrink:0}
+.ev-mint{display:inline-flex;font-size:7px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;padding:1px 5px;border-radius:3px;color:var(--green);background:rgba(35,224,122,.12)}
+.ev-xfer{display:inline-flex;font-size:7px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;padding:1px 5px;border-radius:3px;color:var(--ink3);background:var(--p2)}
+.feed-empty{padding:28px 18px;text-align:center;font-size:11px;color:var(--ink4);font-family:'JetBrains Mono',monospace}
+
+/* VERIFICATION UNAVAIL */
+.verif-unavail{display:flex;align-items:center;justify-content:center;padding:40px 20px;flex-direction:column;gap:10px}
+.verif-icon{font-size:28px;opacity:.35}
+.verif-text{font-size:11px;color:var(--ink4);font-family:'JetBrains Mono',monospace;text-align:center;line-height:1.6}
+.verif-title{font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--ink5)}
+
+/* 2-COL CONTENT GRID */
+.content-2col{display:grid;grid-template-columns:1fr 340px;border-bottom:1px solid var(--l0)}
+.c2-main{border-right:1px solid var(--l0)}
+
+/* BOTTOM STRIP */
+.btm-strip{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--l0)}
+.btm-col{border-right:1px solid var(--l0)}
+.btm-col:last-child{border-right:none}
+
+/* FULL WIDTH SECTION */
+.full-section{border-bottom:1px solid var(--l0)}
+
+/* ANIMATIONS */
+@keyframes beat{0%,100%{box-shadow:0 0 0 0 rgba(35,224,122,.5)}50%{box-shadow:0 0 0 5px rgba(35,224,122,0)}}
+@keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.fadein{animation:fadein .4s ease backwards}
+
+/* LOADING STATE */
+.loading-state{display:flex;align-items:center;justify-content:center;padding:32px;flex-direction:column;gap:12px}
+.loading-spin{width:24px;height:24px;border:2px solid var(--l0);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:10px;color:var(--ink4);font-family:'JetBrains Mono',monospace}
+
+/* RESPONSIVE */
+@media(max-width:1200px){.kpi-row{grid-template-columns:repeat(3,1fr)}.kpi:nth-child(3){border-right:none}.kpi:nth-child(4){border-top:1px solid var(--l0)}.tier-grid{grid-template-columns:repeat(3,1fr)}.content-2col{grid-template-columns:1fr}.c2-main{border-right:none;border-bottom:1px solid var(--l0)}.main-grid{grid-template-columns:1fr}.mg-left{border-right:none;border-bottom:1px solid var(--l0)}}
+@media(max-width:800px){.kpi-row{grid-template-columns:repeat(2,1fr)}.kpi:nth-child(2){border-right:none}.tier-grid{grid-template-columns:repeat(2,1fr)}.btm-strip{grid-template-columns:1fr}.btm-col{border-right:none;border-bottom:1px solid var(--l0)}.sb{display:none}.hero-title{font-size:22px}}
+</style>
+</head>
+<body>
+
+<!-- RIBBON -->
+<div class="ribbon">
+  <div class="ribbon-label"><div class="ribbon-dot"></div>HOLDER INTEL</div>
+  <div class="ribbon-track">
+    <div class="ribbon-inner" id="ribbon-inner">
+      <div class="ribbon-item"><span class="rk">Total Holders</span><span class="rv g" id="rb-holders">—</span></div>
+      <div class="ribbon-item"><span class="rk">Whales</span><span class="rv" id="rb-whales">—</span></div>
+      <div class="ribbon-item"><span class="rk">Top 10 Concentration</span><span class="rv" id="rb-conc">—</span></div>
+      <div class="ribbon-item"><span class="rk">Active 24h</span><span class="rv g" id="rb-active">—</span></div>
+      <div class="ribbon-item"><span class="rk">New 24h</span><span class="rv g" id="rb-new">—</span></div>
+      <div class="ribbon-item"><span class="rk">Indexed Block</span><span class="rv" id="rb-block">—</span></div>
+      <div class="ribbon-item"><span class="rk">Total Holders</span><span class="rv g" id="rb-holders2">—</span></div>
+      <div class="ribbon-item"><span class="rk">Whales</span><span class="rv" id="rb-whales2">—</span></div>
+      <div class="ribbon-item"><span class="rk">Top 10 Concentration</span><span class="rv" id="rb-conc2">—</span></div>
+      <div class="ribbon-item"><span class="rk">Active 24h</span><span class="rv g" id="rb-active2">—</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+
+<!-- SIDEBAR -->
+<div class="sb">
+  <div class="sb-logo">
+    <div class="sb-mark">≋</div>
+    <div class="sb-brand">MANTIS PRO<small>Intelligence Terminal</small></div>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-g">Profile</div>
+    <a class="sb-a" href="/operator/0x40fafac283f5eda53bc572c0bc02caebca96036e"><span class="si">⊞</span> Overview</a>
+    <div class="sb-g">Dashboard</div>
+    <a class="sb-a" href="/litany"><span class="si">◎</span> Command</a>
+    <a class="sb-a" href="/activity"><span class="si">⚡</span> Activity</a>
+    <div class="sb-g">Intelligence</div>
+    <a class="sb-a on" href="/holders"><span class="si">◈</span> Holder Intel</a>
+    <a class="sb-a" href="/litany/scanner"><span class="si">⌕</span> Scanner</a>
+    <a class="sb-a" href="/litany/rarity"><span class="si">★</span> Rarity</a>
+    <div class="sb-g">Platform</div>
+    <a class="sb-a" href="/gauntlet"><span class="si">⚔</span> Gauntlet</a>
+  </nav>
+  <div class="sb-eco">
+    <div class="sb-eco-t">Ecosystem</div>
+    <div class="sb-row"><span class="sb-k">Abstract Chain</span><span class="sb-v live">⬤ Live</span></div>
+    <div class="sb-row"><span class="sb-k">Block</span><span class="sb-v" id="sb-block">—</span></div>
+    <div class="sb-row"><span class="sb-k">Holders</span><span class="sb-v" id="sb-holders">—</span></div>
+  </div>
+  <div class="sb-agent">
+    <img src="/api/avatar?addr=0x40fafac283f5eda53bc572c0bc02caebca96036e" alt="Agent">
+    <div><div class="sb-al">MANTIS AGENT</div><div class="sb-as">#857</div></div>
+    <div class="odot"></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">Holder Intelligence</div>
+    <div class="tsearch">
+      <span class="tsearch-icon">⌕</span>
+      <input id="holdersearch" placeholder="Search wallet, ENS, ANS, name…" autocomplete="off" spellcheck="false">
+      <div class="ts-ac" id="holdersearch-ac" hidden></div>
+    </div>
+    <div class="topbar-right">
+      <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+      <div class="blk-badge" id="tb-block">Block —</div>
+      <div class="export-btn" onclick="exportData()">⬇ Export</div>
+    </div>
+  </div>
+
+  <div class="scroll-body" id="scroll-body">
+
+    <!-- HERO -->
+    <div class="hero-header">
+      <div class="hero-eyebrow"><div class="eyebrow-dot"></div>HOLDER INTELLIGENCE · LITANY ECOSYSTEM</div>
+      <div class="hero-title">Who owns the<br><span class="accent">ecosystem?</span></div>
+      <div class="hero-sub">Real-time intelligence on ownership, distribution and on-chain behavior across all Litany Card holders. Every metric verified from Abstract Chain.</div>
+      <div class="hero-meta">
+        <div class="meta-chip"><span class="mc-lbl">Indexed</span><span id="meta-block">—</span></div>
+        <div class="meta-chip"><span class="mc-lbl">Updated</span><span id="meta-ts">—</span></div>
+        <div class="meta-chip"><span class="mc-lbl">Source</span>Abstract Chain RPC</div>
+        <div class="meta-chip"><span class="mc-lbl">Contract</span><span style="font-family:'JetBrains Mono',monospace;font-size:9.5px">0xd44a…3eB</span></div>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="setTab('overview',this)">Overview <span class="tab-badge">LIVE</span></button>
+      <button class="tab-btn" onclick="setTab('rankings',this)">Holder Rankings</button>
+      <button class="tab-btn" onclick="setTab('whale',this)">Whale Watch</button>
+      <button class="tab-btn" onclick="setTab('trends',this)">Holding Trends <span class="tab-soon">SOON</span></button>
+      <button class="tab-btn" onclick="setTab('behavior',this)">Behavior Analytics <span class="tab-soon">SOON</span></button>
+      <button class="tab-btn" onclick="setTab('cohorts',this)">Cohorts <span class="tab-soon">SOON</span></button>
+    </div>
+
+    <!-- OVERVIEW TAB -->
+    <div id="tab-overview">
+
+      <!-- KPI ROW -->
+      <div class="kpi-row" id="kpi-row">
+        <div class="kpi" title="Total unique wallets currently holding at least 1 Litany Card">
+          <div class="kpi-eyebrow">Total Holders</div>
+          <div class="kpi-val g" id="kpi-holders">—</div>
+          <div class="kpi-delta" id="kpi-holders-d"><span class="up">↑</span> <span>live</span></div>
+          <svg class="kpi-sparkline" id="spark-holders" width="100%" height="28" viewBox="0 0 140 28" preserveAspectRatio="none"></svg>
+          <div class="kpi-tip">Unique wallets with ≥1 card on Abstract Chain</div>
+        </div>
+        <div class="kpi" title="Wallets that sent or received a card in the last ~24 hours">
+          <div class="kpi-eyebrow">Active 24h</div>
+          <div class="kpi-val" id="kpi-active">—</div>
+          <div class="kpi-delta" id="kpi-active-d"><span>wallet interactions</span></div>
+          <svg class="kpi-sparkline" id="spark-active" width="100%" height="28" viewBox="0 0 140 28" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="kpi" title="New addresses that received their first card in last 24 hours">
+          <div class="kpi-eyebrow">New 24h</div>
+          <div class="kpi-val g" id="kpi-new">—</div>
+          <div class="kpi-delta"><span>first-time receivers</span></div>
+          <svg class="kpi-sparkline" id="spark-new" width="100%" height="28" viewBox="0 0 140 28" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="kpi" title="Wallets holding 50 or more Litany Cards">
+          <div class="kpi-eyebrow">Whales (50+)</div>
+          <div class="kpi-val gold" id="kpi-whales">—</div>
+          <div class="kpi-delta"><span id="kpi-whale-pct">—</span> of holders</div>
+          <svg class="kpi-sparkline" id="spark-whales" width="100%" height="28" viewBox="0 0 140 28" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="kpi" title="Percentage of circulating cards owned by the top 10 holders">
+          <div class="kpi-eyebrow">Top 10 Concentration</div>
+          <div class="kpi-val" id="kpi-conc">—</div>
+          <div class="kpi-delta"><span id="kpi-conc-note">of circulating supply</span></div>
+          <svg class="kpi-sparkline" id="spark-conc" width="100%" height="28" viewBox="0 0 140 28" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="kpi" title="Total Litany Cards currently in active wallets">
+          <div class="kpi-eyebrow">Cards in Circulation</div>
+          <div class="kpi-val" id="kpi-supply">—</div>
+          <div class="kpi-delta"><span>verified on-chain</span></div>
+          <svg class="kpi-sparkline" id="spark-supply" width="100%" height="28" viewBox="0 0 140 28" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+
+      <!-- TIER BREAKDOWN -->
+      <div class="tier-grid" id="tier-grid">
+        <div class="tier-cell" style="border-top:1px solid var(--l0)">
+          <div class="tier-icon">🔹</div>
+          <div class="tier-name" style="color:var(--ink3)">Micro</div>
+          <div class="tier-range">1–2 cards</div>
+          <div class="tier-count skel" style="width:60px;height:28px">&nbsp;</div>
+          <div class="tier-sub">holders</div>
+          <div class="tier-bar-wrap"><div class="tier-bar-fill" style="background:var(--ink3)"></div></div>
+        </div>
+        <div class="tier-cell" style="border-top:1px solid var(--l0)">
+          <div class="tier-icon">💎</div>
+          <div class="tier-name" style="color:var(--green)">Collector</div>
+          <div class="tier-range">3–9 cards</div>
+          <div class="tier-count skel" style="width:60px;height:28px">&nbsp;</div>
+          <div class="tier-sub">holders</div>
+          <div class="tier-bar-wrap"><div class="tier-bar-fill" style="background:var(--green)"></div></div>
+        </div>
+        <div class="tier-cell" style="border-top:1px solid var(--l0)">
+          <div class="tier-icon">🔷</div>
+          <div class="tier-name" style="color:var(--blue)">Advanced</div>
+          <div class="tier-range">10–24 cards</div>
+          <div class="tier-count skel" style="width:60px;height:28px">&nbsp;</div>
+          <div class="tier-sub">holders</div>
+          <div class="tier-bar-wrap"><div class="tier-bar-fill" style="background:var(--blue)"></div></div>
+        </div>
+        <div class="tier-cell" style="border-top:1px solid var(--l0)">
+          <div class="tier-icon">👑</div>
+          <div class="tier-name" style="color:var(--gold)">Elite</div>
+          <div class="tier-range">25–49 cards</div>
+          <div class="tier-count skel" style="width:60px;height:28px">&nbsp;</div>
+          <div class="tier-sub">holders</div>
+          <div class="tier-bar-wrap"><div class="tier-bar-fill" style="background:var(--gold)"></div></div>
+        </div>
+        <div class="tier-cell" style="border-top:1px solid var(--l0)">
+          <div class="tier-icon">🐋</div>
+          <div class="tier-name" style="color:var(--purple)">Whale</div>
+          <div class="tier-range">50+ cards</div>
+          <div class="tier-count skel" style="width:60px;height:28px">&nbsp;</div>
+          <div class="tier-sub">holders</div>
+          <div class="tier-bar-wrap"><div class="tier-bar-fill" style="background:var(--purple)"></div></div>
+        </div>
+      </div>
+
+      <!-- DISTRIBUTION + TOP HOLDERS -->
+      <div class="main-grid">
+        <!-- Donut -->
+        <div class="mg-left">
+          <div class="panel-hd">
+            <div class="panel-lbl">Holder Distribution</div>
+            <div class="panel-badge b-live">VERIFIED</div>
+          </div>
+          <div class="donut-wrap" id="donut-wrap">
+            <div class="donut-svg-wrap">
+              <svg id="donut-svg" width="160" height="160" viewBox="0 0 160 160">
+                <circle cx="80" cy="80" r="58" fill="none" stroke="var(--l0)" stroke-width="22"/>
+                <circle id="donut-micro"    cx="80" cy="80" r="58" fill="none" stroke="rgba(234,242,236,.25)" stroke-width="22" stroke-dasharray="0 365" stroke-dashoffset="0" transform="rotate(-90 80 80)" style="transition:stroke-dasharray 1.3s cubic-bezier(.2,.8,.2,1)"/>
+                <circle id="donut-collector"cx="80" cy="80" r="58" fill="none" stroke="var(--green)" stroke-width="22" stroke-dasharray="0 365" stroke-dashoffset="0" transform="rotate(-90 80 80)" style="transition:stroke-dasharray 1.3s cubic-bezier(.2,.8,.2,1)"/>
+                <circle id="donut-advanced" cx="80" cy="80" r="58" fill="none" stroke="var(--blue)" stroke-width="22" stroke-dasharray="0 365" stroke-dashoffset="0" transform="rotate(-90 80 80)" style="transition:stroke-dasharray 1.3s cubic-bezier(.2,.8,.2,1)"/>
+                <circle id="donut-elite"    cx="80" cy="80" r="58" fill="none" stroke="var(--gold)" stroke-width="22" stroke-dasharray="0 365" stroke-dashoffset="0" transform="rotate(-90 80 80)" style="transition:stroke-dasharray 1.3s cubic-bezier(.2,.8,.2,1)"/>
+                <circle id="donut-whale"    cx="80" cy="80" r="58" fill="none" stroke="var(--purple)" stroke-width="22" stroke-dasharray="0 365" stroke-dashoffset="0" transform="rotate(-90 80 80)" style="transition:stroke-dasharray 1.3s cubic-bezier(.2,.8,.2,1)"/>
+              </svg>
+              <div class="donut-center">
+                <div class="donut-center-val" id="donut-total">—</div>
+                <div class="donut-center-lbl">Holders</div>
+              </div>
+            </div>
+            <div class="donut-legend" id="donut-legend">
+              <div class="dl-row"><div class="dl-dot" style="background:rgba(234,242,236,.25)"></div><span class="dl-name">Micro (1–2)</span><span class="dl-count skel" style="width:30px">&nbsp;</span><span class="dl-pct skel" style="width:32px">&nbsp;</span></div>
+              <div class="dl-row"><div class="dl-dot" style="background:var(--green)"></div><span class="dl-name">Collector (3–9)</span><span class="dl-count skel" style="width:30px">&nbsp;</span><span class="dl-pct skel" style="width:32px">&nbsp;</span></div>
+              <div class="dl-row"><div class="dl-dot" style="background:var(--blue)"></div><span class="dl-name">Advanced (10–24)</span><span class="dl-count skel" style="width:30px">&nbsp;</span><span class="dl-pct skel" style="width:32px">&nbsp;</span></div>
+              <div class="dl-row"><div class="dl-dot" style="background:var(--gold)"></div><span class="dl-name">Elite (25–49)</span><span class="dl-count skel" style="width:30px">&nbsp;</span><span class="dl-pct skel" style="width:32px">&nbsp;</span></div>
+              <div class="dl-row"><div class="dl-dot" style="background:var(--purple)"></div><span class="dl-name">Whale (50+)</span><span class="dl-count skel" style="width:30px">&nbsp;</span><span class="dl-pct skel" style="width:32px">&nbsp;</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- Concentration -->
+        <div class="mg-right">
+          <div class="panel-hd">
+            <div class="panel-lbl">Ownership Concentration</div>
+            <div class="panel-badge b-gold">GINI CURVE</div>
+          </div>
+          <div id="conc-body">
+            <div class="loading-state"><div class="loading-spin"></div><div class="loading-text">Computing concentration…</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOP HOLDERS + WHALE WATCH -->
+      <div class="content-2col">
+        <div class="c2-main">
+          <div class="panel-hd">
+            <div class="panel-lbl">Top Holders</div>
+            <div class="panel-badge b-live">LIVE</div>
+            <div class="panel-action" onclick="setTab('rankings',document.querySelectorAll('.tab-btn')[1])">View All →</div>
+          </div>
+          <div id="top-holders-body">
+            <div class="loading-state"><div class="loading-spin"></div><div class="loading-text">Scanning chain…</div></div>
+          </div>
+        </div>
+        <div>
+          <div class="panel-hd">
+            <div class="panel-lbl">Whale Watch</div>
+            <div class="panel-badge b-gold">50+ CARDS</div>
+          </div>
+          <div id="whale-body">
+            <div class="loading-state"><div class="loading-spin"></div><div class="loading-text">Identifying whales…</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIVITY FEED -->
+      <div class="full-section">
+        <div class="panel-hd">
+          <div class="panel-lbl">Live Activity Feed</div>
+          <div class="panel-badge b-live">REAL-TIME</div>
+          <div class="panel-action" href="/activity" onclick="location.href='/activity'">Activity Explorer →</div>
+        </div>
+        <div id="feed-body">
+          <div class="loading-state"><div class="loading-spin"></div><div class="loading-text">Loading activity…</div></div>
+        </div>
+      </div>
+
+      <!-- HOLDER GROWTH -->
+      <div class="full-section">
+        <div class="panel-hd">
+          <div class="panel-lbl">Holder Growth</div>
+          <div class="panel-badge" style="color:var(--ink4);background:var(--p2);border:1px solid var(--l0)">HISTORICAL</div>
+        </div>
+        <div class="verif-unavail">
+          <div class="verif-icon">📈</div>
+          <div class="verif-title">Historical Tracking</div>
+          <div class="verif-text">Holder growth charts require block-level snapshots over time.<br>Live tracking begins from this session — historical series unavailable.<br>Current holder count: <strong id="growth-count" style="color:var(--green)">—</strong></div>
+        </div>
+      </div>
+
+    </div><!-- /tab-overview -->
+
+    <!-- RANKINGS TAB -->
+    <div id="tab-rankings" style="display:none">
+      <div class="panel-hd" style="padding:14px 20px;border-bottom:1px solid var(--l0)">
+        <div class="panel-lbl">Full Holder Rankings</div>
+        <div class="panel-badge b-live">TOP 100</div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <input id="rank-search" placeholder="Filter by address or name…" style="background:var(--p1);border:1px solid var(--l0);border-radius:6px;padding:5px 10px;color:var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;outline:none;width:200px" oninput="filterRankings(this.value)">
+        </div>
+      </div>
+      <div id="rankings-body">
+        <div class="loading-state"><div class="loading-spin"></div><div class="loading-text">Loading rankings…</div></div>
+      </div>
+    </div>
+
+    <!-- WHALE TAB -->
+    <div id="tab-whale" style="display:none">
+      <div class="panel-hd" style="padding:14px 20px;border-bottom:1px solid var(--l0)">
+        <div class="panel-lbl">Whale Intelligence</div>
+        <div class="panel-badge" style="color:var(--purple);background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.2)">50+ CARDS</div>
+      </div>
+      <div id="whale-tab-body">
+        <div class="loading-state"><div class="loading-spin"></div><div class="loading-text">Scanning for whales…</div></div>
+      </div>
+    </div>
+
+    <!-- SOON TABS -->
+    <div id="tab-trends" style="display:none">
+      <div class="verif-unavail" style="min-height:300px">
+        <div class="verif-icon">📊</div>
+        <div class="verif-title">Coming Soon</div>
+        <div class="verif-text">Holding trend charts require multi-day block snapshots.<br>This module is under active development.</div>
+      </div>
+    </div>
+    <div id="tab-behavior" style="display:none">
+      <div class="verif-unavail" style="min-height:300px">
+        <div class="verif-icon">🧠</div>
+        <div class="verif-title">Coming Soon</div>
+        <div class="verif-text">Behavior analytics require extended on-chain event correlation.<br>This module is under active development.</div>
+      </div>
+    </div>
+    <div id="tab-cohorts" style="display:none">
+      <div class="verif-unavail" style="min-height:300px">
+        <div class="verif-icon">🔬</div>
+        <div class="verif-title">Coming Soon</div>
+        <div class="verif-text">Cohort analysis requires holder snapshot history.<br>This module is under active development.</div>
+      </div>
+    </div>
+
+  </div><!-- /scroll-body -->
+</div><!-- /main -->
+</div><!-- /shell -->
+
+<script>
+const CARDS = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB";
+const ZERO  = "0x0000000000000000000000000000000000000000";
+const RPC   = "/api/abstract-rpc";
+let overviewData = null;
+let allHolders   = [];
+let feedData     = [];
+
+// ── HELPERS ──────────────────────────────────────────────────────────
+function sa(a){ return a?a.slice(0,6)+'…'+a.slice(-4):'—' }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+function fmt(n){ return typeof n==='number'?n.toLocaleString():n||'—' }
+function rel(ts){
+  if(!ts) return '—';
+  const d=Math.floor(Date.now()/1000)-ts;
+  if(d<60) return d+'s ago';
+  if(d<3600) return Math.floor(d/60)+'m ago';
+  if(d<86400) return Math.floor(d/3600)+'h ago';
+  return Math.floor(d/86400)+'d ago';
+}
+async function rpc(method,params){
+  const r=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}).then(r=>r.json());
+  if(r.error) throw new Error(r.error.message||'rpc');
+  return r.result;
+}
+
+// ── ANIMATED COUNTER ─────────────────────────────────────────────────
+function animCount(el,target,dur=1200){
+  if(!el||target===null||target===undefined) return;
+  const start=performance.now(), from=0;
+  const isFloat=String(target).includes('.');
+  function step(now){
+    const t=Math.min(1,(now-start)/dur);
+    const ease=1-Math.pow(1-t,3);
+    const v=from+(target-from)*ease;
+    el.textContent=isFloat?v.toFixed(1)+'%':Math.round(v).toLocaleString();
+    if(t<1) requestAnimationFrame(step);
+    else el.textContent=isFloat?target.toFixed(1)+'%':target.toLocaleString();
+  }
+  requestAnimationFrame(step);
+}
+
+// ── SPARKLINE ─────────────────────────────────────────────────────────
+function sparkline(svgId, vals, color){
+  const svg=document.getElementById(svgId);
+  if(!svg||!vals||vals.length<2) return;
+  const W=140,H=28,min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
+  const pts=vals.map((v,i)=>`${(i/(vals.length-1)*W).toFixed(1)},${((1-(v-min)/range)*(H-4)+2).toFixed(1)}`).join(' ');
+  svg.innerHTML=`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>`;
+}
+
+// ── DONUT CHART ──────────────────────────────────────────────────────
+function renderDonut(tiers, total){
+  const CIRCUMFERENCE=2*Math.PI*58; // 364.4
+  const segments=[
+    {key:'micro',    el:'donut-micro',    color:'rgba(234,242,236,.25)'},
+    {key:'collector',el:'donut-collector',color:'var(--green)'},
+    {key:'advanced', el:'donut-advanced', color:'var(--blue)'},
+    {key:'elite',    el:'donut-elite',    color:'var(--gold)'},
+    {key:'whale',    el:'donut-whale',    color:'var(--purple)'},
+  ];
+  let offset=0;
+  segments.forEach(({key,el})=>{
+    const pct=(tiers[key]?.count||0)/Math.max(1,total);
+    const dash=pct*CIRCUMFERENCE;
+    const seg=document.getElementById(el);
+    if(seg){
+      seg.style.strokeDashoffset=-offset;
+      seg.style.strokeDasharray=`${dash} ${CIRCUMFERENCE-dash}`;
+      seg.setAttribute('transform',`rotate(-90 80 80) rotate(${offset/CIRCUMFERENCE*360} 80 80)`);
+    }
+    offset+=dash;
+  });
+  document.getElementById('donut-total').textContent=total.toLocaleString();
+}
+
+function renderDonutLegend(tiers, total){
+  const colors=['rgba(234,242,236,.25)','var(--green)','var(--blue)','var(--gold)','var(--purple)'];
+  const rows=[
+    ['micro',    'Micro (1–2)',    colors[0]],
+    ['collector','Collector (3–9)',colors[1]],
+    ['advanced', 'Advanced (10–24)',colors[2]],
+    ['elite',    'Elite (25–49)',  colors[3]],
+    ['whale',    'Whale (50+)',    colors[4]],
+  ];
+  document.getElementById('donut-legend').innerHTML=rows.map(([key,name,color])=>{
+    const t=tiers[key]||{count:0,cards:0};
+    const pct=total?((t.count/total)*100).toFixed(1):'0.0';
+    return `<div class="dl-row" onclick="location.href='/holders'">
+      <div class="dl-dot" style="background:${color}"></div>
+      <span class="dl-name">${name}</span>
+      <span class="dl-count">${t.count.toLocaleString()}</span>
+      <span class="dl-pct" style="color:${color}">${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
+// ── CONCENTRATION TABLE ─────────────────────────────────────────────
+function renderConcentration(conc){
+  const rows=[
+    ['Top 1',   conc.top1,   'var(--purple)'],
+    ['Top 5',   conc.top5,   'var(--gold)'],
+    ['Top 10',  conc.top10,  'var(--blue)'],
+    ['Top 25',  conc.top25,  'var(--cyan)'],
+    ['Top 50',  conc.top50,  'var(--green)'],
+    ['Top 100', conc.top100, 'var(--green2)'],
+    ['Top 500', conc.top500, 'var(--ink3)'],
+    ['Top 1000',conc.top1000,'var(--ink4)'],
+  ];
+  document.getElementById('conc-body').innerHTML=rows.map(([label,pct,color])=>`
+    <div class="conc-row">
+      <span class="conc-label">${label}</span>
+      <div class="conc-bar-wrap"><div class="conc-bar-fill" data-w="${pct}" style="background:${color}"></div></div>
+      <span class="conc-pct" style="color:${color}">${pct}%</span>
+    </div>`).join('');
+  setTimeout(()=>document.querySelectorAll('.conc-bar-fill').forEach(el=>{el.style.width=el.dataset.w+'%';}),80);
+}
+
+// ── TIER BREAKDOWN ──────────────────────────────────────────────────
+function renderTiers(tiers, total){
+  const defs=[
+    ['micro',    '🔹','Micro',    '1–2 cards', 'var(--ink3)'],
+    ['collector','💎','Collector','3–9 cards',  'var(--green)'],
+    ['advanced', '🔷','Advanced', '10–24 cards','var(--blue)'],
+    ['elite',    '👑','Elite',    '25–49 cards','var(--gold)'],
+    ['whale',    '🐋','Whale',    '50+ cards',  'var(--purple)'],
+  ];
+  const cells=document.querySelectorAll('.tier-cell');
+  const maxCount=Math.max(...defs.map(([k])=>tiers[k]?.count||0),1);
+  defs.forEach(([key,icon,name,range,color],i)=>{
+    const t=tiers[key]||{count:0,cards:0};
+    const pct=total?((t.count/total)*100).toFixed(1):'0.0';
+    const barW=(t.count/maxCount*100).toFixed(1);
+    if(!cells[i]) return;
+    cells[i].innerHTML=`
+      <div class="tier-icon">${icon}</div>
+      <div class="tier-name" style="color:${color}">${name}</div>
+      <div class="tier-range">${range}</div>
+      <div class="tier-count" style="color:${color}">${t.count.toLocaleString()}</div>
+      <div class="tier-sub">${pct}% · ${t.cards.toLocaleString()} cards</div>
+      <div class="tier-bar-wrap"><div class="tier-bar-fill" data-w="${barW}" style="background:${color}"></div></div>`;
+  });
+  setTimeout(()=>document.querySelectorAll('.tier-bar-fill').forEach(el=>{el.style.width=el.dataset.w+'%';}),80);
+}
+
+// ── TOP HOLDERS TABLE ───────────────────────────────────────────────
+function tierLabel(cards){
+  if(cards>=50) return `<span class="tier-badge tier-whale">Whale</span>`;
+  if(cards>=25) return `<span class="tier-badge tier-elite">Elite</span>`;
+  if(cards>=10) return `<span class="tier-badge tier-advanced">Advanced</span>`;
+  if(cards>=3)  return `<span class="tier-badge tier-collector">Collector</span>`;
+  return `<span class="tier-badge tier-micro">Micro</span>`;
+}
+
+function renderTopHolders(holders, max=15, container='top-holders-body'){
+  const slice=holders.slice(0,max);
+  if(!slice.length){
+    document.getElementById(container).innerHTML='<div class="feed-empty">No holder data available.</div>';
+    return;
+  }
+  document.getElementById(container).innerHTML=`
+    <div class="holders-tbl-wrap">
+    <table class="holders-tbl">
+      <thead><tr>
+        <th>#</th><th></th><th>Operator</th><th onclick="sortBy('cards')" class="sorted">Cards ↓</th>
+        <th>Share</th><th>Tier</th>
+      </tr></thead>
+      <tbody>${slice.map(h=>`
+        <tr onclick="location.href='/operator/${h.address}'" style="animation:fadein .3s ease ${(slice.indexOf(h)*.04).toFixed(2)}s both">
+          <td><span class="h-rank${h.rank<=3?' t3':''}">${h.rank}</span></td>
+          <td><img class="h-av" src="/api/avatar?addr=${h.address}" loading="lazy" alt=""></td>
+          <td><div class="h-name">${esc(h.name||sa(h.address))}</div><div class="h-addr">${sa(h.address)}</div></td>
+          <td><span class="h-cards">${h.cards.toLocaleString()}</span></td>
+          <td><span class="h-pct">${h.pct}%</span></td>
+          <td>${tierLabel(h.cards)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+}
+
+function renderRankings(holders){
+  renderTopHolders(holders, 100, 'rankings-body');
+}
+
+let rankingsFiltered=[];
+function filterRankings(q){
+  const s=q.toLowerCase();
+  const filtered=allHolders.filter(h=>{
+    if(!s) return true;
+    return (h.address||'').includes(s)||(h.name||'').toLowerCase().includes(s);
+  });
+  renderTopHolders(filtered,100,'rankings-body');
+}
+
+// ── WHALE WATCH ────────────────────────────────────────────────────
+function renderWhales(holders, container='whale-body'){
+  const whales=holders.filter(h=>h.cards>=50).slice(0,30);
+  if(!whales.length){
+    document.getElementById(container).innerHTML='<div class="feed-empty">No whale wallets detected.</div>';
+    return;
+  }
+  document.getElementById(container).innerHTML=whales.map(h=>`
+    <div class="whale-row" onclick="location.href='/operator/${h.address}'">
+      <img class="whale-av" src="/api/avatar?addr=${h.address}" loading="lazy" alt="">
+      <div style="flex:1;min-width:0">
+        <div class="whale-name">${esc(h.name||sa(h.address))}</div>
+        <div class="whale-addr">${sa(h.address)}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="whale-cards">${h.cards.toLocaleString()}</div>
+        <div class="whale-cards-lbl">cards · ${h.pct}%</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── ACTIVITY FEED ──────────────────────────────────────────────────
+let idmap_feed={};
+async function renderFeed(events){
+  if(!events||!events.length){
+    document.getElementById('feed-body').innerHTML='<div class="feed-empty">No recent activity.</div>';
+    return;
+  }
+  const slice=events.slice(0,30);
+  const addrs=[...new Set(slice.map(e=>e.to.toLowerCase()))];
+  try{const r=await fetch('/api/identities?addrs='+addrs.join(','));idmap_feed=await r.json();}catch(_){}
+  document.getElementById('feed-body').innerHTML=slice.map((ev,i)=>{
+    const isM=ev.from.toLowerCase()===ZERO;
+    const t=ev.to.toLowerCase();
+    const idn=idmap_feed[t]||{};
+    const nm=idn.name||sa(t);
+    const badge=isM?'<span class="ev-mint">Mint</span>':'<span class="ev-xfer">Transfer</span>';
+    const actText=isM?`Minted Card #${ev.token}`:`Acquired Card #${ev.token}`;
+    return `<div class="feed-row fadein" style="animation-delay:${i*.03}s" onclick="location.href='/operator/${t}'">
+      <img class="feed-av" src="/api/avatar?addr=${t}" loading="lazy" alt="">
+      <div class="feed-body-inner" style="flex:1;min-width:0">
+        <div class="feed-top">${badge}<span class="feed-name">${esc(nm)}</span></div>
+        <div class="feed-act">${actText}</div>
+      </div>
+      <div class="feed-ts">${rel(ev.ts)}</div>
+    </div>`;
+  }).join('')+'<div style="padding:10px 18px;border-top:1px solid var(--l0)"><a href="/activity" style="font-size:10.5px;font-weight:700;color:var(--green)">View Activity Explorer →</a></div>';
+}
+
+// ── OVERVIEW RENDER ────────────────────────────────────────────────
+function renderOverview(d){
+  // KPIs
+  animCount(document.getElementById('kpi-holders'), d.total_holders);
+  animCount(document.getElementById('kpi-active'),  d.active_24h);
+  animCount(document.getElementById('kpi-new'),     d.new_holders_24h);
+  animCount(document.getElementById('kpi-whales'),  d.whale_count);
+  document.getElementById('kpi-conc').textContent  = d.top10_conc.toFixed(1)+'%';
+  animCount(document.getElementById('kpi-supply'),  d.total_cards);
+
+  const whalePct=d.total_holders?((d.whale_count/d.total_holders)*100).toFixed(1):'0.0';
+  document.getElementById('kpi-whale-pct').textContent=whalePct+'%';
+  document.getElementById('growth-count').textContent=d.total_holders.toLocaleString();
+
+  // Ribbon
+  document.getElementById('rb-holders').textContent =d.total_holders.toLocaleString();
+  document.getElementById('rb-holders2').textContent=d.total_holders.toLocaleString();
+  document.getElementById('rb-whales').textContent  =d.whale_count;
+  document.getElementById('rb-whales2').textContent =d.whale_count;
+  document.getElementById('rb-conc').textContent    =d.top10_conc.toFixed(1)+'%';
+  document.getElementById('rb-conc2').textContent   =d.top10_conc.toFixed(1)+'%';
+  document.getElementById('rb-active').textContent  =d.active_24h;
+  document.getElementById('rb-active2').textContent =d.active_24h;
+  document.getElementById('rb-new').textContent     =d.new_holders_24h;
+  document.getElementById('rb-block').textContent   ='#'+d.indexed_block.toLocaleString();
+
+  // Meta strip
+  document.getElementById('meta-block').textContent='#'+d.indexed_block.toLocaleString();
+  const ts=new Date(d.indexed_ts*1000);
+  document.getElementById('meta-ts').textContent=ts.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('sb-block').textContent='#'+d.indexed_block.toLocaleString();
+  document.getElementById('sb-holders').textContent=d.total_holders.toLocaleString();
+  document.getElementById('tb-block').textContent='Block #'+d.indexed_block.toLocaleString();
+
+  // Charts
+  renderDonut(d.tiers, d.total_holders);
+  renderDonutLegend(d.tiers, d.total_holders);
+  renderConcentration(d.concentration);
+  renderTiers(d.tiers, d.total_holders);
+
+  // Sparklines (decorative bars showing tier distribution)
+  const tierVals=Object.values(d.tiers).map(t=>t.count);
+  sparkline('spark-holders', tierVals, 'var(--green)');
+  sparkline('spark-active',  [d.active_24h, d.active_24h], 'var(--ink3)');
+  sparkline('spark-whales',  [0,d.whale_count], 'var(--purple)');
+  sparkline('spark-supply',  tierVals.map((_,i)=>tierVals.slice(0,i+1).reduce((a,b)=>a+b,0)), 'var(--blue)');
+
+  // Top holders
+  renderTopHolders(d.top_holders, 15, 'top-holders-body');
+  renderWhales(d.top_holders, 'whale-body');
+  renderRankings(d.top_holders);
+  renderWhales(d.top_holders, 'whale-tab-body');
+  allHolders=d.top_holders;
+
+  overviewData=d;
+}
+
+// ── TABS ───────────────────────────────────────────────────────────
+const TABS=['overview','rankings','whale','trends','behavior','cohorts'];
+function setTab(id, btn){
+  TABS.forEach(t=>{
+    const el=document.getElementById('tab-'+t);
+    if(el) el.style.display=t===id?'':'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+}
+
+// ── SEARCH ────────────────────────────────────────────────────────
+const searchInp=document.getElementById('holdersearch');
+const searchAc =document.getElementById('holdersearch-ac');
+let searchTimer;
+searchInp.addEventListener('input',()=>{
+  clearTimeout(searchTimer);
+  const q=searchInp.value.trim();
+  if(q.length<2){searchAc.hidden=true;return;}
+  searchTimer=setTimeout(async()=>{
+    try{
+      const res=await fetch('/api/operator-search?q='+encodeURIComponent(q)).then(r=>r.json());
+      if(!res.length){searchAc.hidden=true;return;}
+      searchAc.innerHTML=res.map(r=>`<div class="ts-ac-item" onclick="location.href='/operator/${r.address}'">
+        <img width="22" height="22" style="border-radius:50%;flex-shrink:0" src="/api/avatar?addr=${r.address}" loading="lazy">
+        <span class="ts-ac-nm">${esc(r.name||sa(r.address))}</span>
+        <span class="ts-ac-ad">${sa(r.address)}</span>
+      </div>`).join('');
+      searchAc.hidden=false;
+    }catch(_){searchAc.hidden=true;}
+  },280);
+});
+document.addEventListener('click',e=>{if(!e.target.closest('.tsearch'))searchAc.hidden=true;});
+
+// ── EXPORT ────────────────────────────────────────────────────────
+function exportData(){
+  if(!overviewData) return;
+  const blob=new Blob([JSON.stringify(overviewData,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`litany-holders-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+}
+
+// ── SORT ──────────────────────────────────────────────────────────
+function sortBy(col){
+  if(!allHolders.length) return;
+  allHolders.sort((a,b)=>b[col]-a[col]);
+  renderTopHolders(allHolders,100,'rankings-body');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+async function init(){
+  const [overview, feed] = await Promise.all([
+    fetch('/api/holders-overview').then(r=>r.json()).catch(e=>({error:e.message,total_holders:0})),
+    fetch('/api/recent-transfers').then(r=>r.json()).catch(()=>[]),
+  ]);
+
+  if(overview.total_holders || overview.indexed_block){
+    renderOverview(overview);
+  } else {
+    document.getElementById('top-holders-body').innerHTML=
+      `<div class="feed-empty">⚠ ${overview.error||'Data unavailable'}</div>`;
+  }
+
+  feedData=feed;
+  await renderFeed(feed);
+}
+
+// ── POLLING ───────────────────────────────────────────────────────
+function pollOverview(){
+  fetch('/api/holders-overview').then(r=>r.json()).then(d=>{
+    if(d.total_holders||d.indexed_block) renderOverview(d);
+  }).catch(()=>{});
+}
+function pollFeed(){
+  fetch('/api/recent-transfers').then(r=>r.json()).then(async evs=>{
+    feedData=evs;
+    await renderFeed(evs);
+  }).catch(()=>{});
+}
+
+init();
+setInterval(pollFeed, 60000);
+setInterval(pollOverview, 600000);
+</script>
+</body>
+</html>
