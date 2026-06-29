@@ -570,7 +570,7 @@
 
   function schedulePoll(isRunning) {
     clearTimeout(pollTimer);
-    pollTimer = setTimeout(refreshStats, isRunning ? 4000 : 30000);
+    pollTimer = setTimeout(refreshStats, isRunning ? 12000 : 30000);
   }
 
   // ── trigger a battle run ──────────────────────────────────────────────────

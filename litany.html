@@ -763,7 +763,7 @@ async function loadMarket(){
 
 async function loadTiers(){
   try{
-    const r=await fetch("/rarity_index.json",{cache:"no-store"});
+    const r=await fetch("/rarity_index.json",{cache:"default"});
     if(!r.ok){document.getElementById("tier-rows").innerHTML='<div style="padding:16px 18px;color:var(--ink4);font-size:11px;font-family:JetBrains Mono">Rarity index not built — run build_rarity_index.py</div>';return;}
     const d=await r.json(),total=d.totalCards,t={Legendary:0,Epic:0,Rare:0,Uncommon:0,Common:0};
     d.cards.forEach(c=>{const p=c.rank/total;if(p<=.01)t.Legendary++;else if(p<=.05)t.Epic++;else if(p<=.15)t.Rare++;else if(p<=.40)t.Uncommon++;else t.Common++;});
@@ -846,7 +846,7 @@ async function loadRefLeaderboard(){
   }
 }
 
-(async function(){await loadCore();loadGas();loadMarket();loadTiers();loadRecentActivity();loadMesh();loadRefLeaderboard();})();
+(async function(){await Promise.all([loadCore(),loadGas(),loadMarket(),loadTiers(),loadRecentActivity(),loadMesh(),loadRefLeaderboard()]);})();
 setInterval(loadRecentActivity,60000);
 setInterval(()=>{loadCore();loadGas();},30000);
 </script>

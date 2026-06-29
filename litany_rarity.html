@@ -444,7 +444,7 @@ select option{background:var(--bg2);color:var(--ink)}
 
   (async function(){
     try{
-      const r=await fetch("/rarity_index.json",{cache:"no-store"});
+      const r=await fetch("/rarity_index.json",{cache:"default"});
       if(!r.ok){emptyNotBuilt();return;}
       DATA=await r.json();
       if(!DATA||!DATA.cards||!DATA.cards.length){emptyNotBuilt();return;}

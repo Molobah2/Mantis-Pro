@@ -764,14 +764,23 @@ def _server_owned_cards(addr):
             k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) - 1
         ids_set.update(int(k) for k, v in net.items() if v > 0)
 
-    try:
-        recv = _post({"jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[
-            {"address":CARDS_ADDR,"topics":[TT,None,padded],"fromBlock":"0x0","toBlock":"latest"}]})
-        sent = _post({"jsonrpc":"2.0","id":2,"method":"eth_getLogs","params":[
-            {"address":CARDS_ADDR,"topics":[TT,padded,None],"fromBlock":"0x0","toBlock":"latest"}]})
-        _net_balance(recv, sent)
-    except Exception as e:
-        print(f"rpc nft wide {addr}: {e} — trying chunked")
+    def _net_to_set(recv_logs, sent_logs):
+        net = {}
+        for lg in recv_logs:
+            k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) + 1
+        for lg in sent_logs:
+            k = str(int(lg["topics"][3], 16)); net[k] = net.get(k, 0) - 1
+        return {int(k) for k, v in net.items() if v > 0}
+
+    def _fetch_rpc():
+        try:
+            recv = _post({"jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[
+                {"address":CARDS_ADDR,"topics":[TT,None,padded],"fromBlock":"0x0","toBlock":"latest"}]})
+            sent = _post({"jsonrpc":"2.0","id":2,"method":"eth_getLogs","params":[
+                {"address":CARDS_ADDR,"topics":[TT,padded,None],"fromBlock":"0x0","toBlock":"latest"}]})
+            return _net_to_set(recv, sent)
+        except Exception as e:
+            print(f"rpc nft wide {addr}: {e} — trying chunked")
         try:
             from concurrent.futures import ThreadPoolExecutor as _TPE
             latest = int(_post({"jsonrpc":"2.0","id":0,"method":"eth_blockNumber","params":[]}) or "0x0", 16)
@@ -794,13 +803,16 @@ def _server_owned_cards(addr):
             for f in s_futs:
                 try: all_sent.extend(f.result())
                 except: pass
-            _net_balance(all_recv, all_sent)
+            return _net_to_set(all_recv, all_sent)
         except Exception as e2:
             print(f"rpc nft chunked {addr}: {e2}")
+            return set()
 
-    # ── OpenSea supplement (unlimited pages, merges into ids_set) ─────────────
-    key = os.environ.get("OPENSEA_API_KEY")
-    if key:
+    def _fetch_opensea():
+        key = os.environ.get("OPENSEA_API_KEY")
+        if not key:
+            return set()
+        os_ids = set()
         try:
             import urllib.parse
             nxt, pg = None, 0
@@ -812,13 +824,21 @@ def _server_owned_cards(addr):
                 j = r.json()
                 for n in (j.get("nfts") or []):
                     if (n.get("contract") or "").lower() == CARDS_ADDR.lower():
-                        try: ids_set.add(int(n.get("identifier") or n.get("token_id") or 0))
+                        try: os_ids.add(int(n.get("identifier") or n.get("token_id") or 0))
                         except: pass
                 nxt = j.get("next"); pg += 1
                 if not nxt:
                     break
         except Exception as e:
             print(f"os nft {addr}: {e}")
+        return os_ids
+
+    from concurrent.futures import ThreadPoolExecutor as _TPE2
+    with _TPE2(max_workers=2) as ex:
+        rpc_fut = ex.submit(_fetch_rpc)
+        os_fut  = ex.submit(_fetch_opensea)
+        ids_set.update(rpc_fut.result())
+        ids_set.update(os_fut.result())
 
     ids = sorted(i for i in ids_set if i > 0)
     _os_nft_cache[addr] = {"ts": time.time(), "ids": ids}
