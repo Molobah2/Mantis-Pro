@@ -1317,7 +1317,7 @@ let _profAddr="";
     ['aring1','aring2','aring3'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.borderColor=facColor;});
     document.getElementById('avGlow').style.background=`radial-gradient(circle,${facColor}22,transparent 70%)`;
   }
-  document.getElementById("hav").src="/api/avatar?addr="+addr;
+  document.getElementById("hav").src="/api/avatar?addr="+addr+"&_="+Date.now();
   document.getElementById("hav").alt=nm;
   if(lbEntry)document.getElementById("ark").textContent="#"+lbEntry.rank;
   else document.getElementById("ark").style.display="none";

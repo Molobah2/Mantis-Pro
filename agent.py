@@ -573,16 +573,19 @@ def _identicon_svg(addr):
 def _img_fetch(url):
     if url in _img_cache:
         return _img_cache[url]
-    try:
-        r = requests.get(url, timeout=6)
-        if r.status_code == 200 and r.content:
-            ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0]
-            if len(_img_cache) > 800:
-                _img_cache.clear()
-            _img_cache[url] = (ct, r.content)
-            return _img_cache[url]
-    except Exception:
-        pass
+    for _attempt in range(2):
+        try:
+            r = requests.get(url, timeout=12, allow_redirects=True,
+                             headers={"User-Agent": "Mozilla/5.0"})
+            if r.status_code == 200 and r.content:
+                ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0]
+                if ct.startswith("image/") or ct == "application/octet-stream":
+                    if len(_img_cache) > 800:
+                        _img_cache.clear()
+                    _img_cache[url] = (ct if ct.startswith("image/") else "image/jpeg", r.content)
+                    return _img_cache[url]
+        except Exception:
+            pass
     return None
 
 @app.route("/api/agw-profile")
@@ -625,20 +628,24 @@ def identities_batch():
 
 @app.route("/api/avatar")
 def avatar_proxy():
-    """Always returns a valid, cacheable image: proxied X/ANS avatar (cached bytes) or identicon."""
+    """Always returns a valid image: proxied avatar (cached bytes) or identicon."""
     from flask import request, Response
     addr = (request.args.get("addr") or "").strip().lower()
     if not (addr.startswith("0x") and len(addr) == 42):
         return Response(status=400)
-    row = id_get(addr)               # cache-only — never resolves in the image path
+    row = id_get(addr)
+    if not (row and row.get("avatar")):
+        # Identity not cached yet — try a network resolve to get the avatar URL
+        row = resolve_identity(addr, network=True)
     if row and row.get("avatar"):
         got = _img_fetch(row["avatar"])
         if got:
             resp = Response(got[1], content_type=got[0])
             resp.headers["Cache-Control"] = "public, max-age=86400"
             return resp
+    # Identicon fallback: short TTL so the browser retries instead of caching miss for a day
     resp = Response(_identicon_svg(addr), mimetype="image/svg+xml")
-    resp.headers["Cache-Control"] = "public, max-age=86400"
+    resp.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
     return resp
 
 @app.route("/api/litany-mesh")
