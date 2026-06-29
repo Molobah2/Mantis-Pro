@@ -1248,6 +1248,22 @@ def holders_overview():
 
         latest_hex = _rpc_h("eth_blockNumber", []) or "0x0"
         latest_blk = int(latest_hex, 16)
+
+        # Compute real blocks-per-second (Abstract is ~200ms/block, not 2s)
+        try:
+            _ref_n = max(0, latest_blk - 500_000)
+            with ThreadPoolExecutor(max_workers=2) as _bex:
+                _fl = _bex.submit(_rpc_h, "eth_getBlockByNumber", [latest_hex, False])
+                _fr = _bex.submit(_rpc_h, "eth_getBlockByNumber", [hex(_ref_n), False])
+            _lat_d = _fl.result() or {}
+            _ref_d = _fr.result() or {}
+            _lat_ts = int(_lat_d.get("timestamp","0x0"), 16)
+            _ref_ts = int(_ref_d.get("timestamp","0x0"), 16)
+            _spb    = (_lat_ts - _ref_ts) / max(1, latest_blk - _ref_n)
+            BLOCKS_24H = int(86400 / max(0.05, _spb))
+        except Exception:
+            BLOCKS_24H = 400_000  # fallback: ~24h at Abstract ~200ms/block
+
         CHUNK = 50_000
         ranges = [(max(0, i - CHUNK + 1), i) for i in range(latest_blk, -1, -CHUNK)]
 

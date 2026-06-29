@@ -765,7 +765,7 @@ function renderTopHolders(holders, max=15, container='top-holders-body'){
       <tbody>${slice.map(h=>`
         <tr onclick="location.href='/operator/${h.address}'" style="animation:fadein .3s ease ${(slice.indexOf(h)*.04).toFixed(2)}s both">
           <td><span class="h-rank${h.rank<=3?' t3':''}">${h.rank}</span></td>
-          <td><img class="h-av" src="/api/avatar?addr=${h.address}" loading="lazy" alt=""></td>
+          <td><img class="h-av" src="${h.avatarSrc||'/api/avatar?addr='+h.address}" alt="" onerror="this.src='/api/avatar?addr=${h.address}'"></td>
           <td><div class="h-name">${esc(h.name||sa(h.address))}</div><div class="h-addr">${sa(h.address)}</div></td>
           <td><span class="h-cards">${h.cards.toLocaleString()}</span></td>
           <td><span class="h-pct">${h.pct}%</span></td>
@@ -798,7 +798,7 @@ function renderWhales(holders, container='whale-body'){
   }
   document.getElementById(container).innerHTML=whales.map(h=>`
     <div class="whale-row" onclick="location.href='/operator/${h.address}'">
-      <img class="whale-av" src="/api/avatar?addr=${h.address}" loading="lazy" alt="">
+      <img class="whale-av" src="${h.avatarSrc||'/api/avatar?addr='+h.address}" alt="" onerror="this.src='/api/avatar?addr=${h.address}'">
       <div style="flex:1;min-width:0">
         <div class="whale-name">${esc(h.name||sa(h.address))}</div>
         <div class="whale-addr">${sa(h.address)}</div>
@@ -828,7 +828,7 @@ async function renderFeed(events){
     const badge=isM?'<span class="ev-mint">Mint</span>':'<span class="ev-xfer">Transfer</span>';
     const actText=isM?`Minted Card #${ev.token}`:`Acquired Card #${ev.token}`;
     return `<div class="feed-row fadein" style="animation-delay:${i*.03}s" onclick="location.href='/operator/${t}'">
-      <img class="feed-av" src="/api/avatar?addr=${t}" loading="lazy" alt="">
+      <img class="feed-av" src="/api/avatar?addr=${t}" alt="" onerror="this.style.opacity='0.3'">
       <div class="feed-body-inner" style="flex:1;min-width:0">
         <div class="feed-top">${badge}<span class="feed-name">${esc(nm)}</span></div>
         <div class="feed-act">${actText}</div>
@@ -853,9 +853,18 @@ async function enrichHolders(holders){
       Object.assign(idmap,await r.json());
     }catch(_){}
   }
+  const ts=Date.now();
   return holders.map(h=>{
     const idn=idmap[h.address]||{};
-    return{...h,name:idn.name||h.name||null,faction:idn.faction||h.faction||null};
+    // avatarResolved=true means the backend now has a real profile picture cached;
+    // append a cache-buster so the browser fetches the real image instead of any
+    // previously cached identicon.
+    const avatarResolved=idn.resolved===true;
+    return{...h,
+      name:idn.name||h.name||null,
+      faction:idn.faction||h.faction||null,
+      avatarSrc:`/api/avatar?addr=${h.address}${avatarResolved?'&_='+ts:''}`,
+    };
   });
 }
 
