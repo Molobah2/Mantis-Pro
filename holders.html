@@ -838,9 +838,30 @@ async function renderFeed(events){
   }).join('')+'<div style="padding:10px 18px;border-top:1px solid var(--l0)"><a href="/activity" style="font-size:10.5px;font-weight:700;color:var(--green)">View Activity Explorer →</a></div>';
 }
 
+// ── IDENTITY ENRICHMENT ────────────────────────────────────────────
+// Calls /api/identities in batches of 40, which actively resolves ANS +
+// Portal profiles for uncached addresses and warms the avatar cache on the
+// backend — so the first <img src="/api/avatar?addr=…"> request gets the
+// real picture rather than a fallback identicon.
+async function enrichHolders(holders){
+  if(!holders||!holders.length) return holders;
+  const addrs=holders.map(h=>h.address);
+  const idmap={};
+  for(let i=0;i<Math.min(addrs.length,100);i+=40){
+    try{
+      const r=await fetch('/api/identities?addrs='+addrs.slice(i,i+40).join(','));
+      Object.assign(idmap,await r.json());
+    }catch(_){}
+  }
+  return holders.map(h=>{
+    const idn=idmap[h.address]||{};
+    return{...h,name:idn.name||h.name||null,faction:idn.faction||h.faction||null};
+  });
+}
+
 // ── OVERVIEW RENDER ────────────────────────────────────────────────
-function renderOverview(d){
-  // KPIs
+async function renderOverview(d){
+  // KPIs & charts render immediately — no identity needed
   animCount(document.getElementById('kpi-holders'), d.total_holders);
   animCount(document.getElementById('kpi-active'),  d.active_24h);
   animCount(document.getElementById('kpi-new'),     d.new_holders_24h);
@@ -878,19 +899,22 @@ function renderOverview(d){
   renderConcentration(d.concentration);
   renderTiers(d.tiers, d.total_holders);
 
-  // Sparklines (decorative bars showing tier distribution)
+  // Sparklines
   const tierVals=Object.values(d.tiers).map(t=>t.count);
   sparkline('spark-holders', tierVals, 'var(--green)');
   sparkline('spark-active',  [d.active_24h, d.active_24h], 'var(--ink3)');
   sparkline('spark-whales',  [0,d.whale_count], 'var(--purple)');
   sparkline('spark-supply',  tierVals.map((_,i)=>tierVals.slice(0,i+1).reduce((a,b)=>a+b,0)), 'var(--blue)');
 
-  // Top holders
-  renderTopHolders(d.top_holders, 15, 'top-holders-body');
-  renderWhales(d.top_holders, 'whale-body');
-  renderRankings(d.top_holders);
-  renderWhales(d.top_holders, 'whale-tab-body');
-  allHolders=d.top_holders;
+  // Resolve identities first so avatar images load correctly on first request
+  const enriched = await enrichHolders(d.top_holders);
+  d.top_holders  = enriched;
+  allHolders     = enriched;
+
+  renderTopHolders(enriched, 15, 'top-holders-body');
+  renderWhales(enriched, 'whale-body');
+  renderRankings(enriched);
+  renderWhales(enriched, 'whale-tab-body');
 
   overviewData=d;
 }
@@ -966,8 +990,8 @@ async function init(){
 
 // ── POLLING ───────────────────────────────────────────────────────
 function pollOverview(){
-  fetch('/api/holders-overview').then(r=>r.json()).then(d=>{
-    if(d.total_holders||d.indexed_block) renderOverview(d);
+  fetch('/api/holders-overview').then(r=>r.json()).then(async d=>{
+    if(d.total_holders||d.indexed_block) await renderOverview(d);
   }).catch(()=>{});
 }
 function pollFeed(){
