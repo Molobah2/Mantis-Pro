@@ -436,9 +436,11 @@ a{color:inherit;text-decoration:none}
                 <button class="gc-pill m-active" id="gcm-holders" onclick="gcMetric('holders',this)">HOLDERS</button>
                 <button class="gc-pill" id="gcm-cards" onclick="gcMetric('cards',this)">CARDS</button>
               </div>
-              <div class="gc-pill-row">
+              <div class="gc-pill-row" id="gc-range-row">
                 <button class="gc-pill" onclick="gcRange(7,this)">7D</button>
                 <button class="gc-pill active" onclick="gcRange(30,this)">30D</button>
+                <button class="gc-pill" onclick="gcRange(90,this)">3M</button>
+                <button class="gc-pill" onclick="gcRange(365,this)">1Y</button>
                 <button class="gc-pill" onclick="gcRange(0,this)">ALL</button>
               </div>
             </div>
@@ -715,7 +717,7 @@ function gcMetric(m, btn){
 }
 function gcRange(days, btn){
   _gcDays=days;
-  document.querySelectorAll('.gc-pill-row:last-child .gc-pill').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#gc-range-row .gc-pill').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   _drawGrowthChart();
 }
