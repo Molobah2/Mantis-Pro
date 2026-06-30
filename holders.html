@@ -141,6 +141,23 @@ a{color:inherit;text-decoration:none}
 .panel-action{margin-left:auto;font-size:9.5px;color:var(--green);font-weight:700;cursor:pointer}
 .panel-action:hover{text-decoration:underline}
 
+/* MARKET CHART */
+.gc-wrap{padding:20px 22px 0}
+.gc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.gc-left{}
+.gc-val{font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:900;letter-spacing:-2px;color:var(--ink);line-height:1}
+.gc-lbl{font-size:9px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink4);margin-top:5px}
+.gc-delta{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;margin-top:6px}
+.gc-delta.up{color:var(--green)}.gc-delta.flat{color:var(--ink4)}.gc-delta.dn{color:#f87171}
+.gc-right{display:flex;flex-direction:column;gap:8px;align-items:flex-end;padding-top:2px}
+.gc-pill-row{display:flex;gap:4px}
+.gc-pill{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:900;letter-spacing:.6px;padding:4px 10px;border-radius:4px;border:1px solid var(--l1);background:var(--p1);color:var(--ink4);cursor:pointer;transition:all .12s}
+.gc-pill:hover{background:var(--p2);color:var(--ink2)}
+.gc-pill.active{background:var(--p3);border-color:var(--l2);color:var(--ink)}
+.gc-pill.m-active{color:var(--green);border-color:rgba(35,224,122,.3);background:rgba(35,224,122,.07)}
+.gc-pill.m-active-b{color:var(--blue);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.07)}
+.gc-canvas-wrap{height:210px;position:relative;padding:16px 0 0;margin:0 -4px}
+
 /* DONUT CHART */
 .donut-wrap{padding:24px;display:flex;align-items:center;gap:24px}
 .donut-svg-wrap{position:relative;flex-shrink:0}
@@ -406,17 +423,29 @@ a{color:inherit;text-decoration:none}
       </div>
 
       <!-- GROWTH CHART -->
-      <div class="panel" id="growth-panel" style="margin:0 0 1px;border-bottom:1px solid var(--l0)">
-        <div class="panel-hd">
-          <div class="panel-lbl">Holder Growth</div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <span class="panel-badge b-green" id="gc-holders-badge">— Holders</span>
-            <span class="panel-badge b-blue"  id="gc-cards-badge">— Cards</span>
-            <div class="panel-badge" id="gc-days-badge" style="color:var(--ink4)">loading…</div>
+      <div class="panel" id="growth-panel" style="border-bottom:1px solid var(--l0)">
+        <div class="gc-wrap">
+          <div class="gc-top">
+            <div class="gc-left">
+              <div class="gc-val" id="gc-main-val">—</div>
+              <div class="gc-lbl" id="gc-metric-lbl">Unique Holders</div>
+              <div class="gc-delta flat" id="gc-delta">loading on-chain history…</div>
+            </div>
+            <div class="gc-right">
+              <div class="gc-pill-row">
+                <button class="gc-pill m-active" id="gcm-holders" onclick="gcMetric('holders',this)">HOLDERS</button>
+                <button class="gc-pill" id="gcm-cards" onclick="gcMetric('cards',this)">CARDS</button>
+              </div>
+              <div class="gc-pill-row">
+                <button class="gc-pill" onclick="gcRange(7,this)">7D</button>
+                <button class="gc-pill active" onclick="gcRange(30,this)">30D</button>
+                <button class="gc-pill" onclick="gcRange(0,this)">ALL</button>
+              </div>
+            </div>
           </div>
-        </div>
-        <div style="padding:0 16px 20px;height:200px;position:relative">
-          <canvas id="growth-chart"></canvas>
+          <div class="gc-canvas-wrap">
+            <canvas id="growth-chart"></canvas>
+          </div>
         </div>
       </div>
 
@@ -653,111 +682,184 @@ function animCount(el,target,dur=1200){
   requestAnimationFrame(step);
 }
 
-// ── GROWTH CHART (Chart.js) ───────────────────────────────────────────
+// ── GROWTH CHART (Chart.js — CMC style) ──────────────────────────────
 let _growthChart = null;
+let _gcHistory   = [];
+let _gcMetric    = 'holders';
+let _gcDays      = 30;
+
+const _crosshairPlugin = {
+  id:'crosshair',
+  afterDraw(chart){
+    if(chart._crossX==null) return;
+    const {ctx,chartArea:{top,bottom}}=chart;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(chart._crossX,top);
+    ctx.lineTo(chart._crossX,bottom);
+    ctx.strokeStyle='rgba(255,255,255,0.13)';
+    ctx.lineWidth=1;
+    ctx.setLineDash([3,4]);
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
+function gcMetric(m, btn){
+  _gcMetric=m;
+  document.querySelectorAll('.gc-pill[id^="gcm-"]').forEach(b=>{
+    b.classList.remove('m-active','m-active-b');
+  });
+  btn.classList.add(m==='holders'?'m-active':'m-active-b');
+  _drawGrowthChart();
+}
+function gcRange(days, btn){
+  _gcDays=days;
+  document.querySelectorAll('.gc-pill-row:last-child .gc-pill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  _drawGrowthChart();
+}
+
 function renderGrowthChart(history){
-  const canvas = document.getElementById('growth-chart');
-  if(!canvas || !history || history.length < 2) return;
+  if(!history||history.length<2) return;
+  _gcHistory=history;
+  _drawGrowthChart();
+}
 
-  const green  = getComputedStyle(document.documentElement).getPropertyValue('--green').trim()  || '#23e07a';
-  const blue   = getComputedStyle(document.documentElement).getPropertyValue('--blue').trim()   || '#3b82f6';
-  const ink4   = getComputedStyle(document.documentElement).getPropertyValue('--ink4').trim()   || 'rgba(255,255,255,.25)';
-  const grid   = 'rgba(255,255,255,0.04)';
+function _drawGrowthChart(){
+  const history=_gcHistory;
+  if(!history||history.length<2) return;
+  const canvas=document.getElementById('growth-chart');
+  if(!canvas) return;
 
-  const labels  = history.map(d => d.date);
-  const holders = history.map(d => d.holders);
-  const cards   = history.map(d => d.cards);
-  const noPts   = history.length > 20;
+  const isH    = _gcMetric==='holders';
+  const color  = isH ? '#23e07a' : '#3b82f6';
+  const colorA = isH ? 'rgba(35,224,122,' : 'rgba(59,130,246,';
+  const lbl    = isH ? 'Unique Holders' : 'Cards in Circulation';
+  const key    = isH ? 'holders' : 'cards';
 
-  // Update badges
-  const last = history[history.length-1];
-  const el_h = document.getElementById('gc-holders-badge');
-  const el_c = document.getElementById('gc-cards-badge');
-  const el_d = document.getElementById('gc-days-badge');
-  if(el_h) el_h.textContent = last.holders.toLocaleString()+' Holders';
-  if(el_c) el_c.textContent = last.cards.toLocaleString()+' Cards';
-  if(el_d) el_d.textContent = history.length+' days';
+  // Slice to selected range
+  const slice  = _gcDays>0 ? history.slice(-_gcDays) : history;
+  const labels = slice.map(d=>d.date);
+  const vals   = slice.map(d=>d[key]);
+  const first  = vals[0], last=vals[vals.length-1];
+  const delta  = last-first;
+  const sign   = delta>=0?'+':'';
+  const pct    = first>0?(delta/first*100).toFixed(1):'0.0';
 
-  if(_growthChart) _growthChart.destroy();
-  _growthChart = new Chart(canvas, {
-    type: 'line',
-    data: {
+  // Header
+  const elVal  = document.getElementById('gc-main-val');
+  const elLbl  = document.getElementById('gc-metric-lbl');
+  const elDel  = document.getElementById('gc-delta');
+  if(elVal) elVal.textContent=last.toLocaleString();
+  if(elLbl) elLbl.textContent=lbl;
+  if(elDel){
+    elDel.textContent=`${sign}${delta.toLocaleString()} (${sign}${pct}%) over ${slice.length}d`;
+    elDel.className='gc-delta '+(delta>0?'up':delta<0?'dn':'flat');
+  }
+
+  if(_growthChart){_growthChart.destroy();_growthChart=null;}
+
+  // Gradient fill — must be created after canvas is in DOM
+  const ctx2=canvas.getContext('2d');
+
+  const gradientPlugin={
+    id:'gradientFill',
+    beforeDatasetsDraw(chart){
+      const ds=chart.data.datasets[0];
+      const {ctx:c,chartArea:{top,bottom}}=chart;
+      const g=c.createLinearGradient(0,top,0,bottom);
+      g.addColorStop(0,colorA+'0.28)');
+      g.addColorStop(0.5,colorA+'0.08)');
+      g.addColorStop(1,colorA+'0)');
+      ds.backgroundColor=g;
+    }
+  };
+
+  _growthChart=new Chart(ctx2,{
+    type:'line',
+    plugins:[_crosshairPlugin, gradientPlugin],
+    data:{
       labels,
-      datasets: [
-        {
-          label: 'Holders',
-          data: holders,
-          borderColor: green,
-          backgroundColor: green.replace(')',',0.08)').replace('rgb(','rgba(').replace('#23e07a','rgba(35,224,122,0.08)'),
-          fill: true,
-          tension: 0.35,
-          borderWidth: 1.5,
-          pointRadius: noPts ? 0 : 3,
-          pointHoverRadius: 4,
-          yAxisID: 'yH',
-        },
-        {
-          label: 'Cards',
-          data: cards,
-          borderColor: blue,
-          backgroundColor: 'rgba(59,130,246,0.05)',
-          fill: true,
-          tension: 0.35,
-          borderWidth: 1.5,
-          pointRadius: noPts ? 0 : 3,
-          pointHoverRadius: 4,
-          yAxisID: 'yC',
-        }
-      ]
+      datasets:[{
+        label:lbl,
+        data:vals,
+        borderColor:color,
+        backgroundColor:'transparent',
+        fill:true,
+        tension:0.42,
+        borderWidth:2,
+        pointRadius:0,
+        pointHoverRadius:5,
+        pointHoverBackgroundColor:color,
+        pointHoverBorderColor:'rgba(255,255,255,0.8)',
+        pointHoverBorderWidth:1.5,
+      }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode:'index', intersect:false },
-      animation: { duration: 600 },
-      plugins: {
-        legend: { display:false },
-        tooltip: {
-          backgroundColor: 'rgba(7,14,10,0.96)',
-          borderColor: 'rgba(255,255,255,0.06)',
-          borderWidth: 1,
-          titleColor: ink4,
-          bodyColor: '#fff',
-          titleFont: { family:"'JetBrains Mono',monospace", size:9 },
-          bodyFont:  { family:"'JetBrains Mono',monospace", size:10 },
-          callbacks: {
-            label: ctx => (ctx.datasetIndex===0
-              ? `  Holders  ${ctx.parsed.y.toLocaleString()}`
-              : `  Cards    ${ctx.parsed.y.toLocaleString()}`),
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      animation:{duration:450,easing:'easeInOutQuart'},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          enabled:true,
+          backgroundColor:'rgba(4,8,6,0.96)',
+          borderColor:'rgba(255,255,255,0.07)',
+          borderWidth:1,
+          padding:{top:8,bottom:8,left:12,right:12},
+          displayColors:false,
+          caretSize:0,
+          titleColor:'rgba(255,255,255,0.35)',
+          bodyColor:'#fff',
+          titleFont:{family:"'JetBrains Mono',monospace",size:9},
+          bodyFont:{family:"'JetBrains Mono',monospace",size:14,weight:'900'},
+          callbacks:{
+            title:items=>items[0].label,
+            label:item=>item.parsed.y.toLocaleString()+' '+_gcMetric,
           }
         }
       },
-      scales: {
-        x: {
-          ticks: { color:ink4, font:{family:"'JetBrains Mono',monospace",size:8},
-                   maxRotation:0, autoSkip:true, maxTicksLimit:10 },
-          grid:  { color:grid },
-          border:{ color:'rgba(255,255,255,0.06)' },
+      scales:{
+        x:{
+          border:{display:false},
+          grid:{color:'rgba(255,255,255,0.03)',drawTicks:false},
+          ticks:{
+            color:'rgba(255,255,255,0.18)',
+            font:{family:"'JetBrains Mono',monospace",size:8},
+            maxTicksLimit:8,maxRotation:0,autoSkip:true,
+            padding:6,
+          },
         },
-        yH: {
-          position: 'left',
-          ticks: { color:green, font:{family:"'JetBrains Mono',monospace",size:8}, maxTicksLimit:5 },
-          grid:  { color:grid },
-          border:{ color:'rgba(255,255,255,0.06)' },
-          title: { display:true, text:'Holders', color:green,
-                   font:{family:"'JetBrains Mono',monospace",size:8} },
-        },
-        yC: {
-          position: 'right',
-          ticks: { color:blue, font:{family:"'JetBrains Mono',monospace",size:8}, maxTicksLimit:5 },
-          grid:  { drawOnChartArea:false },
-          border:{ color:'rgba(255,255,255,0.06)' },
-          title: { display:true, text:'Cards', color:blue,
-                   font:{family:"'JetBrains Mono',monospace",size:8} },
-        },
+        y:{
+          position:'right',
+          border:{display:false},
+          grid:{color:'rgba(255,255,255,0.03)',drawTicks:false},
+          ticks:{
+            color:'rgba(255,255,255,0.18)',
+            font:{family:"'JetBrains Mono',monospace",size:8},
+            maxTicksLimit:5,
+            padding:8,
+            callback:v=>v>=1000?(v/1000).toFixed(1)+'k':v,
+          },
+        }
       }
     }
   });
+
+  // Crosshair via canvas events
+  canvas.onmousemove=e=>{
+    if(!_growthChart) return;
+    const r=canvas.getBoundingClientRect();
+    _growthChart._crossX=e.clientX-r.left;
+    _growthChart.draw();
+  };
+  canvas.onmouseleave=()=>{
+    if(!_growthChart) return;
+    _growthChart._crossX=null;
+    _growthChart.draw();
+  };
 }
 
 // ── SPARKLINE ─────────────────────────────────────────────────────────
