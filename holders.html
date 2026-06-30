@@ -648,23 +648,29 @@ function sparkline(svgId, vals, color){
 
 // ── DONUT CHART ──────────────────────────────────────────────────────
 function renderDonut(tiers, total){
-  const CIRCUMFERENCE=2*Math.PI*58; // 364.4
+  const CIRCUMFERENCE=2*Math.PI*58; // ~364.4
+  const MIN_DASH=6; // minimum visible arc in pixels for non-zero categories
   const segments=[
-    {key:'micro',    el:'donut-micro',    color:'rgba(234,242,236,.25)'},
-    {key:'collector',el:'donut-collector',color:'var(--green)'},
-    {key:'advanced', el:'donut-advanced', color:'var(--blue)'},
-    {key:'elite',    el:'donut-elite',    color:'var(--gold)'},
-    {key:'whale',    el:'donut-whale',    color:'var(--purple)'},
+    {key:'micro',    el:'donut-micro'},
+    {key:'collector',el:'donut-collector'},
+    {key:'advanced', el:'donut-advanced'},
+    {key:'elite',    el:'donut-elite'},
+    {key:'whale',    el:'donut-whale'},
   ];
   let offset=0;
   segments.forEach(({key,el})=>{
-    const pct=(tiers[key]?.count||0)/Math.max(1,total);
-    const dash=pct*CIRCUMFERENCE;
+    const count=(tiers[key]?.count||0);
+    const rawDash=(count/Math.max(1,total))*CIRCUMFERENCE;
+    // Guarantee a minimum visible arc for any non-zero category; keep zero at zero
+    const dash=count>0 ? Math.max(rawDash,MIN_DASH) : 0;
     const seg=document.getElementById(el);
     if(seg){
+      // Use only strokeDashoffset to position each segment after the previous one.
+      // The SVG circles already have a fixed rotate(-90 80 80) that starts arcs at 12 o'clock.
+      // Applying an ADDITIONAL rotation here doubled the offset and scattered all segments.
       seg.style.strokeDashoffset=-offset;
       seg.style.strokeDasharray=`${dash} ${CIRCUMFERENCE-dash}`;
-      seg.setAttribute('transform',`rotate(-90 80 80) rotate(${offset/CIRCUMFERENCE*360} 80 80)`);
+      seg.setAttribute('transform','rotate(-90 80 80)');
     }
     offset+=dash;
   });
