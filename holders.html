@@ -263,6 +263,7 @@ a{color:inherit;text-decoration:none}
 @media(max-width:1200px){.kpi-row{grid-template-columns:repeat(3,1fr)}.kpi:nth-child(3){border-right:none}.kpi:nth-child(4){border-top:1px solid var(--l0)}.tier-grid{grid-template-columns:repeat(3,1fr)}.content-2col{grid-template-columns:1fr}.c2-main{border-right:none;border-bottom:1px solid var(--l0)}.main-grid{grid-template-columns:1fr}.mg-left{border-right:none;border-bottom:1px solid var(--l0)}}
 @media(max-width:800px){.kpi-row{grid-template-columns:repeat(2,1fr)}.kpi:nth-child(2){border-right:none}.tier-grid{grid-template-columns:repeat(2,1fr)}.btm-strip{grid-template-columns:1fr}.btm-col{border-right:none;border-bottom:1px solid var(--l0)}.sb{display:none}.hero-title{font-size:22px}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -401,6 +402,21 @@ a{color:inherit;text-decoration:none}
           <div class="kpi-val" id="kpi-supply">—</div>
           <div class="kpi-delta"><span>verified on-chain</span></div>
           <svg class="kpi-sparkline" id="spark-supply" width="100%" height="28" viewBox="0 0 140 28" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+
+      <!-- GROWTH CHART -->
+      <div class="panel" id="growth-panel" style="margin:0 0 1px;border-bottom:1px solid var(--l0)">
+        <div class="panel-hd">
+          <div class="panel-lbl">Holder Growth</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="panel-badge b-green" id="gc-holders-badge">— Holders</span>
+            <span class="panel-badge b-blue"  id="gc-cards-badge">— Cards</span>
+            <div class="panel-badge" id="gc-days-badge" style="color:var(--ink4)">loading…</div>
+          </div>
+        </div>
+        <div style="padding:0 16px 20px;height:200px;position:relative">
+          <canvas id="growth-chart"></canvas>
         </div>
       </div>
 
@@ -635,6 +651,113 @@ function animCount(el,target,dur=1200){
     else el.textContent=isFloat?target.toFixed(1)+'%':target.toLocaleString();
   }
   requestAnimationFrame(step);
+}
+
+// ── GROWTH CHART (Chart.js) ───────────────────────────────────────────
+let _growthChart = null;
+function renderGrowthChart(history){
+  const canvas = document.getElementById('growth-chart');
+  if(!canvas || !history || history.length < 2) return;
+
+  const green  = getComputedStyle(document.documentElement).getPropertyValue('--green').trim()  || '#23e07a';
+  const blue   = getComputedStyle(document.documentElement).getPropertyValue('--blue').trim()   || '#3b82f6';
+  const ink4   = getComputedStyle(document.documentElement).getPropertyValue('--ink4').trim()   || 'rgba(255,255,255,.25)';
+  const grid   = 'rgba(255,255,255,0.04)';
+
+  const labels  = history.map(d => d.date);
+  const holders = history.map(d => d.holders);
+  const cards   = history.map(d => d.cards);
+  const noPts   = history.length > 20;
+
+  // Update badges
+  const last = history[history.length-1];
+  const el_h = document.getElementById('gc-holders-badge');
+  const el_c = document.getElementById('gc-cards-badge');
+  const el_d = document.getElementById('gc-days-badge');
+  if(el_h) el_h.textContent = last.holders.toLocaleString()+' Holders';
+  if(el_c) el_c.textContent = last.cards.toLocaleString()+' Cards';
+  if(el_d) el_d.textContent = history.length+' days';
+
+  if(_growthChart) _growthChart.destroy();
+  _growthChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Holders',
+          data: holders,
+          borderColor: green,
+          backgroundColor: green.replace(')',',0.08)').replace('rgb(','rgba(').replace('#23e07a','rgba(35,224,122,0.08)'),
+          fill: true,
+          tension: 0.35,
+          borderWidth: 1.5,
+          pointRadius: noPts ? 0 : 3,
+          pointHoverRadius: 4,
+          yAxisID: 'yH',
+        },
+        {
+          label: 'Cards',
+          data: cards,
+          borderColor: blue,
+          backgroundColor: 'rgba(59,130,246,0.05)',
+          fill: true,
+          tension: 0.35,
+          borderWidth: 1.5,
+          pointRadius: noPts ? 0 : 3,
+          pointHoverRadius: 4,
+          yAxisID: 'yC',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      animation: { duration: 600 },
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          backgroundColor: 'rgba(7,14,10,0.96)',
+          borderColor: 'rgba(255,255,255,0.06)',
+          borderWidth: 1,
+          titleColor: ink4,
+          bodyColor: '#fff',
+          titleFont: { family:"'JetBrains Mono',monospace", size:9 },
+          bodyFont:  { family:"'JetBrains Mono',monospace", size:10 },
+          callbacks: {
+            label: ctx => (ctx.datasetIndex===0
+              ? `  Holders  ${ctx.parsed.y.toLocaleString()}`
+              : `  Cards    ${ctx.parsed.y.toLocaleString()}`),
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color:ink4, font:{family:"'JetBrains Mono',monospace",size:8},
+                   maxRotation:0, autoSkip:true, maxTicksLimit:10 },
+          grid:  { color:grid },
+          border:{ color:'rgba(255,255,255,0.06)' },
+        },
+        yH: {
+          position: 'left',
+          ticks: { color:green, font:{family:"'JetBrains Mono',monospace",size:8}, maxTicksLimit:5 },
+          grid:  { color:grid },
+          border:{ color:'rgba(255,255,255,0.06)' },
+          title: { display:true, text:'Holders', color:green,
+                   font:{family:"'JetBrains Mono',monospace",size:8} },
+        },
+        yC: {
+          position: 'right',
+          ticks: { color:blue, font:{family:"'JetBrains Mono',monospace",size:8}, maxTicksLimit:5 },
+          grid:  { drawOnChartArea:false },
+          border:{ color:'rgba(255,255,255,0.06)' },
+          title: { display:true, text:'Cards', color:blue,
+                   font:{family:"'JetBrains Mono',monospace",size:8} },
+        },
+      }
+    }
+  });
 }
 
 // ── SPARKLINE ─────────────────────────────────────────────────────────
@@ -909,6 +1032,7 @@ async function renderOverview(d){
   document.getElementById('tb-block').textContent='Block #'+d.indexed_block.toLocaleString();
 
   // Charts
+  renderGrowthChart(d.history || []);
   renderDonut(d.tiers, d.total_holders);
   renderDonutLegend(d.tiers, d.total_holders);
   renderConcentration(d.concentration);

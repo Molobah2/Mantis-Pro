@@ -1259,6 +1259,8 @@ def holders_overview():
         latest_blk = int(latest_hex, 16)
 
         # Compute real blocks-per-second (Abstract is ~200ms/block, not 2s)
+        _lat_ts = int(now)   # defaults overwritten in try block below
+        _spb    = 0.2
         try:
             _ref_n = max(0, latest_blk - 500_000)
             with ThreadPoolExecutor(max_workers=2) as _bex:
@@ -1292,6 +1294,45 @@ def holders_overview():
                 except: pass
 
         all_logs.sort(key=lambda l: (int(l["blockNumber"],16), int(l.get("logIndex","0x0"),16)))
+
+        # Build daily history in one O(N) pass through the sorted logs.
+        # Estimate each log's timestamp from the latest block timestamp + seconds-per-block.
+        _h_bal   = {}   # addr -> running card balance
+        _h_count = 0    # running unique-holder count
+        _h_cards = 0    # running total cards held
+        _day_map = {}   # start-of-day epoch -> (holders, cards)
+        for _lg in all_logs:
+            _tops = _lg.get("topics", [])
+            if len(_tops) < 3: continue
+            _blk = int(_lg["blockNumber"], 16)
+            _frm = "0x" + _tops[1][-40:].lower()
+            _to  = "0x" + _tops[2][-40:].lower()
+            if _frm != "0x0000000000000000000000000000000000000000":
+                _pb = _h_bal.get(_frm, 0)
+                _h_bal[_frm] = _pb - 1
+                if _pb == 1:    _h_count -= 1
+                _h_cards -= 1
+            if _to  != "0x0000000000000000000000000000000000000000":
+                _pb = _h_bal.get(_to, 0)
+                _h_bal[_to]  = _pb + 1
+                if _pb == 0:    _h_count += 1
+                _h_cards += 1
+            _ts_est = _lat_ts - (latest_blk - _blk) * _spb
+            _day    = int(_ts_est // 86400) * 86400
+            _day_map[_day] = (_h_count, _h_cards)
+        # Fill gaps and emit sorted list
+        _history = []
+        if _day_map:
+            _d = min(_day_map)
+            _prev_h, _prev_c = 0, 0
+            while _d <= max(_day_map):
+                if _d in _day_map: _prev_h, _prev_c = _day_map[_d]
+                _history.append({
+                    "date":    time.strftime("%Y-%m-%d", time.gmtime(_d)),
+                    "holders": _prev_h,
+                    "cards":   _prev_c,
+                })
+                _d += 86400
 
         # Build holder balance map (net received - sent)
         recv_map, sent_map = {}, {}
@@ -1437,6 +1478,7 @@ def holders_overview():
             "top_holders":     top_holders,
             "whale_moves":     whale_moves,
             "snapshots":       list(_holder_snapshots),
+            "history":         _history,
         }
         _holders_cache["ts"]   = now
         _holders_cache["data"] = result
