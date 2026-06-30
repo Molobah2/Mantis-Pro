@@ -914,12 +914,14 @@ async function renderOverview(d){
   renderConcentration(d.concentration);
   renderTiers(d.tiers, d.total_holders);
 
-  // Sparklines
-  const tierVals=Object.values(d.tiers).map(t=>t.count);
-  sparkline('spark-holders', tierVals, 'var(--green)');
-  sparkline('spark-active',  [d.active_24h, d.active_24h], 'var(--ink3)');
-  sparkline('spark-whales',  [0,d.whale_count], 'var(--purple)');
-  sparkline('spark-supply',  tierVals.map((_,i)=>tierVals.slice(0,i+1).reduce((a,b)=>a+b,0)), 'var(--blue)');
+  // Sparklines — flat lines only; no historical time-series exists yet, fake trends are not shown
+  const _v=v=>[v,v];
+  sparkline('spark-holders', _v(d.total_holders),    'var(--green)');
+  sparkline('spark-active',  _v(d.active_24h),       'var(--ink3)');
+  sparkline('spark-new',     _v(d.new_holders_24h),  'var(--green)');
+  sparkline('spark-whales',  _v(d.whale_count),      'var(--purple)');
+  sparkline('spark-conc',    _v(d.top10_conc),       'var(--blue)');
+  sparkline('spark-supply',  _v(d.total_cards),      'var(--blue)');
 
   // Resolve identities first so avatar images load correctly on first request
   const enriched = await enrichHolders(d.top_holders);
