@@ -1124,8 +1124,10 @@ def referral_data_endpoint():
 _rt_cache      = {"ts": 0, "data": []}
 _RT_TTL        = 120   # 2-minute cache for recent transfers
 
-_holders_cache = {"ts": 0.0, "data": None}
-_HOLDERS_TTL   = 600   # 10-minute cache for full holder snapshot
+_holders_cache     = {"ts": 0.0, "data": None}
+_HOLDERS_TTL       = 600   # 10-minute cache for full holder snapshot
+_holder_snapshots  = []    # rolling real history; one entry per recompute (~every 10 min)
+_MAX_SNAPSHOTS     = 14    # ~140 min of history at 10-min TTL
 
 @app.route("/api/recent-transfers")
 def recent_transfers():
@@ -1407,6 +1409,20 @@ def holders_overview():
             key=lambda x: x["count"], reverse=True
         )[:20]
 
+        # Append a real snapshot so sparklines accumulate genuine trend history.
+        # One entry per recompute (~10-min TTL); reset on process restart.
+        _holder_snapshots.append({
+            "ts":       int(now),
+            "holders":  total_holders,
+            "cards":    total_cards,
+            "whales":   whale_count,
+            "active":   active_24h,
+            "new":      new_holders_24h,
+            "conc":     round(concentration["top10"], 2),
+        })
+        if len(_holder_snapshots) > _MAX_SNAPSHOTS:
+            del _holder_snapshots[:-_MAX_SNAPSHOTS]
+
         result = {
             "indexed_block":   latest_blk,
             "indexed_ts":      int(now),
@@ -1420,6 +1436,7 @@ def holders_overview():
             "concentration":   concentration,
             "top_holders":     top_holders,
             "whale_moves":     whale_moves,
+            "snapshots":       list(_holder_snapshots),
         }
         _holders_cache["ts"]   = now
         _holders_cache["data"] = result

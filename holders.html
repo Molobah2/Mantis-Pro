@@ -914,14 +914,17 @@ async function renderOverview(d){
   renderConcentration(d.concentration);
   renderTiers(d.tiers, d.total_holders);
 
-  // Sparklines — flat lines only; no historical time-series exists yet, fake trends are not shown
-  const _v=v=>[v,v];
-  sparkline('spark-holders', _v(d.total_holders),    'var(--green)');
-  sparkline('spark-active',  _v(d.active_24h),       'var(--ink3)');
-  sparkline('spark-new',     _v(d.new_holders_24h),  'var(--green)');
-  sparkline('spark-whales',  _v(d.whale_count),      'var(--purple)');
-  sparkline('spark-conc',    _v(d.top10_conc),       'var(--blue)');
-  sparkline('spark-supply',  _v(d.total_cards),      'var(--blue)');
+  // Sparklines — use real accumulated snapshot history when ≥2 points exist;
+  // fall back to a flat line (two identical values) until history builds up.
+  // Snapshots accumulate in-memory on the server, one per 10-min cache cycle.
+  const snaps = d.snapshots || [];
+  const sv = (key, now) => snaps.length >= 2 ? snaps.map(s => s[key]) : [now, now];
+  sparkline('spark-holders', sv('holders', d.total_holders),    'var(--green)');
+  sparkline('spark-active',  sv('active',  d.active_24h),       'var(--ink3)');
+  sparkline('spark-new',     sv('new',     d.new_holders_24h),  'var(--green)');
+  sparkline('spark-whales',  sv('whales',  d.whale_count),      'var(--purple)');
+  sparkline('spark-conc',    sv('conc',    d.top10_conc),       'var(--blue)');
+  sparkline('spark-supply',  sv('cards',   d.total_cards),      'var(--blue)');
 
   // Resolve identities first so avatar images load correctly on first request
   const enriched = await enrichHolders(d.top_holders);
