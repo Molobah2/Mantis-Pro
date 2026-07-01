@@ -1917,6 +1917,10 @@ AGENT_METADATA = {
         {
             "agentId": 857,
             "agentRegistry": "eip155:2741:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+        },
+        {
+            "agentId": 57919,
+            "agentRegistry": "eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
         }
     ]
 }
