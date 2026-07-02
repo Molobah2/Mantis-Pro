@@ -1,6 +1,7 @@
 import express from "express";
-import { createSessionClient } from "@abstract-foundation/agw-client/sessions";
-import { privateKeyToAccount } from "viem/accounts";
+import { createAbstractClient } from "@abstract-foundation/agw-client";
+import { createSessionClient, LimitType } from "@abstract-foundation/agw-client/sessions";
+import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { http } from "viem";
 import { abstract, abstractTestnet } from "viem/chains";
 
@@ -73,6 +74,72 @@ app.post("/upvote", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[upvote]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// POST /create-session — server-side session creation using owner private key
+app.post("/create-session", async (req, res) => {
+  const { ownerPrivKey, network } = req.body as {
+    ownerPrivKey: string;
+    network:      string;
+  };
+
+  if (!ownerPrivKey) {
+    return res.status(400).json({ error: "ownerPrivKey required" });
+  }
+
+  try {
+    const chain = network === "testnet" ? abstractTestnet : abstract;
+    const rpc   = network === "testnet"
+      ? "https://api.testnet.abs.xyz"
+      : "https://api.mainnet.abs.xyz";
+
+    const ownerAccount   = privateKeyToAccount(ownerPrivKey as `0x${string}`);
+    const abstractClient = await createAbstractClient({
+      signer:    ownerAccount,
+      chain,
+      transport: http(rpc),
+    });
+    const agwAddress = abstractClient.account.address;
+
+    const sessionPrivKey   = generatePrivateKey();
+    const sessionAccount   = privateKeyToAccount(sessionPrivKey);
+    const expiresAt        = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
+
+    const { session } = await abstractClient.createSession({
+      session: {
+        signer:    sessionAccount.address,
+        expiresAt,
+        feeLimit: {
+          limitType: LimitType.Lifetime,
+          limit:     BigInt("500000000000000"),
+          period:    0n,
+        },
+        callPolicies: [{
+          target:         UPVOTE_CONTRACT,
+          selector:       "0x7060a227" as `0x${string}`,
+          maxValuePerUse: 0n,
+          valueLimit:     { limitType: LimitType.Unlimited, limit: 0n, period: 0n },
+          constraints:    [],
+        }],
+        transferPolicies: [],
+      },
+    });
+
+    const sessionConfigJson = JSON.stringify(session, (_k, v) =>
+      typeof v === "bigint" ? v.toString() : v
+    );
+
+    return res.json({
+      sessionPrivKey,
+      sessionConfig: sessionConfigJson,
+      agwAddress,
+      expiresAt: Number(expiresAt),
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[create-session]", msg);
     return res.status(500).json({ error: msg });
   }
 });

@@ -1804,6 +1804,54 @@ def portal_upvote_store_session():
 
     return jsonify({"ok": True, "agw_address": agw_addr, "expires_at": expires_at})
 
+@app.route("/portal-upvote/server-authorize", methods=["POST"])
+def portal_upvote_server_authorize():
+    """Create AGW session server-side using OWNER_PRIVATE_KEY env var."""
+    import requests as _r
+    owner_key = os.getenv("OWNER_PRIVATE_KEY", "").strip()
+    if not owner_key:
+        return jsonify({"error": "OWNER_PRIVATE_KEY not set in env"}), 400
+    if not _upvote_node.node_health():
+        return jsonify({"error": "Node wallet-helper not running"}), 503
+    try:
+        resp = _r.post(
+            f"{_upvote_node._cfg.NODE_HELPER_URL}/create-session",
+            json={"ownerPrivKey": owner_key, "network": NETWORK},
+            timeout=120,
+        )
+        data = resp.json()
+        if resp.status_code != 200 or data.get("error"):
+            return jsonify({"error": data.get("error", f"HTTP {resp.status_code}")}), 500
+
+        # Reuse store-session logic
+        from flask import request as freq
+        class _FakeReq:
+            json = data
+            get_json = lambda self, **kw: data
+        import sys; _orig = sys.modules.get("flask")
+        # Call the store logic directly
+        enc_key_hex = os.getenv("SESSION_KEY_ENCRYPTION_KEY", "")
+        if len(enc_key_hex) != 64:
+            return jsonify({"error": "SESSION_KEY_ENCRYPTION_KEY not set (64-char hex required)"}), 400
+        from Crypto.Cipher import AES
+        import base64, json as _json
+        session_priv = data["sessionPrivKey"]
+        raw_key = bytes.fromhex(enc_key_hex)
+        cipher   = AES.new(raw_key, AES.MODE_EAX)
+        ct, tag  = cipher.encrypt_and_digest(session_priv.encode())
+        encrypted = base64.b64encode(cipher.nonce + tag + ct).decode()
+        payload = {
+            "encrypted_key":  encrypted,
+            "session_config": data["sessionConfig"],
+            "agw_address":    data["agwAddress"],
+            "expires_at":     data["expiresAt"],
+        }
+        with open(SESSION_FILE, "w") as f:
+            _json.dump(payload, f)
+        return jsonify({"ok": True, "agw_address": data["agwAddress"], "expires_at": data["expiresAt"]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/portal-upvote/revoke-session", methods=["POST"])
 def portal_upvote_revoke():
     try:
