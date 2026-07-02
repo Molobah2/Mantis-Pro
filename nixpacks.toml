@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+cmds = ["curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs"]
 
 [phases.build]
 cmds = ["cd wallet-helper && npm ci && npm run build"]
