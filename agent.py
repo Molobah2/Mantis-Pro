@@ -2344,10 +2344,19 @@ threading.Thread(target=_warmup_profile_cache, daemon=True).start()
 def _start_node_helper():
     """Start wallet-helper/dist/server.js as a subprocess. Restarts on crash."""
     import shutil
-    node_bin = shutil.which("node")
+    # shutil.which misses nix store when Railway doesn't source the nix profile at runtime
+    _NIX_CANDIDATES = [
+        "/nix/var/nix/profiles/default/bin/node",
+        "/root/.nix-profile/bin/node",
+        "/usr/local/bin/node",
+        "/usr/bin/node",
+    ]
+    node_bin = shutil.which("node") or next(
+        (p for p in _NIX_CANDIDATES if os.path.isfile(p)), None
+    )
     dist     = os.path.join(os.path.dirname(__file__), "wallet-helper", "dist", "server.js")
     if not node_bin:
-        print("[wallet-helper] node not found in PATH — upvote signing unavailable")
+        print("[wallet-helper] node not found in PATH or nix store — upvote signing unavailable")
         return
     if not os.path.exists(dist):
         print(f"[wallet-helper] dist/server.js not found at {dist} — run: cd wallet-helper && npm run build")
