@@ -1,5 +1,5 @@
 import express from "express";
-import { createSessionClient } from "@abstract-foundation/agw-client";
+import { createSessionClient } from "@abstract-foundation/agw-client/sessions";
 import { privateKeyToAccount } from "viem/accounts";
 import { http } from "viem";
 import { abstract, abstractTestnet } from "viem/chains";
@@ -59,11 +59,14 @@ app.post("/upvote", async (req, res) => {
       transport: http(rpc),
     });
 
-    const txHash = await sessionClient.writeContract({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const txHash = await (sessionClient as any).writeContract({
       address:      UPVOTE_CONTRACT,
       abi:          UPVOTE_ABI,
       functionName: "upvote",
       args:         [BigInt(appId)],
+      chain,
+      account:      agwAddress as `0x${string}`,
     });
 
     return res.json({ txHash });
