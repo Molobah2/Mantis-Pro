@@ -1745,6 +1745,136 @@ def contract_activity():
     return jsonify(data)
 
 
+# ── PORTAL AUTO-UPVOTE ───────────────────────────────────────────────
+import base64
+from portal_upvote import worker as _upvote_worker
+from portal_upvote import node_client as _upvote_node
+from portal_upvote import catalog as _upvote_catalog
+from portal_upvote import store as _upvote_store
+from portal_upvote import selector as _upvote_selector
+from portal_upvote.config import SESSION_FILE, AGW_ADDRESS, NETWORK
+
+@app.route("/portal-upvote")
+def portal_upvote_page():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "portal_upvote.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+@app.route("/portal-upvote/store-session", methods=["POST"])
+def portal_upvote_store_session():
+    from flask import request as freq
+    from Crypto.Cipher import AES
+    from Crypto.Random import get_random_bytes
+    import json as _json
+
+    enc_key_hex = os.environ.get("SESSION_KEY_ENCRYPTION_KEY", "")
+    if len(enc_key_hex) != 64:
+        return jsonify({"error": "SESSION_KEY_ENCRYPTION_KEY not set or invalid in env"}), 503
+
+    body = freq.get_json(force=True) or {}
+    priv_key      = body.get("sessionPrivKey", "")
+    session_cfg   = body.get("sessionConfig",  "")
+    agw_addr      = body.get("agwAddress",     AGW_ADDRESS)
+    expires_at    = body.get("expiresAt",      0)
+
+    if not priv_key or not session_cfg:
+        return jsonify({"error": "Missing sessionPrivKey or sessionConfig"}), 400
+
+    key    = bytes.fromhex(enc_key_hex)
+    nonce  = get_random_bytes(16)
+    cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
+    ct, tag = cipher.encrypt_and_digest(priv_key.encode())
+    encrypted = base64.b64encode(nonce + tag + ct).decode()
+
+    payload = {
+        "encrypted_key":  encrypted,
+        "session_config": session_cfg,
+        "agw_address":    agw_addr,
+        "expires_at":     expires_at,
+        "created_at":     time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    try:
+        with open(SESSION_FILE, "w") as f:
+            _json.dump(payload, f)
+    except Exception as e:
+        return jsonify({"error": f"Could not write session file: {e}"}), 500
+
+    return jsonify({"ok": True, "agw_address": agw_addr, "expires_at": expires_at})
+
+@app.route("/portal-upvote/revoke-session", methods=["POST"])
+def portal_upvote_revoke():
+    try:
+        if os.path.exists(SESSION_FILE):
+            os.remove(SESSION_FILE)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/upvote-status")
+def upvote_status():
+    import json as _json
+    authorized = os.path.exists(SESSION_FILE)
+    sess_data  = {}
+    if authorized:
+        try:
+            with open(SESSION_FILE) as f:
+                sess_data = _json.load(f)
+        except Exception:
+            authorized = False
+
+    worker_st  = _upvote_worker.get_status()
+    node_ok    = _upvote_node.node_health()
+    history    = _upvote_store.get_upvote_log(20)
+    catalog    = _upvote_store.get_apps()
+    next_app   = _upvote_selector.pick_next_app() if catalog else None
+
+    last_run = None
+    if history:
+        h = history[0]
+        last_run = {"app_name": h["app_name"], "app_id": h["app_id"],
+                    "upvoted_at": h["upvoted_at"], "tx_hash": h["tx_hash"], "status": h["status"]}
+
+    resp = jsonify({
+        "authorized":   authorized,
+        "agw_address":  sess_data.get("agw_address", AGW_ADDRESS),
+        "expires_at":   sess_data.get("expires_at"),
+        "network":      NETWORK,
+        "node_ok":      node_ok,
+        "worker":       worker_st,
+        "last_run":     last_run,
+        "next_app":     next_app,
+        "catalog_size": len(catalog),
+        "history":      history,
+    })
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+@app.route("/api/upvote-trigger", methods=["POST"])
+def upvote_trigger():
+    try:
+        app_ = _upvote_selector.pick_next_app()
+        if app_ is None:
+            return jsonify({"error": "Catalog empty — refresh catalog first"}), 400
+        result = _upvote_node.call_upvote(app_["id"])
+        tx_hash = result.get("txHash", "")
+        _upvote_store.record_upvote(app_["id"], tx_hash, "success")
+        return jsonify({"ok": True, "app_name": app_["name"], "app_id": app_["id"],
+                        "tx_hash": tx_hash})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/upvote-refresh-catalog", methods=["POST"])
+def upvote_refresh_catalog():
+    try:
+        apps = _upvote_catalog.get_catalog(force_refresh=True)
+        return jsonify({"ok": True, "count": len(apps)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 def run_identity_refresh():
     time.sleep(30)
     while True:
@@ -2209,6 +2339,48 @@ gauntlet_thread.start()
 
 # Run warmup in background so Flask starts immediately (avoids health-check timeout)
 threading.Thread(target=_warmup_profile_cache, daemon=True).start()
+
+# ── PORTAL UPVOTE: Node helper subprocess ────────────────────────────
+def _start_node_helper():
+    """Start wallet-helper/dist/server.js as a subprocess. Restarts on crash."""
+    import shutil
+    node_bin = shutil.which("node")
+    dist     = os.path.join(os.path.dirname(__file__), "wallet-helper", "dist", "server.js")
+    if not node_bin:
+        print("[wallet-helper] node not found in PATH — upvote signing unavailable")
+        return
+    if not os.path.exists(dist):
+        print(f"[wallet-helper] dist/server.js not found at {dist} — run: cd wallet-helper && npm run build")
+        return
+    while True:
+        try:
+            print(f"[wallet-helper] starting {dist}")
+            proc = subprocess.Popen(
+                [node_bin, dist],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                cwd=os.path.dirname(dist),
+            )
+            for line in proc.stdout:
+                print("[wallet-helper]", line.decode(errors="replace").rstrip())
+            proc.wait()
+            print(f"[wallet-helper] exited with code {proc.returncode} — restarting in 10s")
+        except Exception as e:
+            print(f"[wallet-helper] error: {e} — restarting in 10s")
+        time.sleep(10)
+
+threading.Thread(target=_start_node_helper, daemon=True).start()
+
+# ── PORTAL UPVOTE: APScheduler daily job ─────────────────────────────
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from portal_upvote.worker import run_daily_upvote
+    _upvote_scheduler = BackgroundScheduler(timezone="UTC")
+    _upvote_scheduler.add_job(run_daily_upvote, "cron", hour=9, minute=0,
+                              id="daily_upvote", replace_existing=True)
+    _upvote_scheduler.start()
+    print("[upvote] APScheduler started — daily job at 09:00 UTC")
+except ImportError:
+    print("[upvote] APScheduler not installed — add APScheduler>=3.10.0 to requirements.txt")
 
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":

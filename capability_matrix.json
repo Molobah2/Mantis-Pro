@@ -328,6 +328,20 @@
       "approval_required": true,
       "automation_level": "gated",
       "status": "planned"
+    },
+    {
+      "name": "portal_auto_upvote",
+      "label": "Portal auto-upvote",
+      "description": "Daily upvotes on Abstract Portal apps via AGW session key. Session key scoped exclusively to upvote(uint256) on the Portal upvote contract. No funds moved. Rotates through all visible Portal apps in least-recently-upvoted order.",
+      "category": "social",
+      "mode": "execution",
+      "risk": "low",
+      "requires_key": true,
+      "moves_funds": false,
+      "spend_cap_applies": false,
+      "approval_required": false,
+      "automation_level": "full",
+      "status": "live"
     }
   ]
 }

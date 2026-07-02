@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal Upvote — Mantis Pro</title>
+<style>
+  :root {
+    --bg:     #0a0b0d;
+    --bg1:    #10121a;
+    --l0:     rgba(255,255,255,.06);
+    --l1:     rgba(255,255,255,.10);
+    --ink0:   #f0f0f8;
+    --ink1:   rgba(240,240,248,.70);
+    --ink2:   rgba(240,240,248,.45);
+    --ink3:   rgba(240,240,248,.28);
+    --green:  #4cff91;
+    --red:    #ff4c6a;
+    --blue:   #4ca8ff;
+    --purple: #b48eff;
+    --yellow: #ffd560;
+    --radius: 10px;
+    font-size: 14px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink0); font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; min-height: 100vh; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { background: var(--bg1); border-bottom: 1px solid var(--l0); padding: 14px 24px;
+           display: flex; align-items: center; gap: 16px; }
+  header .logo { font-weight: 700; font-size: 15px; letter-spacing: .02em; color: var(--ink0); }
+  header .logo span { color: var(--green); }
+  header nav a { color: var(--ink2); font-size: 13px; margin-left: 20px; }
+  header nav a:hover { color: var(--ink0); }
+
+  .page { max-width: 780px; margin: 0 auto; padding: 32px 20px 60px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: var(--ink2); font-size: 13px; margin-bottom: 28px; }
+
+  .card { background: var(--bg1); border: 1px solid var(--l0); border-radius: var(--radius);
+          padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 11px; font-weight: 600; letter-spacing: .08em;
+                text-transform: uppercase; color: var(--ink3); margin-bottom: 14px; }
+
+  .row { display: flex; justify-content: space-between; align-items: center;
+         padding: 8px 0; border-bottom: 1px solid var(--l0); }
+  .row:last-child { border-bottom: none; }
+  .row .label { color: var(--ink2); font-size: 13px; }
+  .row .val   { color: var(--ink0); font-size: 13px; font-weight: 500; text-align: right; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px;
+           font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+  .badge-green  { background: rgba(76,255,145,.12); color: var(--green); }
+  .badge-red    { background: rgba(255,76,106,.12);  color: var(--red); }
+  .badge-yellow { background: rgba(255,213,96,.12);  color: var(--yellow); }
+  .badge-blue   { background: rgba(76,168,255,.12);  color: var(--blue); }
+
+  btn, .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px;
+              border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+              border: none; transition: opacity .15s; }
+  .btn:hover { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-green  { background: var(--green);  color: #000; }
+  .btn-ghost  { background: var(--l0);     color: var(--ink0); }
+  .btn-red    { background: rgba(255,76,106,.15); color: var(--red); border: 1px solid rgba(255,76,106,.25); }
+  .btn-row    { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+  #status-msg { padding: 12px 16px; border-radius: 8px; font-size: 13px;
+                margin-bottom: 16px; display: none; }
+  #status-msg.ok  { background: rgba(76,255,145,.10); color: var(--green); border: 1px solid rgba(76,255,145,.2); }
+  #status-msg.err { background: rgba(255,76,106,.10); color: var(--red);   border: 1px solid rgba(255,76,106,.2); }
+  #status-msg.info { background: rgba(76,168,255,.10); color: var(--blue); border: 1px solid rgba(76,168,255,.2); }
+
+  #authorize-section { display: none; }
+  #authorized-section { display: none; }
+
+  .steps { color: var(--ink2); font-size: 13px; line-height: 1.7; margin: 14px 0; padding-left: 20px; }
+  .steps li { margin-bottom: 4px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--ink3); font-weight: 600; font-size: 10px;
+       letter-spacing: .07em; text-transform: uppercase; padding: 6px 8px;
+       border-bottom: 1px solid var(--l0); }
+  td { padding: 8px; border-bottom: 1px solid var(--l0); color: var(--ink1); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.mono { font-family: monospace; font-size: 11px; color: var(--ink2); }
+  td a { color: var(--blue); }
+
+  #spinner { display: none; width: 18px; height: 18px; border: 2px solid var(--l1);
+             border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .warning-box { background: rgba(255,213,96,.07); border: 1px solid rgba(255,213,96,.2);
+                 border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--yellow);
+                 margin-bottom: 16px; line-height: 1.6; }
+  .warning-box strong { display: block; margin-bottom: 4px; }
+
+  .empty { color: var(--ink3); font-size: 13px; text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Mantis <span>Pro</span></div>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/operator/0x9d60f5906d43aa12b0496765ec202bf498e9cd1f">Operator</a>
+    <a href="/holders">Holders</a>
+  </nav>
+</header>
+
+<div class="page">
+  <h1>Portal Auto-Upvote</h1>
+  <p class="subtitle">Daily upvotes delegated to the agent via AGW session key — scoped exclusively to the upvote contract.</p>
+
+  <div id="status-msg"></div>
+
+  <!-- ── AUTHORIZED ─────────────────────────────── -->
+  <div id="authorized-section">
+
+    <div class="card">
+      <div class="card-title">Session</div>
+      <div class="row"><span class="label">Status</span>
+        <span class="val" id="sess-status">—</span></div>
+      <div class="row"><span class="label">AGW Address</span>
+        <span class="val mono" id="sess-agw">—</span></div>
+      <div class="row"><span class="label">Expires</span>
+        <span class="val" id="sess-expires">—</span></div>
+      <div class="row"><span class="label">Network</span>
+        <span class="val" id="sess-network">—</span></div>
+      <div class="row"><span class="label">Node Helper</span>
+        <span class="val" id="sess-node">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Last Run</div>
+      <div class="row"><span class="label">App Upvoted</span>
+        <span class="val" id="last-app">—</span></div>
+      <div class="row"><span class="label">Time</span>
+        <span class="val" id="last-time">—</span></div>
+      <div class="row"><span class="label">Tx</span>
+        <span class="val mono" id="last-tx">—</span></div>
+      <div class="row"><span class="label">Result</span>
+        <span class="val" id="last-result">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Next Up</div>
+      <div class="row"><span class="label">App</span>
+        <span class="val" id="next-app">—</span></div>
+      <div class="row"><span class="label">Catalog Size</span>
+        <span class="val" id="catalog-size">—</span></div>
+      <div class="row"><span class="label">Scheduled</span>
+        <span class="val">Daily at 09:00 UTC</span></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="triggerNow()" id="btn-now">Run Now</button>
+      <button class="btn btn-ghost" onclick="refreshCatalog()" id="btn-catalog">Refresh Catalog</button>
+      <button class="btn btn-red"   onclick="revokeSession()">Revoke Session</button>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="card-title">Upvote History</div>
+      <table>
+        <thead>
+          <tr><th>Time</th><th>App</th><th>Tx</th><th>Status</th></tr>
+        </thead>
+        <tbody id="history-body">
+          <tr><td colspan="4" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── NOT AUTHORIZED ────────────────────────── -->
+  <div id="authorize-section">
+
+    <div class="warning-box" id="mainnet-warning" style="display:none">
+      <strong>Mainnet note</strong>
+      The Abstract Session Key Policy Registry requires a security review before session keys
+      can call contracts on mainnet. If the upvote contract
+      (<code>0x3b50de27…ce2a</code>) is not yet whitelisted, the daily upvote will
+      revert silently. Everything else (session creation, storage) still works.
+    </div>
+
+    <div class="card">
+      <div class="card-title">How it works</div>
+      <ol class="steps">
+        <li>Connect your AGW wallet below.</li>
+        <li>A new <em>session key</em> is generated locally — your owner key never leaves the browser.</li>
+        <li>You sign one on-chain transaction that registers the session key, scoped only to
+            <code>upvote(uint256)</code> on <code>0x3b50de27…ce2a</code>.</li>
+        <li>The session private key is encrypted with AES-256-EAX and stored server-side.
+            Only the agent decrypts it at runtime — never committed to git.</li>
+        <li>Each day at 09:00 UTC the agent scrapes the Portal, picks the least-recently-upvoted
+            app, and submits the transaction autonomously.</li>
+      </ol>
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="startAuthorize()" id="btn-auth">Connect &amp; Authorize</button>
+        <div id="spinner"></div>
+      </div>
+      <div id="auth-progress" style="color:var(--ink2);font-size:12px;margin-top:12px;display:none"></div>
+    </div>
+
+    <div class="warning-box">
+      <strong>Requirements</strong>
+      You need the <strong>Abstract browser extension</strong> (which injects <code>window.ethereum</code>)
+      or a wallet that supports Abstract's EIP-1193 provider.
+      Set <code>SESSION_KEY_ENCRYPTION_KEY</code> in Railway env vars before authorizing
+      (generate: <code>python -c "import secrets; print(secrets.token_hex(32))"</code>).
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+// ── helpers ──────────────────────────────────────────────────────────
+function msg(text, type = "info") {
+  const el = document.getElementById("status-msg");
+  el.textContent = text;
+  el.className   = type;
+  el.style.display = "block";
+}
+function clearMsg() {
+  const el = document.getElementById("status-msg");
+  el.style.display = "none";
+}
+function setProgress(text) {
+  const el = document.getElementById("auth-progress");
+  if (el) { el.textContent = text; el.style.display = text ? "block" : "none"; }
+}
+function fmtTs(ts) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleString();
+}
+function shortAddr(a) {
+  if (!a || a.length < 10) return a || "—";
+  return a.slice(0, 8) + "…" + a.slice(-6);
+}
+function txLink(hash, network) {
+  if (!hash) return "—";
+  const base = network === "testnet"
+    ? "https://explorer.testnet.abs.xyz/tx/"
+    : "https://abscan.org/tx/";
+  return `<a href="${base}${hash}" target="_blank">${hash.slice(0,10)}…</a>`;
+}
+
+// ── load status ───────────────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const r    = await fetch("/api/upvote-status");
+    const data = await r.json();
+    window._upvoteStatus = data;
+
+    if (data.authorized) {
+      document.getElementById("authorized-section").style.display = "";
+      document.getElementById("authorize-section").style.display  = "none";
+      renderStatus(data);
+    } else {
+      document.getElementById("authorized-section").style.display = "none";
+      document.getElementById("authorize-section").style.display  = "";
+      if (data.network === "mainnet") {
+        document.getElementById("mainnet-warning").style.display = "";
+      }
+    }
+  } catch (e) {
+    msg("Could not load status: " + e.message, "err");
+  }
+}
+
+function renderStatus(d) {
+  const network = d.network || "mainnet";
+
+  // Session card
+  const expired = d.expires_at && d.expires_at < Date.now() / 1000;
+  document.getElementById("sess-status").innerHTML =
+    expired ? '<span class="badge badge-red">Expired</span>'
+            : '<span class="badge badge-green">Active</span>';
+  document.getElementById("sess-agw").textContent     = shortAddr(d.agw_address);
+  document.getElementById("sess-expires").textContent = d.expires_at ? fmtTs(d.expires_at) : "—";
+  document.getElementById("sess-network").innerHTML   =
+    `<span class="badge badge-${network === "mainnet" ? "blue" : "yellow"}">${network}</span>`;
+  document.getElementById("sess-node").innerHTML =
+    d.node_ok ? '<span class="badge badge-green">Running</span>'
+              : '<span class="badge badge-red">Offline</span>';
+
+  // Last run card
+  const lr = d.last_run || {};
+  document.getElementById("last-app").textContent    = lr.app_name || "—";
+  document.getElementById("last-time").textContent   = fmtTs(lr.upvoted_at);
+  document.getElementById("last-tx").innerHTML       = txLink(lr.tx_hash, network);
+  document.getElementById("last-result").innerHTML   = lr.status === "success"
+    ? '<span class="badge badge-green">Success</span>'
+    : (lr.status ? `<span class="badge badge-red">${lr.status}</span>` : "—");
+
+  // Next up
+  const next = d.next_app || {};
+  document.getElementById("next-app").textContent    = next.name || "—";
+  document.getElementById("catalog-size").textContent = d.catalog_size != null ? d.catalog_size : "—";
+
+  // History
+  const tbody = document.getElementById("history-body");
+  if (!d.history || d.history.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No upvotes recorded yet.</td></tr>';
+  } else {
+    tbody.innerHTML = d.history.map(h => `
+      <tr>
+        <td>${h.upvoted_at ? fmtTs(h.upvoted_at) : "—"}</td>
+        <td>${h.app_name || "App #" + h.app_id}</td>
+        <td class="mono">${txLink(h.tx_hash, network)}</td>
+        <td><span class="badge ${h.status === "success" ? "badge-green" : "badge-red"}">${h.status}</span></td>
+      </tr>`).join("");
+  }
+}
+
+// ── authorize flow ────────────────────────────────────────────────────
+async function startAuthorize() {
+  const btn = document.getElementById("btn-auth");
+  const sp  = document.getElementById("spinner");
+  btn.disabled = true;
+  sp.style.display = "block";
+  clearMsg();
+
+  try {
+    if (!window.ethereum) {
+      throw new Error("window.ethereum not found. Install the Abstract browser extension.");
+    }
+
+    setProgress("Requesting wallet accounts…");
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+
+    setProgress("Loading AGW client library…");
+    const { createAbstractClient, LimitType } =
+      await import("https://esm.sh/@abstract-foundation/agw-client");
+    const { privateKeyToAccount, generatePrivateKey } =
+      await import("https://esm.sh/viem/accounts");
+    const { abstract: absMainnet, abstractTestnet } =
+      await import("https://esm.sh/viem/chains");
+    const { createWalletClient, custom, http } =
+      await import("https://esm.sh/viem");
+
+    const network = window._upvoteStatus?.network || "mainnet";
+    const chain   = network === "testnet" ? abstractTestnet : absMainnet;
+    const rpc     = network === "testnet"
+      ? "https://api.testnet.abs.xyz"
+      : "https://api.mainnet.abs.xyz";
+
+    setProgress("Connecting wallet client…");
+    const walletClient = createWalletClient({
+      chain,
+      transport: custom(window.ethereum),
+    });
+    const [signerAddress] = await walletClient.getAddresses();
+
+    setProgress(`Creating Abstract client for ${signerAddress.slice(0,8)}…`);
+    const abstractClient = await createAbstractClient({
+      signer:    walletClient,
+      chain,
+      transport: http(rpc),
+    });
+    const agwAddress = abstractClient.account.address;
+
+    setProgress("Generating session key…");
+    const sessionPrivKey  = generatePrivateKey();
+    const sessionAccount  = privateKeyToAccount(sessionPrivKey);
+
+    // Expiry: 30 days from now
+    const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
+
+    setProgress("Submitting createSession transaction — please approve in your wallet…");
+    const { session } = await abstractClient.createSession({
+      session: {
+        signer:    sessionAccount.address,
+        expiresAt,
+        feeLimit: {
+          limitType: LimitType.Lifetime,
+          limit:     BigInt("500000000000000"),   // 0.0005 ETH gas budget
+          period:    0n,
+        },
+        callPolicies: [{
+          target:         "0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a",
+          selector:       "0x7060a227",
+          maxValuePerUse: 0n,
+          valueLimit: { limitType: LimitType.Unlimited, limit: 0n, period: 0n },
+          constraints:    [],
+        }],
+        transferPolicies: [],
+      },
+    });
+
+    // Serialize session config (BigInt → string for JSON)
+    const sessionConfigJson = JSON.stringify(session, (_k, v) =>
+      typeof v === "bigint" ? v.toString() : v
+    );
+
+    setProgress("Storing session key server-side…");
+    const storeResp = await fetch("/portal-upvote/store-session", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        sessionPrivKey:  sessionPrivKey,
+        sessionConfig:   sessionConfigJson,
+        agwAddress,
+        expiresAt:       Number(expiresAt),
+      }),
+    });
+    if (!storeResp.ok) {
+      const e = await storeResp.json().catch(() => ({}));
+      throw new Error(e.error || `Store failed: HTTP ${storeResp.status}`);
+    }
+
+    setProgress("");
+    msg("Session authorized successfully! Daily upvotes are now active.", "ok");
+    setTimeout(loadStatus, 800);
+
+  } catch (e) {
+    setProgress("");
+    msg("Authorization failed: " + (e.message || e), "err");
+    console.error("[authorize]", e);
+  } finally {
+    btn.disabled = false;
+    document.getElementById("spinner").style.display = "none";
+  }
+}
+window.startAuthorize = startAuthorize;
+
+// ── actions ───────────────────────────────────────────────────────────
+async function triggerNow() {
+  const btn = document.getElementById("btn-now");
+  btn.disabled = true;
+  clearMsg();
+  try {
+    const r = await fetch("/api/upvote-trigger", { method: "POST" });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    msg(`Upvote triggered: ${d.app_name} → tx: ${d.tx_hash?.slice(0, 16)}…`, "ok");
+    setTimeout(loadStatus, 2000);
+  } catch (e) {
+    msg("Trigger failed: " + e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+window.triggerNow = triggerNow;
+
+async function refreshCatalog() {
+  const btn = document.getElementById("btn-catalog");
+  btn.disabled = true;
+  clearMsg();
+  try {
+    const r = await fetch("/api/upvote-refresh-catalog", { method: "POST" });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    msg(`Catalog refreshed: ${d.count} apps found.`, "ok");
+    setTimeout(loadStatus, 600);
+  } catch (e) {
+    msg("Catalog refresh failed: " + e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+window.refreshCatalog = refreshCatalog;
+
+async function revokeSession() {
+  if (!confirm("Revoke the session key? Daily upvotes will stop until you re-authorize.")) return;
+  clearMsg();
+  try {
+    const r = await fetch("/portal-upvote/revoke-session", { method: "POST" });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    msg("Session revoked. Re-authorize to resume upvotes.", "info");
+    setTimeout(loadStatus, 600);
+  } catch (e) {
+    msg("Revoke failed: " + e.message, "err");
+  }
+}
+window.revokeSession = revokeSession;
+
+// ── bootstrap ─────────────────────────────────────────────────────────
+loadStatus();
+</script>
+</body>
+</html>

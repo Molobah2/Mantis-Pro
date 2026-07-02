@@ -318,6 +318,25 @@ SKILL_REGISTRY = [
         "automation_level": "gated",
         "status": "planned",
     },
+    {
+        "name": "portal_auto_upvote",
+        "label": "Portal auto-upvote",
+        "description": (
+            "Daily upvotes on Abstract Portal apps via AGW session key. "
+            "Session key is scoped exclusively to upvote(uint256) on the Portal upvote contract. "
+            "No funds moved. One-time browser authorization; agent runs daily at 09:00 UTC autonomously. "
+            "Rotates through all visible Portal apps in least-recently-upvoted order."
+        ),
+        "category": "social",
+        "mode": "execution",
+        "risk": "low",
+        "requires_key": True,
+        "moves_funds": False,
+        "spend_cap_applies": False,
+        "approval_required": False,
+        "automation_level": "full",
+        "status": "live",
+    },
 ]
 
 

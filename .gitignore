@@ -3,3 +3,11 @@ claw-council/
 __pycache__/
 *.pyc
 .env
+.upvote_session
+portal_upvote.db
+identities.db
+roots.sst
+spark-install.ps1
+test.json
+wallet-helper/node_modules/
+wallet-helper/dist/
