@@ -2344,24 +2344,16 @@ threading.Thread(target=_warmup_profile_cache, daemon=True).start()
 def _start_node_helper():
     """Start wallet-helper/dist/server.js as a subprocess. Restarts on crash."""
     import shutil
-    # Try PATH first, then nix store candidates, then shell `which`
-    _NIX_CANDIDATES = [
-        "/nix/var/nix/profiles/default/bin/node",
-        "/root/.nix-profile/bin/node",
-        "/usr/local/bin/node",
-        "/usr/bin/node",
-    ]
-    node_bin = shutil.which("node") or next(
-        (p for p in _NIX_CANDIDATES if os.path.isfile(p)), None
-    )
+    import glob as _glob
+    # PATH-based search first, then scan nix store directly (nix store is present
+    # in the Railway runtime image even when its bin dirs aren't in PATH)
+    node_bin = shutil.which("node")
     if not node_bin:
-        try:
-            r = subprocess.run(["bash", "-lc", "which node"], capture_output=True, text=True, timeout=5)
-            if r.returncode == 0:
-                node_bin = r.stdout.strip()
-        except Exception:
-            pass
-    print(f"[wallet-helper] PATH={os.environ.get('PATH','')}")
+        for _pat in ["/nix/store/*/bin/node", "/usr/local/bin/node", "/usr/bin/node"]:
+            _hits = sorted(_glob.glob(_pat))
+            if _hits:
+                node_bin = _hits[-1]
+                break
     print(f"[wallet-helper] node resolved to: {node_bin!r}")
     dist     = os.path.join(os.path.dirname(__file__), "wallet-helper", "dist", "server.js")
     if not node_bin:
