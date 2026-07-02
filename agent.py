@@ -1852,6 +1852,33 @@ def portal_upvote_server_authorize():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/portal-upvote/direct-upvote", methods=["POST"])
+def portal_upvote_direct():
+    """Send upvote(appId) directly from OWNER_PRIVATE_KEY — no AGW session needed."""
+    import requests as _r
+    from flask import request as freq
+    owner_key = os.getenv("OWNER_PRIVATE_KEY", "").strip()
+    if not owner_key:
+        return jsonify({"error": "OWNER_PRIVATE_KEY not set in env"}), 400
+    if not _upvote_node.node_health():
+        return jsonify({"error": "Node wallet-helper not running"}), 503
+    body = freq.get_json(silent=True) or {}
+    app_id = body.get("appId")
+    if app_id is None:
+        return jsonify({"error": "appId required"}), 400
+    try:
+        resp = _r.post(
+            f"{os.getenv('NODE_HELPER_URL', 'http://127.0.0.1:3456')}/direct-upvote",
+            json={"ownerPrivKey": owner_key, "appId": int(app_id), "network": NETWORK},
+            timeout=60,
+        )
+        data = resp.json()
+        if resp.status_code != 200:
+            return jsonify({"error": data.get("error", "Node error")}), 502
+        return jsonify({"ok": True, "txHash": data.get("txHash")})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/portal-upvote/revoke-session", methods=["POST"])
 def portal_upvote_revoke():
     try:

@@ -2,7 +2,8 @@ import express from "express";
 import { createAbstractClient } from "@abstract-foundation/agw-client";
 import { createSessionClient, LimitType } from "@abstract-foundation/agw-client/sessions";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
-import { http } from "viem";
+import { createWalletClient, http } from "viem";
+import { eip712WalletActions } from "viem/zksync";
 import { abstract, abstractTestnet } from "viem/chains";
 
 const app = express();
@@ -97,11 +98,11 @@ app.post("/create-session", async (req, res) => {
 
     const normalizedKey  = ownerPrivKey.startsWith("0x") ? ownerPrivKey : `0x${ownerPrivKey}`;
     const ownerAccount   = privateKeyToAccount(normalizedKey as `0x${string}`);
-    const abstractClient = await createAbstractClient({
-      signer:    ownerAccount,
-      chain,
-      transport: http(rpc),
-    });
+    // Abstract (ZKSync) requires EIP-712 signed transactions — use eip712WalletActions
+    const signerClient   = createWalletClient({ account: ownerAccount, chain, transport: http(rpc) })
+                            .extend(eip712WalletActions());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const abstractClient = await createAbstractClient({ signer: signerClient as any, chain, transport: http(rpc) });
     const agwAddress = abstractClient.account.address;
 
     const sessionPrivKey   = generatePrivateKey();
@@ -141,6 +142,40 @@ app.post("/create-session", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[create-session]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// POST /direct-upvote — call upvote(uint256) directly from an EOA, no AGW session needed
+app.post("/direct-upvote", async (req, res) => {
+  const { ownerPrivKey, appId, network } = req.body as {
+    ownerPrivKey: string;
+    appId:        number;
+    network:      string;
+  };
+  if (!ownerPrivKey || appId == null) {
+    return res.status(400).json({ error: "ownerPrivKey and appId required" });
+  }
+  try {
+    const chain = network === "testnet" ? abstractTestnet : abstract;
+    const rpc   = network === "testnet" ? "https://api.testnet.abs.xyz" : "https://api.mainnet.abs.xyz";
+    const key   = ownerPrivKey.startsWith("0x") ? ownerPrivKey : `0x${ownerPrivKey}`;
+    const walletClient = createWalletClient({
+      account:   privateKeyToAccount(key as `0x${string}`),
+      chain,
+      transport: http(rpc),
+    }).extend(eip712WalletActions());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const txHash = await (walletClient as any).writeContract({
+      address:      UPVOTE_CONTRACT,
+      abi:          UPVOTE_ABI,
+      functionName: "upvote",
+      args:         [BigInt(appId)],
+    });
+    return res.json({ txHash });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[direct-upvote]", msg);
     return res.status(500).json({ error: msg });
   }
 });
