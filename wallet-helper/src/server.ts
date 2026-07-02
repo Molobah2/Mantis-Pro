@@ -98,11 +98,9 @@ app.post("/create-session", async (req, res) => {
 
     const normalizedKey  = ownerPrivKey.startsWith("0x") ? ownerPrivKey : `0x${ownerPrivKey}`;
     const ownerAccount   = privateKeyToAccount(normalizedKey as `0x${string}`);
-    // Abstract (ZKSync) requires EIP-712 signed transactions — use eip712WalletActions
-    const signerClient   = createWalletClient({ account: ownerAccount, chain, transport: http(rpc) })
-                            .extend(eip712WalletActions());
+    // createAbstractClient reads signer.address — pass PrivateKeyAccount directly (not a WalletClient)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const abstractClient = await createAbstractClient({ signer: signerClient as any, chain, transport: http(rpc) });
+    const abstractClient = await createAbstractClient({ signer: ownerAccount as any, chain, transport: http(rpc) });
     const agwAddress = abstractClient.account.address;
 
     const sessionPrivKey   = generatePrivateKey();
