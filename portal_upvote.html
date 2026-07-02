@@ -361,8 +361,10 @@ async function startAuthorize() {
     await provider.request({ method: "eth_requestAccounts" });
 
     setProgress("Loading AGW client library…");
-    const { createAbstractClient, LimitType } =
+    const { createAbstractClient } =
       await import("https://esm.sh/@abstract-foundation/agw-client");
+    const { LimitType } =
+      await import("https://esm.sh/@abstract-foundation/agw-client/sessions");
     const { privateKeyToAccount, generatePrivateKey } =
       await import("https://esm.sh/viem/accounts");
     const { abstract: absMainnet, abstractTestnet } =
