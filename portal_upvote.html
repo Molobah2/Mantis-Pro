@@ -188,7 +188,7 @@
     <div class="card">
       <div class="card-title">How it works</div>
       <ol class="steps">
-        <li>Connect your AGW wallet below.</li>
+        <li>Select your Abstract wallet below.</li>
         <li>A new <em>session key</em> is generated locally — your owner key never leaves the browser.</li>
         <li>You sign one on-chain transaction that registers the session key, scoped only to
             <code>upvote(uint256)</code> on <code>0x3b50de27…ce2a</code>.</li>
@@ -197,18 +197,17 @@
         <li>Each day at 09:00 UTC the agent scrapes the Portal, picks the least-recently-upvoted
             app, and submits the transaction autonomously.</li>
       </ol>
-      <div class="btn-row">
-        <button class="btn btn-green" onclick="startAuthorize()" id="btn-auth">Connect &amp; Authorize</button>
-        <div id="spinner"></div>
-      </div>
+
+      <!-- wallet picker — populated by JS via EIP-6963 -->
+      <div id="wallet-picker" style="margin-top:16px"></div>
+      <div id="spinner" style="margin-top:12px"></div>
       <div id="auth-progress" style="color:var(--ink2);font-size:12px;margin-top:12px;display:none"></div>
     </div>
 
     <div class="warning-box">
       <strong>Requirements</strong>
-      You need the <strong>Abstract browser extension</strong> (which injects <code>window.ethereum</code>)
-      or a wallet that supports Abstract's EIP-1193 provider.
-      Set <code>SESSION_KEY_ENCRYPTION_KEY</code> in Railway env vars before authorizing
+      Install the <strong>Abstract browser extension</strong> so it appears in the wallet picker.
+      Make sure <code>SESSION_KEY_ENCRYPTION_KEY</code> is set in Railway env vars
       (generate: <code>python -c "import secrets; print(secrets.token_hex(32))"</code>).
     </div>
   </div>
@@ -315,21 +314,84 @@ function renderStatus(d) {
   }
 }
 
+// ── EIP-6963 wallet discovery ─────────────────────────────────────────
+const _eip6963 = {};
+
+function _discoverWallets() {
+  window.addEventListener("eip6963:announceProvider", (e) => {
+    const { info, provider } = e.detail || {};
+    if (info?.rdns) _eip6963[info.rdns] = { info, provider };
+    _renderPicker();
+  });
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+  // Legacy fallback: if no EIP-6963 providers arrive within 300ms, show window.ethereum
+  setTimeout(() => {
+    if (Object.keys(_eip6963).length === 0 && window.ethereum) {
+      const isAbstract = window.ethereum.isAbstract ||
+        (window.ethereum.providers || []).some(p => p.isAbstract);
+      _eip6963["_legacy"] = {
+        provider: window.ethereum,
+        info: {
+          rdns:  "_legacy",
+          name:  isAbstract ? "Abstract Wallet" : "Browser Wallet",
+          icon:  "",
+        },
+      };
+      _renderPicker();
+    }
+  }, 300);
+}
+
+function _isAbstractProvider(info) {
+  const name = (info.name || "").toLowerCase();
+  const rdns = (info.rdns || "").toLowerCase();
+  return rdns.includes("abs") || rdns.includes("abstract") ||
+         name.includes("abstract") || name.includes("agw");
+}
+
+function _renderPicker() {
+  const el = document.getElementById("wallet-picker");
+  if (!el) return;
+  const wallets = Object.values(_eip6963);
+  if (wallets.length === 0) {
+    el.innerHTML = `<p style="color:var(--ink2);font-size:13px">
+      No wallet extensions detected. Install the
+      <a href="https://abs.xyz" target="_blank">Abstract browser extension</a>.</p>`;
+    return;
+  }
+  // Sort: Abstract-native first
+  wallets.sort((a, b) => (_isAbstractProvider(b.info) ? 1 : 0) - (_isAbstractProvider(a.info) ? 1 : 0));
+  el.innerHTML = wallets.map(w => {
+    const isAbs = _isAbstractProvider(w.info);
+    const icon  = w.info.icon
+      ? `<img src="${w.info.icon}" style="width:28px;height:28px;border-radius:6px;object-fit:contain">`
+      : `<div style="width:28px;height:28px;border-radius:6px;background:var(--l1);display:flex;align-items:center;justify-content:center;font-size:14px">🔑</div>`;
+    return `<button class="btn ${isAbs ? "btn-green" : "btn-ghost"}"
+        style="display:flex;align-items:center;gap:10px;margin-bottom:8px;width:100%;justify-content:flex-start"
+        onclick="window.startAuthorize(${JSON.stringify(w.info.rdns)})">
+      ${icon}
+      <span>${w.info.name}</span>
+      ${isAbs ? '<span style="font-size:10px;opacity:.7;margin-left:auto">RECOMMENDED</span>' : ""}
+    </button>`;
+  }).join("");
+}
+
 // ── authorize flow ────────────────────────────────────────────────────
-async function startAuthorize() {
-  const btn = document.getElementById("btn-auth");
-  const sp  = document.getElementById("spinner");
-  btn.disabled = true;
+async function startAuthorize(rdns) {
+  const entry = _eip6963[rdns] || Object.values(_eip6963)[0];
+  if (!entry) { msg("No wallet selected.", "err"); return; }
+
+  const pickerEl = document.getElementById("wallet-picker");
+  if (pickerEl) pickerEl.style.opacity = "0.4";
+  const sp = document.getElementById("spinner");
   sp.style.display = "block";
   clearMsg();
 
-  try {
-    if (!window.ethereum) {
-      throw new Error("window.ethereum not found. Install the Abstract browser extension.");
-    }
+  const provider = entry.provider;
 
+  try {
     setProgress("Requesting wallet accounts…");
-    await window.ethereum.request({ method: "eth_requestAccounts" });
+    await provider.request({ method: "eth_requestAccounts" });
 
     setProgress("Loading AGW client library…");
     const { createAbstractClient, LimitType } =
@@ -350,7 +412,7 @@ async function startAuthorize() {
     setProgress("Connecting wallet client…");
     const walletClient = createWalletClient({
       chain,
-      transport: custom(window.ethereum),
+      transport: custom(provider),
     });
     const [signerAddress] = await walletClient.getAddresses();
 
@@ -420,7 +482,8 @@ async function startAuthorize() {
     msg("Authorization failed: " + (e.message || e), "err");
     console.error("[authorize]", e);
   } finally {
-    btn.disabled = false;
+    const pickerEl = document.getElementById("wallet-picker");
+    if (pickerEl) pickerEl.style.opacity = "1";
     document.getElementById("spinner").style.display = "none";
   }
 }
@@ -479,6 +542,7 @@ async function revokeSession() {
 window.revokeSession = revokeSession;
 
 // ── bootstrap ─────────────────────────────────────────────────────────
+_discoverWallets();
 loadStatus();
 </script>
 </body>
