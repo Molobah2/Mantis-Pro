@@ -2,7 +2,10 @@
 nixPkgs = ["nodejs_20"]
 
 [phases.build]
-cmds = ["cd wallet-helper && npm ci && npm run build"]
+cmds = [
+  "ln -sf $(which node) /usr/local/bin/node",
+  "cd wallet-helper && npm ci && npm run build"
+]
 
 [start]
-cmd = "bash -lc 'python agent.py'"
+cmd = "python agent.py"
