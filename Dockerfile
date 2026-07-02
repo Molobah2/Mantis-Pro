@@ -1,5 +1,8 @@
 FROM python:3.12
 
+# Flush Python stdout/stderr immediately so container logs are visible
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # Install Node.js 20 via NodeSource

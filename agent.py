@@ -2371,7 +2371,7 @@ def _start_node_helper():
                 cwd=os.path.dirname(dist),
             )
             for line in proc.stdout:
-                print("[wallet-helper]", line.decode(errors="replace").rstrip())
+                print("[wallet-helper]", line.decode(errors="replace").rstrip(), flush=True)
             proc.wait()
             print(f"[wallet-helper] exited with code {proc.returncode} — restarting in 10s")
         except Exception as e:
