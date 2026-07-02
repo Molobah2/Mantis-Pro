@@ -95,7 +95,8 @@ app.post("/create-session", async (req, res) => {
       ? "https://api.testnet.abs.xyz"
       : "https://api.mainnet.abs.xyz";
 
-    const ownerAccount   = privateKeyToAccount(ownerPrivKey as `0x${string}`);
+    const normalizedKey  = ownerPrivKey.startsWith("0x") ? ownerPrivKey : `0x${ownerPrivKey}`;
+    const ownerAccount   = privateKeyToAccount(normalizedKey as `0x${string}`);
     const abstractClient = await createAbstractClient({
       signer:    ownerAccount,
       chain,
