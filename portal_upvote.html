@@ -188,7 +188,7 @@
     <div class="card">
       <div class="card-title">How it works</div>
       <ol class="steps">
-        <li>Select your Abstract wallet below.</li>
+        <li>Click <strong>Connect Abstract Wallet</strong> below.</li>
         <li>A new <em>session key</em> is generated locally — your owner key never leaves the browser.</li>
         <li>You sign one on-chain transaction that registers the session key, scoped only to
             <code>upvote(uint256)</code> on <code>0x3b50de27…ce2a</code>.</li>
@@ -198,9 +198,20 @@
             app, and submits the transaction autonomously.</li>
       </ol>
 
-      <div id="wallet-list" style="margin-top:18px;display:flex;flex-direction:column;gap:8px"></div>
-      <div id="spinner" style="display:none;width:18px;height:18px;border:2px solid var(--l1);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin-top:14px"></div>
-      <div id="auth-progress" style="color:var(--ink2);font-size:12px;margin-top:10px;line-height:1.5"></div>
+      <div style="margin-top:20px">
+        <button id="btn-connect-abstract"
+          onclick="window.startAuthorize()"
+          style="display:flex;align-items:center;gap:12px;padding:14px 22px;border-radius:12px;
+                 background:var(--green);color:#000;border:none;cursor:pointer;
+                 font-size:15px;font-weight:700;width:100%;justify-content:center;transition:opacity .15s"
+          onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Connect Abstract Wallet
+        </button>
+        <div id="wallet-hint" style="color:var(--ink2);font-size:12px;margin-top:8px;text-align:center"></div>
+      </div>
+      <div id="spinner" style="display:none;width:20px;height:20px;border:2px solid var(--l1);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:14px auto 0"></div>
+      <div id="auth-progress" style="color:var(--ink2);font-size:12px;margin-top:10px;line-height:1.5;text-align:center"></div>
     </div>
 
     <div class="warning-box">
@@ -312,94 +323,38 @@ function renderStatus(d) {
   }
 }
 
-// ── EIP-6963 wallet discovery ─────────────────────────────────────────
-const _providers = {};   // rdns → { info, provider }
-
-function _isAbstract(info) {
-  const n = (info.name || "").toLowerCase();
-  const r = (info.rdns || "").toLowerCase();
-  return r.includes("abs") || r.includes("abstract") || n.includes("abstract");
-}
-
-function _renderWalletList() {
-  const el = document.getElementById("wallet-list");
-  if (!el) return;
-  const list = Object.values(_providers);
-  if (list.length === 0) {
-    el.innerHTML = `<p style="color:var(--ink2);font-size:13px;line-height:1.6">
-      No wallet extensions detected.<br>
-      Install the <a href="https://abs.xyz" target="_blank">Abstract browser extension</a> and refresh.
-    </p>`;
-    return;
-  }
-  list.sort((a, b) => (_isAbstract(b.info) ? 1 : 0) - (_isAbstract(a.info) ? 1 : 0));
-  el.innerHTML = list.map(w => {
-    const abs  = _isAbstract(w.info);
-    const icon = w.info.icon
-      ? `<img src="${w.info.icon}" width="28" height="28" style="border-radius:6px;object-fit:contain;flex-shrink:0">`
-      : `<div style="width:28px;height:28px;border-radius:6px;background:var(--l1);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">🔑</div>`;
-    return `<button
-        onclick="window.startAuthorize('${w.info.rdns}')"
-        style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;
-               background:${abs ? "var(--green)" : "var(--l0)"};color:${abs ? "#000" : "var(--ink0)"};
-               border:1px solid ${abs ? "transparent" : "var(--l1)"};cursor:pointer;
-               font-size:14px;font-weight:600;text-align:left;width:100%;transition:opacity .15s"
-        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-      ${icon}
-      <span style="flex:1">${w.info.name}</span>
-      ${abs ? '<span style="font-size:10px;font-weight:700;opacity:.7;letter-spacing:.06em">ABSTRACT NATIVE</span>' : ""}
-    </button>`;
-  }).join("");
-}
-
-function _discoverWallets() {
-  // Listener MUST be registered before dispatching requestProvider
-  window.addEventListener("eip6963:announceProvider", (e) => {
-    const { info, provider } = e.detail || {};
-    if (info?.rdns && provider) {
-      _providers[info.rdns] = { info, provider };
-      _renderWalletList();
-    }
-  });
-  window.dispatchEvent(new Event("eip6963:requestProvider"));
-
-  // Fallback after 500ms if nothing announced
-  setTimeout(() => {
-    if (Object.keys(_providers).length > 0) return;
-    // Check window.ethereum manually
-    if (window.ethereum) {
-      const providers = window.ethereum.providers || [window.ethereum];
-      providers.forEach((p, i) => {
-        const name = p.isAbstract ? "Abstract Wallet"
-                   : p.isMetaMask ? "MetaMask"
-                   : p.isCoinbaseWallet ? "Coinbase Wallet"
-                   : `Wallet ${i + 1}`;
-        _providers[`_fallback_${i}`] = {
-          provider: p,
-          info: { rdns: `_fallback_${i}`, name, icon: "" },
-        };
-      });
-    } else {
-      _providers["_none"] = {
-        provider: null,
-        info: { rdns: "_none", name: "No wallet found", icon: "" },
-      };
-    }
-    _renderWalletList();
-  }, 500);
+// ── wallet hint (shows which extension will sign) ─────────────────────
+function _showWalletHint() {
+  const hint = document.getElementById("wallet-hint");
+  if (!hint) return;
+  const p = window.ethereum;
+  if (!p) { hint.textContent = "No wallet extension detected — install one to continue."; return; }
+  const name = p.isAbstract ? "Abstract Wallet"
+             : p.isMetaMask ? "MetaMask (signs as AGW owner)"
+             : p.isCoinbaseWallet ? "Coinbase Wallet (signs as AGW owner)"
+             : "Browser wallet (signs as AGW owner)";
+  hint.textContent = `Will sign with: ${name}`;
 }
 
 // ── authorize flow ────────────────────────────────────────────────────
-async function startAuthorize(rdns) {
-  const entry = _providers[rdns];
-  if (!entry?.provider) { msg("Wallet not available.", "err"); return; }
+async function startAuthorize() {
+  // Pick best available provider: prefer native Abstract, fall back to window.ethereum
+  const provider = (() => {
+    if (!window.ethereum) return null;
+    const candidates = window.ethereum.providers || [window.ethereum];
+    return candidates.find(p => p.isAbstract) || candidates[0] || null;
+  })();
 
-  document.getElementById("wallet-list").style.opacity = "0.4";
+  if (!provider) {
+    msg("No wallet extension found. Install MetaMask or the Abstract browser extension.", "err");
+    return;
+  }
+
+  const btn = document.getElementById("btn-connect-abstract");
+  if (btn) btn.disabled = true;
   document.getElementById("spinner").style.display = "block";
   document.getElementById("auth-progress").textContent = "";
   clearMsg();
-
-  const provider = entry.provider;
 
   try {
     setProgress("Requesting wallet accounts…");
@@ -494,8 +449,8 @@ async function startAuthorize(rdns) {
     msg("Authorization failed: " + (e.message || e), "err");
     console.error("[authorize]", e);
   } finally {
-    const listEl = document.getElementById("wallet-list");
-    if (listEl) listEl.style.opacity = "1";
+    const btn = document.getElementById("btn-connect-abstract");
+    if (btn) btn.disabled = false;
     document.getElementById("spinner").style.display = "none";
   }
 }
@@ -554,7 +509,7 @@ async function revokeSession() {
 window.revokeSession = revokeSession;
 
 // ── bootstrap ─────────────────────────────────────────────────────────
-_discoverWallets();
+_showWalletHint();
 loadStatus();
 </script>
 </body>
