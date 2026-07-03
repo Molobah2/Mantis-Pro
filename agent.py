@@ -1949,6 +1949,11 @@ def upvote_refresh_catalog():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/wc-config")
+def wc_config():
+    project_id = os.getenv("WC_PROJECT_ID", "").strip()
+    return jsonify({"projectId": project_id, "ok": bool(project_id)})
+
 
 def run_identity_refresh():
     time.sleep(30)

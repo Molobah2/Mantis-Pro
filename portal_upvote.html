@@ -188,38 +188,41 @@
     <div class="card">
       <div class="card-title">How it works</div>
       <ol class="steps">
-        <li>Click <strong>Connect Abstract Wallet</strong> below.</li>
-        <li>A new <em>session key</em> is generated locally — your owner key never leaves the browser.</li>
-        <li>You sign one on-chain transaction that registers the session key, scoped only to
-            <code>upvote(uint256)</code> on <code>0x3b50de27…ce2a</code>.</li>
-        <li>The session private key is encrypted with AES-256-EAX and stored server-side.
-            Only the agent decrypts it at runtime — never committed to git.</li>
-        <li>Each day at 09:00 UTC the agent scrapes the Portal, picks the least-recently-upvoted
-            app, and submits the transaction autonomously.</li>
+        <li>Click <strong>Connect via WalletConnect</strong> — a QR code appears.</li>
+        <li>Scan the QR code with your Abstract Wallet mobile app (or any WalletConnect wallet).</li>
+        <li>Approve the one-time session key transaction in your wallet.</li>
+        <li>The session key is encrypted and stored server-side. Daily upvotes run automatically at 09:00 UTC.</li>
       </ol>
 
-      <div style="margin-top:20px">
-        <button id="btn-connect-abstract"
-          onclick="window.startAuthorize()"
+      <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px">
+        <button id="btn-wc"
+          onclick="window.startWalletConnect()"
           style="display:flex;align-items:center;gap:12px;padding:14px 22px;border-radius:12px;
-                 background:var(--green);color:#000;border:none;cursor:pointer;
+                 background:var(--blue);color:#fff;border:none;cursor:pointer;
                  font-size:15px;font-weight:700;width:100%;justify-content:center;transition:opacity .15s"
           onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Connect Abstract Wallet
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          Connect via WalletConnect
         </button>
-        <div id="wallet-hint" style="color:var(--ink2);font-size:12px;margin-top:8px;text-align:center"></div>
+        <button id="btn-connect-abstract"
+          onclick="window.startBrowserWallet()"
+          style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-radius:10px;
+                 background:var(--l0);color:var(--ink1);border:1px solid var(--l1);cursor:pointer;
+                 font-size:13px;font-weight:600;width:100%;justify-content:center;transition:opacity .15s"
+          onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Connect Browser Wallet (MetaMask / injected)
+        </button>
       </div>
-      <div id="spinner" style="display:none;width:20px;height:20px;border:2px solid var(--l1);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:14px auto 0"></div>
-      <div id="auth-progress" style="color:var(--ink2);font-size:12px;margin-top:10px;line-height:1.5;text-align:center"></div>
-
-      <div id="wallet-debug" style="margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border-radius:8px;font-size:11px;font-family:monospace;color:var(--ink2);line-height:1.7;display:none"></div>
+      <div id="wallet-hint" style="color:var(--ink2);font-size:12px;margin-top:10px;text-align:center"></div>
+      <div id="spinner" style="display:none;width:20px;height:20px;border:2px solid var(--l1);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin:12px auto 0"></div>
+      <div id="auth-progress" style="color:var(--ink2);font-size:12px;margin-top:8px;line-height:1.5;text-align:center"></div>
     </div>
 
     <div class="warning-box">
       <strong>Requirements</strong>
-      Make sure <code>SESSION_KEY_ENCRYPTION_KEY</code> is set in Railway env vars before authorizing
-      (generate: <code>python -c "import secrets; print(secrets.token_hex(32))"</code>).
+      <code>WC_PROJECT_ID</code> must be set in Railway env vars for WalletConnect.
+      Get a free key: <a href="https://cloud.reown.com" target="_blank" style="color:var(--yellow)">cloud.reown.com</a> → New Project → copy Project ID → paste into Railway.
     </div>
   </div>
 
@@ -325,227 +328,193 @@ function renderStatus(d) {
   }
 }
 
-// ── wallet discovery: EIP-6963 → ethereum#initialized → window.ethereum ─
-async function _discoverProvider() {
-  // Wait for ethereum#initialized (some extensions fire this on inject)
-  const ethReady = new Promise(resolve => {
-    if (window.ethereum) { resolve(); return; }
-    window.addEventListener("ethereum#initialized", resolve, { once: true });
-    setTimeout(resolve, 600);  // max wait
+// ── shared: core auth logic given any EIP-1193 provider + EOA address ──
+async function _doAuthorize(provider, eoaAddress) {
+  setProgress("Loading AGW client library…");
+  const { createAbstractClient } =
+    await import("https://esm.sh/@abstract-foundation/agw-client");
+  const { LimitType } =
+    await import("https://esm.sh/@abstract-foundation/agw-client/sessions");
+  const { toAccount, privateKeyToAccount, generatePrivateKey } =
+    await import("https://esm.sh/viem/accounts");
+  const { abstract: absMainnet, abstractTestnet } =
+    await import("https://esm.sh/viem/chains");
+  const { createWalletClient, custom } =
+    await import("https://esm.sh/viem");
+
+  const network = window._upvoteStatus?.network || "mainnet";
+  const chain   = network === "testnet" ? abstractTestnet : absMainnet;
+
+  setProgress(`Building AGW signer for ${eoaAddress.slice(0,8)}…`);
+  const eoaWC = createWalletClient({ account: eoaAddress, chain, transport: custom(provider) });
+  const signerAccount = toAccount({
+    address:       eoaAddress,
+    signMessage:   (a) => eoaWC.signMessage({ ...a, account: eoaAddress }),
+    signTypedData: (a) => eoaWC.signTypedData({ ...a, account: eoaAddress }),
+    signTransaction:(a)=> eoaWC.signTransaction({ ...a, account: eoaAddress }),
   });
-  await ethReady;
 
-  // EIP-6963 (300ms window after page settled)
-  const eip6963 = [];
-  const h = (e) => { if (e.detail?.provider) eip6963.push(e.detail); };
-  window.addEventListener("eip6963:announceProvider", h);
-  window.dispatchEvent(new Event("eip6963:requestProvider"));
-  await new Promise(r => setTimeout(r, 300));
-  window.removeEventListener("eip6963:announceProvider", h);
+  const abstractClient = await createAbstractClient({
+    signer: signerAccount,
+    chain,
+    transport: custom(provider),
+  });
+  const agwAddress = abstractClient.account.address;
+  setProgress(`AGW: ${agwAddress.slice(0,10)}… — generating session key…`);
 
-  if (eip6963.length > 0) {
-    const abs = eip6963.find(p =>
-      (p.info?.rdns || "").toLowerCase().includes("abstract") ||
-      (p.info?.name || "").toLowerCase().includes("abstract") ||
-      p.provider?.isAbstract
-    );
-    const best = abs || eip6963[0];
-    return { provider: best.provider, name: best.info?.name || "Wallet" };
+  const sessionPrivKey = generatePrivateKey();
+  const sessionAccount = privateKeyToAccount(sessionPrivKey);
+  const expiresAt      = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
+
+  setProgress("Submitting createSession — approve in your wallet…");
+  const { session } = await abstractClient.createSession({
+    session: {
+      signer:    sessionAccount.address,
+      expiresAt,
+      feeLimit: { limitType: LimitType.Lifetime, limit: BigInt("500000000000000"), period: 0n },
+      callPolicies: [{
+        target:         "0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a",
+        selector:       "0x7060a227",
+        maxValuePerUse: 0n,
+        valueLimit:     { limitType: LimitType.Unlimited, limit: 0n, period: 0n },
+        constraints:    [],
+      }],
+      transferPolicies: [],
+    },
+  });
+
+  const sessionConfigJson = JSON.stringify(session, (_k, v) =>
+    typeof v === "bigint" ? v.toString() : v);
+
+  setProgress("Storing session key server-side…");
+  const storeResp = await fetch("/portal-upvote/store-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionPrivKey, sessionConfig: sessionConfigJson,
+      agwAddress, expiresAt: Number(expiresAt),
+    }),
+  });
+  if (!storeResp.ok) {
+    const e = await storeResp.json().catch(() => ({}));
+    throw new Error(e.error || `Store failed: HTTP ${storeResp.status}`);
   }
-
-  // window.ethereum fallback (handles MetaMask, Coinbase, legacy injections)
-  if (window.ethereum) {
-    const candidates = window.ethereum.providers || [window.ethereum];
-    const abs  = candidates.find(p => p.isAbstract);
-    const meta = candidates.find(p => p.isMetaMask);
-    const best = abs || meta || candidates[0];
-    return {
-      provider: best,
-      name: best.isAbstract ? "Abstract Wallet"
-          : best.isMetaMask ? "MetaMask"
-          : best.isCoinbaseWallet ? "Coinbase Wallet"
-          : "Browser Wallet",
-    };
-  }
-
-  return null;
+  setProgress("");
+  msg("Session authorized! Daily upvotes are now active.", "ok");
+  setTimeout(loadStatus, 800);
 }
 
-// ── wallet hint + debug panel ─────────────────────────────────────────
-async function _showWalletHint() {
-  const hint  = document.getElementById("wallet-hint");
-  const dbg   = document.getElementById("wallet-debug");
-
-  // Build debug info
-  const lines = [];
-  lines.push(`window.ethereum: ${typeof window.ethereum}`);
-  if (window.ethereum) {
-    lines.push(`  .isMetaMask=${!!window.ethereum.isMetaMask}`);
-    lines.push(`  .isAbstract=${!!window.ethereum.isAbstract}`);
-    lines.push(`  .isCoinbaseWallet=${!!window.ethereum.isCoinbaseWallet}`);
-    if (window.ethereum.providers)
-      lines.push(`  .providers[${window.ethereum.providers.length}]=${window.ethereum.providers.map(p=>Object.keys(p).filter(k=>k.startsWith('is')).join('|')||'?').join(', ')}`);
-  }
-  // Quick EIP-6963 scan
-  const e6963 = [];
-  const _h = (e) => { if (e.detail?.info) e6963.push(e.detail.info.name || e.detail.info.rdns); };
-  window.addEventListener("eip6963:announceProvider", _h);
-  window.dispatchEvent(new Event("eip6963:requestProvider"));
-  await new Promise(r => setTimeout(r, 400));
-  window.removeEventListener("eip6963:announceProvider", _h);
-  lines.push(`EIP-6963 providers: ${e6963.length > 0 ? e6963.join(", ") : "none"}`);
-
-  if (dbg) { dbg.style.display = "block"; dbg.innerHTML = lines.join("<br>"); }
-
-  if (!hint) return;
-  const detected = await _discoverProvider();
-  if (!detected) {
-    hint.innerHTML = 'No Web3 wallet injected. The Abstract Wallet extension may not inject on non-abs.xyz pages — try <strong>MetaMask</strong> instead (any wallet works as the AGW signer).';
-    return;
-  }
-  try {
-    const accts = await detected.provider.request({ method: "eth_accounts" });
-    if (accts && accts.length > 0) {
-      hint.textContent = `${detected.name} connected: ${accts[0].slice(0,8)}…${accts[0].slice(-6)} — click above to authorize once.`;
-      return;
-    }
-  } catch (_) { /* ignore */ }
-  hint.textContent = `Detected: ${detected.name} — click above to connect & authorize.`;
-}
-
-// ── authorize flow ────────────────────────────────────────────────────
-async function startAuthorize() {
-  const btn = document.getElementById("btn-connect-abstract");
-  if (btn) btn.disabled = true;
+function _lockButtons() {
+  ["btn-wc","btn-connect-abstract"].forEach(id => {
+    const b = document.getElementById(id); if (b) b.disabled = true;
+  });
   document.getElementById("spinner").style.display = "block";
-  setProgress("Detecting wallet…");
   clearMsg();
+}
+function _unlockButtons() {
+  ["btn-wc","btn-connect-abstract"].forEach(id => {
+    const b = document.getElementById(id); if (b) b.disabled = false;
+  });
+  document.getElementById("spinner").style.display = "none";
+}
 
-  const detected = await _discoverProvider();
-
-  if (!detected) {
-    setProgress("");
-    msg("No wallet detected. Install Abstract Wallet (abs.xyz/wallet) or MetaMask, then refresh and try again.", "err");
-    if (btn) btn.disabled = false;
-    document.getElementById("spinner").style.display = "none";
-    return;
-  }
-
-  const { provider, name: walletName } = detected;
-
+// ── WalletConnect flow ────────────────────────────────────────────────
+async function startWalletConnect() {
+  _lockButtons();
+  setProgress("Fetching WalletConnect config…");
   try {
-    setProgress(`Requesting accounts from ${walletName}…`);
-    const accounts = await provider.request({ method: "eth_requestAccounts" });
-    const eoaAddress = accounts[0];
-    if (!eoaAddress) throw new Error("No accounts returned from wallet");
+    const cfg = await fetch("/api/wc-config").then(r => r.json());
+    if (!cfg.projectId) {
+      throw new Error(
+        "WC_PROJECT_ID is not set in Railway env vars. " +
+        "Get a free key at cloud.reown.com → New Project → copy Project ID → add to Railway."
+      );
+    }
 
-    setProgress("Loading AGW client library…");
-    const { createAbstractClient, transformEIP1193Provider } =
-      await import("https://esm.sh/@abstract-foundation/agw-client");
-    const { LimitType } =
-      await import("https://esm.sh/@abstract-foundation/agw-client/sessions");
-    const { toAccount, privateKeyToAccount, generatePrivateKey } =
-      await import("https://esm.sh/viem/accounts");
-    const { abstract: absMainnet, abstractTestnet } =
-      await import("https://esm.sh/viem/chains");
-    const { createWalletClient, custom, http } =
-      await import("https://esm.sh/viem");
+    setProgress("Loading WalletConnect SDK…");
+    const { EthereumProvider } =
+      await import("https://esm.sh/@walletconnect/ethereum-provider@2");
 
-    const network = window._upvoteStatus?.network || "mainnet";
-    const chain   = network === "testnet" ? abstractTestnet : absMainnet;
-    const rpc     = network === "testnet"
-      ? "https://api.testnet.abs.xyz"
-      : "https://api.mainnet.abs.xyz";
-
-    setProgress(`Building AGW signer for ${eoaAddress.slice(0,8)}…`);
-
-    // Build a proper Account object with .address set directly (required by createAbstractClient)
-    const eoaWalletClient = createWalletClient({
-      account: eoaAddress,
-      chain,
-      transport: custom(provider),
-    });
-    const signerAccount = toAccount({
-      address:      eoaAddress,
-      signMessage:   (args)  => eoaWalletClient.signMessage({ ...args, account: eoaAddress }),
-      signTypedData: (args)  => eoaWalletClient.signTypedData({ ...args, account: eoaAddress }),
-      signTransaction:(args) => eoaWalletClient.signTransaction({ ...args, account: eoaAddress }),
-    });
-
-    // createAbstractClient reads signerAccount.address directly (not .account.address)
-    // transport: custom(provider) routes eth_sendTransaction to the browser wallet
-    // which signs it as an EIP-712 type-113 AGW transaction
-    const abstractClient = await createAbstractClient({
-      signer:    signerAccount,
-      chain,
-      transport: custom(provider),
-    });
-    const agwAddress = abstractClient.account.address;
-    setProgress(`AGW: ${agwAddress.slice(0,10)}… — generating session key…`);
-
-    setProgress("Generating session key…");
-    const sessionPrivKey  = generatePrivateKey();
-    const sessionAccount  = privateKeyToAccount(sessionPrivKey);
-
-    // Expiry: 30 days from now
-    const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
-
-    setProgress("Submitting createSession transaction — please approve in your wallet…");
-    const { session } = await abstractClient.createSession({
-      session: {
-        signer:    sessionAccount.address,
-        expiresAt,
-        feeLimit: {
-          limitType: LimitType.Lifetime,
-          limit:     BigInt("500000000000000"),   // 0.0005 ETH gas budget
-          period:    0n,
-        },
-        callPolicies: [{
-          target:         "0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a",
-          selector:       "0x7060a227",
-          maxValuePerUse: 0n,
-          valueLimit: { limitType: LimitType.Unlimited, limit: 0n, period: 0n },
-          constraints:    [],
-        }],
-        transferPolicies: [],
+    setProgress("Opening WalletConnect modal — scan QR with your wallet app…");
+    const wcProvider = await EthereumProvider.init({
+      projectId:      cfg.projectId,
+      chains:         [2741],
+      optionalChains: [1],
+      showQrModal:    true,
+      rpcMap:         { 2741: "https://api.mainnet.abs.xyz" },
+      metadata: {
+        name:        "Mantis Pro",
+        description: "Portal Auto-Upvote",
+        url:         window.location.origin,
+        icons:       [],
       },
     });
 
-    // Serialize session config (BigInt → string for JSON)
-    const sessionConfigJson = JSON.stringify(session, (_k, v) =>
-      typeof v === "bigint" ? v.toString() : v
-    );
+    await wcProvider.connect();
+    const accounts    = await wcProvider.request({ method: "eth_accounts" });
+    const eoaAddress  = accounts[0];
+    if (!eoaAddress) throw new Error("No accounts returned after WalletConnect");
 
-    setProgress("Storing session key server-side…");
-    const storeResp = await fetch("/portal-upvote/store-session", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        sessionPrivKey:  sessionPrivKey,
-        sessionConfig:   sessionConfigJson,
-        agwAddress,
-        expiresAt:       Number(expiresAt),
-      }),
-    });
-    if (!storeResp.ok) {
-      const e = await storeResp.json().catch(() => ({}));
-      throw new Error(e.error || `Store failed: HTTP ${storeResp.status}`);
-    }
-
-    setProgress("");
-    msg("Session authorized successfully! Daily upvotes are now active.", "ok");
-    setTimeout(loadStatus, 800);
+    setProgress(`Connected: ${eoaAddress.slice(0,8)}… — creating AGW session…`);
+    await _doAuthorize(wcProvider, eoaAddress);
 
   } catch (e) {
     setProgress("");
-    msg("Authorization failed: " + (e.message || e), "err");
-    console.error("[authorize]", e);
+    msg("WalletConnect error: " + (e.message || e), "err");
+    console.error("[wc]", e);
   } finally {
-    if (btn) btn.disabled = false;
-    document.getElementById("spinner").style.display = "none";
+    _unlockButtons();
   }
 }
-window.startAuthorize = startAuthorize;
+window.startWalletConnect = startWalletConnect;
+
+// ── Browser-wallet fallback (MetaMask / injected) ─────────────────────
+async function startBrowserWallet() {
+  _lockButtons();
+  setProgress("Detecting browser wallet…");
+  try {
+    await new Promise(r => {
+      if (window.ethereum) { r(); return; }
+      window.addEventListener("ethereum#initialized", r, { once: true });
+      setTimeout(r, 800);
+    });
+    if (!window.ethereum) throw new Error("No browser wallet detected (window.ethereum is undefined). Install MetaMask.");
+
+    const candidates = window.ethereum.providers || [window.ethereum];
+    const provider   = candidates.find(p => p.isMetaMask) || candidates[0];
+
+    setProgress("Requesting accounts…");
+    const accounts   = await provider.request({ method: "eth_requestAccounts" });
+    const eoaAddress = accounts[0];
+    if (!eoaAddress) throw new Error("No accounts returned");
+
+    setProgress(`Connected: ${eoaAddress.slice(0,8)}… — creating AGW session…`);
+    await _doAuthorize(provider, eoaAddress);
+
+  } catch (e) {
+    setProgress("");
+    msg("Browser wallet error: " + (e.message || e), "err");
+    console.error("[browser-wallet]", e);
+  } finally {
+    _unlockButtons();
+  }
+}
+window.startBrowserWallet = startBrowserWallet;
+// keep old name working
+window.startAuthorize = startBrowserWallet;
+
+// ── wallet hint ───────────────────────────────────────────────────────
+async function _showWalletHint() {
+  const hint = document.getElementById("wallet-hint");
+  if (!hint) return;
+  const cfg = await fetch("/api/wc-config").then(r => r.json()).catch(() => ({}));
+  if (cfg.projectId) {
+    hint.textContent = "WalletConnect ready — click the blue button and scan with your wallet app.";
+  } else {
+    hint.innerHTML = 'Set <code>WC_PROJECT_ID</code> in Railway to enable WalletConnect. '
+      + 'Or use MetaMask with the grey button.';
+  }
+}
 
 // ── actions ───────────────────────────────────────────────────────────
 async function triggerNow() {
