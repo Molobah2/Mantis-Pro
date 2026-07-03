@@ -323,60 +323,69 @@ function renderStatus(d) {
   }
 }
 
-// ── EIP-6963 + legacy wallet discovery ───────────────────────────────
+// ── wallet discovery: EIP-6963 → ethereum#initialized → window.ethereum ─
 async function _discoverProvider() {
-  // 1. EIP-6963 (modern standard — Abstract wallet uses this)
+  // Wait for ethereum#initialized (some extensions fire this on inject)
+  const ethReady = new Promise(resolve => {
+    if (window.ethereum) { resolve(); return; }
+    window.addEventListener("ethereum#initialized", resolve, { once: true });
+    setTimeout(resolve, 600);  // max wait
+  });
+  await ethReady;
+
+  // EIP-6963 (300ms window after page settled)
   const eip6963 = [];
-  const handler = (e) => { if (e.detail?.provider) eip6963.push(e.detail); };
-  window.addEventListener("eip6963:announceProvider", handler);
+  const h = (e) => { if (e.detail?.provider) eip6963.push(e.detail); };
+  window.addEventListener("eip6963:announceProvider", h);
   window.dispatchEvent(new Event("eip6963:requestProvider"));
-  await new Promise(r => setTimeout(r, 200));
-  window.removeEventListener("eip6963:announceProvider", handler);
+  await new Promise(r => setTimeout(r, 300));
+  window.removeEventListener("eip6963:announceProvider", h);
 
   if (eip6963.length > 0) {
     const abs = eip6963.find(p =>
-      (p.info?.rdns  || "").toLowerCase().includes("abstract") ||
-      (p.info?.name  || "").toLowerCase().includes("abstract") ||
+      (p.info?.rdns || "").toLowerCase().includes("abstract") ||
+      (p.info?.name || "").toLowerCase().includes("abstract") ||
       p.provider?.isAbstract
     );
     const best = abs || eip6963[0];
     return { provider: best.provider, name: best.info?.name || "Wallet" };
   }
 
-  // 2. Legacy window.ethereum fallback
+  // window.ethereum fallback (handles MetaMask, Coinbase, legacy injections)
   if (window.ethereum) {
     const candidates = window.ethereum.providers || [window.ethereum];
     const abs  = candidates.find(p => p.isAbstract);
     const meta = candidates.find(p => p.isMetaMask);
     const best = abs || meta || candidates[0];
-    const name = best.isAbstract      ? "Abstract Wallet"
-               : best.isMetaMask      ? "MetaMask"
-               : best.isCoinbaseWallet? "Coinbase Wallet"
-               : "Browser Wallet";
-    return { provider: best, name };
+    return {
+      provider: best,
+      name: best.isAbstract ? "Abstract Wallet"
+          : best.isMetaMask ? "MetaMask"
+          : best.isCoinbaseWallet ? "Coinbase Wallet"
+          : "Browser Wallet",
+    };
   }
 
   return null;
 }
 
-// ── wallet hint (shows detected wallet + connected address) ───────────
+// ── wallet hint ───────────────────────────────────────────────────────
 async function _showWalletHint() {
   const hint = document.getElementById("wallet-hint");
   if (!hint) return;
   const detected = await _discoverProvider();
   if (!detected) {
-    hint.innerHTML = 'No wallet detected — <a href="https://abs.xyz/wallet" target="_blank">install Abstract Wallet</a> to continue.';
+    hint.innerHTML = 'No wallet detected — <a href="https://abs.xyz/wallet" target="_blank">install Abstract Wallet</a> or use MetaMask.';
     return;
   }
   try {
     const accts = await detected.provider.request({ method: "eth_accounts" });
     if (accts && accts.length > 0) {
-      const addr = accts[0];
-      hint.textContent = `${detected.name} connected: ${addr.slice(0,8)}…${addr.slice(-6)} — click above to authorize once.`;
+      hint.textContent = `${detected.name} connected: ${accts[0].slice(0,8)}…${accts[0].slice(-6)} — click above to authorize once.`;
       return;
     }
   } catch (_) { /* ignore */ }
-  hint.textContent = `Will sign with: ${detected.name}`;
+  hint.textContent = `Detected: ${detected.name} — click above to connect & authorize.`;
 }
 
 // ── authorize flow ────────────────────────────────────────────────────
@@ -391,46 +400,26 @@ async function startAuthorize() {
 
   if (!detected) {
     setProgress("");
-    msg("No wallet extension found — make sure Abstract Wallet is installed and this page is open in a Chromium-based browser.", "err");
+    msg("No wallet detected. Install Abstract Wallet (abs.xyz/wallet) or MetaMask, then refresh and try again.", "err");
     if (btn) btn.disabled = false;
     document.getElementById("spinner").style.display = "none";
     return;
   }
 
-  const { provider } = detected;
+  const { provider, name: walletName } = detected;
 
   try {
-    setProgress("Requesting wallet accounts…");
-    await provider.request({ method: "eth_requestAccounts" });
-
-    // Ensure the wallet is on Abstract mainnet (chainId 0xAB5 = 2741)
-    setProgress("Switching to Abstract chain…");
-    try {
-      await provider.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0xAB5" }],
-      });
-    } catch (switchErr) {
-      if (switchErr.code === 4902) {
-        await provider.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId:         "0xAB5",
-            chainName:       "Abstract",
-            nativeCurrency:  { name: "Ether", symbol: "ETH", decimals: 18 },
-            rpcUrls:         ["https://api.mainnet.abs.xyz"],
-            blockExplorerUrls: ["https://abscan.org"],
-          }],
-        });
-      }
-    }
+    setProgress(`Requesting accounts from ${walletName}…`);
+    const accounts = await provider.request({ method: "eth_requestAccounts" });
+    const eoaAddress = accounts[0];
+    if (!eoaAddress) throw new Error("No accounts returned from wallet");
 
     setProgress("Loading AGW client library…");
-    const { createAbstractClient } =
+    const { createAbstractClient, transformEIP1193Provider } =
       await import("https://esm.sh/@abstract-foundation/agw-client");
     const { LimitType } =
       await import("https://esm.sh/@abstract-foundation/agw-client/sessions");
-    const { privateKeyToAccount, generatePrivateKey } =
+    const { toAccount, privateKeyToAccount, generatePrivateKey } =
       await import("https://esm.sh/viem/accounts");
     const { abstract: absMainnet, abstractTestnet } =
       await import("https://esm.sh/viem/chains");
@@ -443,20 +432,31 @@ async function startAuthorize() {
       ? "https://api.testnet.abs.xyz"
       : "https://api.mainnet.abs.xyz";
 
-    setProgress("Connecting wallet client…");
-    const walletClient = createWalletClient({
+    setProgress(`Building AGW signer for ${eoaAddress.slice(0,8)}…`);
+
+    // Build a proper Account object with .address set directly (required by createAbstractClient)
+    const eoaWalletClient = createWalletClient({
+      account: eoaAddress,
       chain,
       transport: custom(provider),
     });
-    const [signerAddress] = await walletClient.getAddresses();
+    const signerAccount = toAccount({
+      address:      eoaAddress,
+      signMessage:   (args)  => eoaWalletClient.signMessage({ ...args, account: eoaAddress }),
+      signTypedData: (args)  => eoaWalletClient.signTypedData({ ...args, account: eoaAddress }),
+      signTransaction:(args) => eoaWalletClient.signTransaction({ ...args, account: eoaAddress }),
+    });
 
-    setProgress(`Creating Abstract client for ${signerAddress.slice(0,8)}…`);
+    // createAbstractClient reads signerAccount.address directly (not .account.address)
+    // transport: custom(provider) routes eth_sendTransaction to the browser wallet
+    // which signs it as an EIP-712 type-113 AGW transaction
     const abstractClient = await createAbstractClient({
-      signer:    walletClient,
+      signer:    signerAccount,
       chain,
-      transport: http(rpc),
+      transport: custom(provider),
     });
     const agwAddress = abstractClient.account.address;
+    setProgress(`AGW: ${agwAddress.slice(0,10)}… — generating session key…`);
 
     setProgress("Generating session key…");
     const sessionPrivKey  = generatePrivateKey();
