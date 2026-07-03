@@ -323,53 +323,81 @@ function renderStatus(d) {
   }
 }
 
-// ── wallet hint (shows which extension will sign + connected address) ──
+// ── EIP-6963 + legacy wallet discovery ───────────────────────────────
+async function _discoverProvider() {
+  // 1. EIP-6963 (modern standard — Abstract wallet uses this)
+  const eip6963 = [];
+  const handler = (e) => { if (e.detail?.provider) eip6963.push(e.detail); };
+  window.addEventListener("eip6963:announceProvider", handler);
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+  await new Promise(r => setTimeout(r, 200));
+  window.removeEventListener("eip6963:announceProvider", handler);
+
+  if (eip6963.length > 0) {
+    const abs = eip6963.find(p =>
+      (p.info?.rdns  || "").toLowerCase().includes("abstract") ||
+      (p.info?.name  || "").toLowerCase().includes("abstract") ||
+      p.provider?.isAbstract
+    );
+    const best = abs || eip6963[0];
+    return { provider: best.provider, name: best.info?.name || "Wallet" };
+  }
+
+  // 2. Legacy window.ethereum fallback
+  if (window.ethereum) {
+    const candidates = window.ethereum.providers || [window.ethereum];
+    const abs  = candidates.find(p => p.isAbstract);
+    const meta = candidates.find(p => p.isMetaMask);
+    const best = abs || meta || candidates[0];
+    const name = best.isAbstract      ? "Abstract Wallet"
+               : best.isMetaMask      ? "MetaMask"
+               : best.isCoinbaseWallet? "Coinbase Wallet"
+               : "Browser Wallet";
+    return { provider: best, name };
+  }
+
+  return null;
+}
+
+// ── wallet hint (shows detected wallet + connected address) ───────────
 async function _showWalletHint() {
   const hint = document.getElementById("wallet-hint");
   if (!hint) return;
-  const p = window.ethereum;
-  if (!p) {
-    hint.innerHTML = 'No wallet extension detected — <a href="https://abs.xyz/wallet" target="_blank">install Abstract Wallet</a> to continue.';
+  const detected = await _discoverProvider();
+  if (!detected) {
+    hint.innerHTML = 'No wallet detected — <a href="https://abs.xyz/wallet" target="_blank">install Abstract Wallet</a> to continue.';
     return;
   }
-  const candidates = p.providers || [p];
-  const abs  = candidates.find(x => x.isAbstract);
-  const meta = candidates.find(x => x.isMetaMask && !x.isAbstract);
-  const best = abs || meta || candidates[0];
-  const name = best.isAbstract ? "Abstract Wallet"
-             : best.isMetaMask ? "MetaMask"
-             : best.isCoinbaseWallet ? "Coinbase Wallet"
-             : "Browser wallet";
   try {
-    const accts = await best.request({ method: "eth_accounts" });
+    const accts = await detected.provider.request({ method: "eth_accounts" });
     if (accts && accts.length > 0) {
       const addr = accts[0];
-      hint.textContent = `${name} connected: ${addr.slice(0,8)}…${addr.slice(-6)} — click above to authorize once.`;
+      hint.textContent = `${detected.name} connected: ${addr.slice(0,8)}…${addr.slice(-6)} — click above to authorize once.`;
       return;
     }
   } catch (_) { /* ignore */ }
-  hint.textContent = `Will sign with: ${name}`;
+  hint.textContent = `Will sign with: ${detected.name}`;
 }
 
 // ── authorize flow ────────────────────────────────────────────────────
 async function startAuthorize() {
-  // Pick best available provider: prefer native Abstract, fall back to window.ethereum
-  const provider = (() => {
-    if (!window.ethereum) return null;
-    const candidates = window.ethereum.providers || [window.ethereum];
-    return candidates.find(p => p.isAbstract) || candidates[0] || null;
-  })();
-
-  if (!provider) {
-    msg("No wallet extension found. Install MetaMask or the Abstract browser extension.", "err");
-    return;
-  }
-
   const btn = document.getElementById("btn-connect-abstract");
   if (btn) btn.disabled = true;
   document.getElementById("spinner").style.display = "block";
-  document.getElementById("auth-progress").textContent = "";
+  setProgress("Detecting wallet…");
   clearMsg();
+
+  const detected = await _discoverProvider();
+
+  if (!detected) {
+    setProgress("");
+    msg("No wallet extension found — make sure Abstract Wallet is installed and this page is open in a Chromium-based browser.", "err");
+    if (btn) btn.disabled = false;
+    document.getElementById("spinner").style.display = "none";
+    return;
+  }
+
+  const { provider } = detected;
 
   try {
     setProgress("Requesting wallet accounts…");
@@ -488,7 +516,6 @@ async function startAuthorize() {
     msg("Authorization failed: " + (e.message || e), "err");
     console.error("[authorize]", e);
   } finally {
-    const btn = document.getElementById("btn-connect-abstract");
     if (btn) btn.disabled = false;
     document.getElementById("spinner").style.display = "none";
   }
