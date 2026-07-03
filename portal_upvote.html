@@ -212,6 +212,8 @@
       </div>
       <div id="spinner" style="display:none;width:20px;height:20px;border:2px solid var(--l1);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:14px auto 0"></div>
       <div id="auth-progress" style="color:var(--ink2);font-size:12px;margin-top:10px;line-height:1.5;text-align:center"></div>
+
+      <div id="wallet-debug" style="margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border-radius:8px;font-size:11px;font-family:monospace;color:var(--ink2);line-height:1.7;display:none"></div>
     </div>
 
     <div class="warning-box">
@@ -369,13 +371,36 @@ async function _discoverProvider() {
   return null;
 }
 
-// ── wallet hint ───────────────────────────────────────────────────────
+// ── wallet hint + debug panel ─────────────────────────────────────────
 async function _showWalletHint() {
-  const hint = document.getElementById("wallet-hint");
+  const hint  = document.getElementById("wallet-hint");
+  const dbg   = document.getElementById("wallet-debug");
+
+  // Build debug info
+  const lines = [];
+  lines.push(`window.ethereum: ${typeof window.ethereum}`);
+  if (window.ethereum) {
+    lines.push(`  .isMetaMask=${!!window.ethereum.isMetaMask}`);
+    lines.push(`  .isAbstract=${!!window.ethereum.isAbstract}`);
+    lines.push(`  .isCoinbaseWallet=${!!window.ethereum.isCoinbaseWallet}`);
+    if (window.ethereum.providers)
+      lines.push(`  .providers[${window.ethereum.providers.length}]=${window.ethereum.providers.map(p=>Object.keys(p).filter(k=>k.startsWith('is')).join('|')||'?').join(', ')}`);
+  }
+  // Quick EIP-6963 scan
+  const e6963 = [];
+  const _h = (e) => { if (e.detail?.info) e6963.push(e.detail.info.name || e.detail.info.rdns); };
+  window.addEventListener("eip6963:announceProvider", _h);
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+  await new Promise(r => setTimeout(r, 400));
+  window.removeEventListener("eip6963:announceProvider", _h);
+  lines.push(`EIP-6963 providers: ${e6963.length > 0 ? e6963.join(", ") : "none"}`);
+
+  if (dbg) { dbg.style.display = "block"; dbg.innerHTML = lines.join("<br>"); }
+
   if (!hint) return;
   const detected = await _discoverProvider();
   if (!detected) {
-    hint.innerHTML = 'No wallet detected — <a href="https://abs.xyz/wallet" target="_blank">install Abstract Wallet</a> or use MetaMask.';
+    hint.innerHTML = 'No Web3 wallet injected. The Abstract Wallet extension may not inject on non-abs.xyz pages — try <strong>MetaMask</strong> instead (any wallet works as the AGW signer).';
     return;
   }
   try {
