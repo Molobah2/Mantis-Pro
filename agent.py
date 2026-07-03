@@ -1903,7 +1903,7 @@ def upvote_status():
     worker_st  = _upvote_worker.get_status()
     node_ok    = _upvote_node.node_health()
     history    = _upvote_store.get_upvote_log(20)
-    catalog    = _upvote_store.get_apps()
+    catalog    = _upvote_catalog.get_catalog()   # auto-seeds from blockchain if DB is empty
     next_app   = _upvote_selector.pick_next_app() if catalog else None
 
     last_run = None

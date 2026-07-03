@@ -13,6 +13,10 @@ _PORTAL_APIS = [
 ]
 _PORTAL_DISCOVER_URL = "https://abs.xyz/explore"
 
+# Upvote contract event: Upvoted(address indexed voter, uint256 indexed appId, uint256 indexed epoch)
+_UPVOTE_CONTRACT  = "0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a"
+_UPVOTED_TOPIC    = "0xea66f58e474bc09f580000e81f31b334d171db387d0c6098ba47bd897741679b"
+
 
 def _fetch_via_api():
     headers = {"Accept": "application/json", "User-Agent": "MantisBot/1.0"}
@@ -94,13 +98,77 @@ def _fetch_via_playwright():
     return apps
 
 
+def _fetch_via_blockchain():
+    """
+    Query upvote contract event logs on Abstract to discover active appIds.
+    Event: Upvoted(address indexed voter, uint256 indexed appId, uint256 indexed epoch)
+    topic2 = appId, topic3 = epoch
+    """
+    from .config import get_rpc
+    rpc = get_rpc()
+    try:
+        r = _req.post(rpc, json={"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}, timeout=10)
+        latest = int(r.json()["result"], 16)
+        from_block = max(0, latest - 5000)
+
+        r2 = _req.post(rpc, json={
+            "jsonrpc": "2.0", "id": 2, "method": "eth_getLogs",
+            "params": [{
+                "fromBlock": hex(from_block),
+                "toBlock":   "latest",
+                "address":   _UPVOTE_CONTRACT,
+                "topics":    [_UPVOTED_TOPIC],
+            }],
+        }, timeout=30)
+        logs = r2.json().get("result", [])
+        if not logs:
+            return []
+
+        # Determine current epoch (most frequent in recent logs)
+        epoch_counts: dict[int, int] = {}
+        for log in logs:
+            topics = log.get("topics", [])
+            if len(topics) >= 4:
+                ep = int(topics[3], 16)
+                epoch_counts[ep] = epoch_counts.get(ep, 0) + 1
+        if not epoch_counts:
+            return []
+        current_epoch = max(epoch_counts, key=epoch_counts.get)
+
+        seen: set[int] = set()
+        apps = []
+        for log in logs:
+            topics = log.get("topics", [])
+            if len(topics) < 4:
+                continue
+            if int(topics[3], 16) != current_epoch:
+                continue
+            app_id = int(topics[2], 16)
+            if app_id not in seen:
+                seen.add(app_id)
+                apps.append({
+                    "id":   app_id,
+                    "name": f"App #{app_id}",
+                    "url":  f"https://abs.xyz/apps/{app_id}",
+                })
+
+        apps.sort(key=lambda a: a["id"])
+        print(f"[catalog] Blockchain: {len(apps)} apps from epoch {current_epoch}")
+        return apps
+    except Exception as e:
+        print(f"[catalog] Blockchain fetch failed: {e}")
+        return []
+
+
 def fetch_catalog():
-    """Try API first, fall back to Playwright."""
+    """Try Portal API → blockchain events → Playwright."""
     apps = _fetch_via_api()
+    if not apps:
+        apps = _fetch_via_blockchain()
     if not apps:
         apps = _fetch_via_playwright()
     if not apps:
-        print("[catalog] Both sources returned empty — using stored catalog")
+        print("[catalog] All sources returned empty — using stored catalog")
     return apps
 
 

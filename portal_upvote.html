@@ -323,16 +323,31 @@ function renderStatus(d) {
   }
 }
 
-// ── wallet hint (shows which extension will sign) ─────────────────────
-function _showWalletHint() {
+// ── wallet hint (shows which extension will sign + connected address) ──
+async function _showWalletHint() {
   const hint = document.getElementById("wallet-hint");
   if (!hint) return;
   const p = window.ethereum;
-  if (!p) { hint.textContent = "No wallet extension detected — install one to continue."; return; }
-  const name = p.isAbstract ? "Abstract Wallet"
-             : p.isMetaMask ? "MetaMask (signs as AGW owner)"
-             : p.isCoinbaseWallet ? "Coinbase Wallet (signs as AGW owner)"
-             : "Browser wallet (signs as AGW owner)";
+  if (!p) {
+    hint.innerHTML = 'No wallet extension detected — <a href="https://abs.xyz/wallet" target="_blank">install Abstract Wallet</a> to continue.';
+    return;
+  }
+  const candidates = p.providers || [p];
+  const abs  = candidates.find(x => x.isAbstract);
+  const meta = candidates.find(x => x.isMetaMask && !x.isAbstract);
+  const best = abs || meta || candidates[0];
+  const name = best.isAbstract ? "Abstract Wallet"
+             : best.isMetaMask ? "MetaMask"
+             : best.isCoinbaseWallet ? "Coinbase Wallet"
+             : "Browser wallet";
+  try {
+    const accts = await best.request({ method: "eth_accounts" });
+    if (accts && accts.length > 0) {
+      const addr = accts[0];
+      hint.textContent = `${name} connected: ${addr.slice(0,8)}…${addr.slice(-6)} — click above to authorize once.`;
+      return;
+    }
+  } catch (_) { /* ignore */ }
   hint.textContent = `Will sign with: ${name}`;
 }
 
@@ -359,6 +374,28 @@ async function startAuthorize() {
   try {
     setProgress("Requesting wallet accounts…");
     await provider.request({ method: "eth_requestAccounts" });
+
+    // Ensure the wallet is on Abstract mainnet (chainId 0xAB5 = 2741)
+    setProgress("Switching to Abstract chain…");
+    try {
+      await provider.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0xAB5" }],
+      });
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        await provider.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId:         "0xAB5",
+            chainName:       "Abstract",
+            nativeCurrency:  { name: "Ether", symbol: "ETH", decimals: 18 },
+            rpcUrls:         ["https://api.mainnet.abs.xyz"],
+            blockExplorerUrls: ["https://abscan.org"],
+          }],
+        });
+      }
+    }
 
     setProgress("Loading AGW client library…");
     const { createAbstractClient } =
