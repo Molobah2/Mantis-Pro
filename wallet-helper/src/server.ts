@@ -110,6 +110,8 @@ app.post("/create-session", async (req, res) => {
     const expiresAt        = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
 
     const { session } = await abstractClient.createSession({
+      account: agwAddress,
+      chain,
       session: {
         signer:    sessionAccount.address,
         expiresAt,
