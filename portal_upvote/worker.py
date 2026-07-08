@@ -31,7 +31,7 @@ def run_daily_upvote():
         _status["running"] = True
 
     try:
-        node_client.ensure_session()  # renew if missing or expiring within 3 days
+        node_client.restore_from_env()  # restore session from Railway env var if file is gone
 
         app = selector.pick_next_app()
         if app is None:

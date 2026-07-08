@@ -174,6 +174,28 @@
     </div>
   </div>
 
+  <!-- ── RAILWAY PERSISTENCE STEP (shown once after browser auth) ── -->
+  <div id="railway-persist-step" style="display:none;margin-top:20px">
+    <div class="card" style="border-color:rgba(76,255,145,.25)">
+      <div class="card-title" style="color:var(--green)">Step 2 of 2 — Make it survive restarts</div>
+      <p style="color:var(--ink2);font-size:13px;margin-bottom:14px;line-height:1.6">
+        Copy the value below and add it as <strong style="color:var(--ink0)">UPVOTE_SESSION_B64</strong>
+        in your Railway service → Variables. The agent will restore the session automatically on every restart.
+        Valid for 30 days — repeat after re-authorizing.
+      </p>
+      <textarea id="railway-session-b64" readonly
+        style="width:100%;font-family:monospace;font-size:10px;background:var(--bg);
+               color:var(--ink2);border:1px solid var(--l1);border-radius:6px;
+               padding:10px;resize:vertical;height:80px"></textarea>
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn btn-green" onclick="navigator.clipboard.writeText(document.getElementById('railway-session-b64').value).then(()=>this.textContent='Copied!')">
+          Copy to clipboard
+        </button>
+        <a href="https://railway.com" target="_blank" class="btn btn-ghost">Open Railway</a>
+      </div>
+    </div>
+  </div>
+
   <!-- ── NOT AUTHORIZED ────────────────────────── -->
   <div id="authorize-section">
 
@@ -399,8 +421,20 @@ async function _doAuthorize(provider, eoaAddress) {
     const e = await storeResp.json().catch(() => ({}));
     throw new Error(e.error || `Store failed: HTTP ${storeResp.status}`);
   }
+  const storeData = await storeResp.json().catch(() => ({}));
   setProgress("");
   msg("Session authorized! Daily upvotes are now active.", "ok");
+
+  // Show Railway persistence step so the session survives container restarts
+  if (storeData.session_b64) {
+    const railwayDiv = document.getElementById("railway-persist-step");
+    const railwayB64 = document.getElementById("railway-session-b64");
+    if (railwayDiv && railwayB64) {
+      railwayB64.textContent = storeData.session_b64;
+      railwayDiv.style.display = "";
+    }
+  }
+
   setTimeout(loadStatus, 800);
 }
 

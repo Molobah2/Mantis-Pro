@@ -1802,7 +1802,11 @@ def portal_upvote_store_session():
     except Exception as e:
         return jsonify({"error": f"Could not write session file: {e}"}), 500
 
-    return jsonify({"ok": True, "agw_address": agw_addr, "expires_at": expires_at})
+    # Return the session as base64 so the UI can prompt the user to set UPVOTE_SESSION_B64 in Railway
+    import base64 as _b64
+    session_b64 = _b64.b64encode(_json.dumps(payload).encode()).decode()
+    return jsonify({"ok": True, "agw_address": agw_addr, "expires_at": expires_at,
+                    "session_b64": session_b64})
 
 @app.route("/portal-upvote/server-authorize", methods=["POST"])
 def portal_upvote_server_authorize():
@@ -2473,21 +2477,36 @@ except ImportError:
     print("[upvote] APScheduler not installed — add APScheduler>=3.10.0 to requirements.txt")
 
 
-def _startup_session_ensure():
-    """Wait for the node helper to come up, then create/renew the AGW session."""
-    for _ in range(30):
-        if _upvote_node.node_health():
-            break
-        time.sleep(2)
-    else:
-        print("[upvote] startup: node helper not ready after 60s — skipping session ensure")
-        return
+def _startup_session_restore():
+    """On startup: restore session file from UPVOTE_SESSION_B64 env var if the file is missing."""
     try:
-        _upvote_node.ensure_session()
+        ok = _upvote_node.restore_from_env()
+        if ok:
+            print("[upvote] startup: session ready")
+        else:
+            print("[upvote] startup: no session — authorize at /portal-upvote then set UPVOTE_SESSION_B64 in Railway")
     except Exception as e:
-        print(f"[upvote] startup session ensure failed: {e}")
+        print(f"[upvote] startup session restore failed: {e}")
 
-threading.Thread(target=_startup_session_ensure, daemon=True).start()
+threading.Thread(target=_startup_session_restore, daemon=True).start()
+
+
+@app.route("/portal-upvote/export-session")
+def portal_upvote_export_session():
+    """Return the current session file as base64 so it can be set as UPVOTE_SESSION_B64 in Railway."""
+    import json as _json
+    if not os.path.exists(SESSION_FILE):
+        return jsonify({"error": "No session file — authorize first at /portal-upvote"}), 404
+    try:
+        with open(SESSION_FILE, "rb") as f:
+            raw = f.read()
+        import base64 as _b64
+        b64 = _b64.b64encode(raw).decode()
+        data = _json.loads(raw)
+        return jsonify({"ok": True, "b64": b64, "expires_at": data.get("expires_at"),
+                        "agw_address": data.get("agw_address")})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":

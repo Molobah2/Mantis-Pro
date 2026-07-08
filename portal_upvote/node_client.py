@@ -66,60 +66,39 @@ def node_health():
         return False
 
 
-def ensure_session(renew_days_before_expiry=3):
+def restore_from_env():
     """
-    Create or renew the AGW session using AGW_OWNER_PRIVATE_KEY.
-    Runs on startup and before each daily upvote so the session is always fresh.
-    No-ops if the session is valid and not expiring soon.
-    Returns True if session is ready, raises RuntimeError on failure.
+    Restore session file from UPVOTE_SESSION_B64 env var on startup.
+    The env var holds the raw session JSON as base64 — set it in Railway after
+    authorizing via the browser so it survives container restarts.
+    Returns True if session file is now present and not expired, False otherwise.
     """
     import time
-    from Crypto.Cipher import AES
-    from Crypto.Random import get_random_bytes
 
-    agw_owner_key = os.getenv("AGW_OWNER_PRIVATE_KEY", "").strip()
-    enc_key_hex   = os.getenv("SESSION_KEY_ENCRYPTION_KEY", "")
-    if not agw_owner_key or len(enc_key_hex) != 64:
-        return True  # credentials missing — fall through to manual session
-
-    # Skip if session file is valid and not expiring soon
+    # Already have a valid session file — nothing to do.
     if os.path.exists(_cfg.SESSION_FILE):
         try:
             with open(_cfg.SESSION_FILE) as f:
                 sess = json.load(f)
-            if sess.get("expires_at", 0) > time.time() + renew_days_before_expiry * 86400:
+            if sess.get("expires_at", 0) > time.time():
                 return True
         except Exception:
-            pass  # corrupt or unreadable — recreate below
+            pass
 
-    print("[upvote] creating/renewing AGW session via AGW_OWNER_PRIVATE_KEY...")
+    b64 = os.getenv("UPVOTE_SESSION_B64", "").strip()
+    if not b64:
+        return False
+
     try:
-        r = _req.post(
-            f"{_cfg.NODE_HELPER_URL}/create-session",
-            json={"ownerPrivKey": agw_owner_key, "network": _cfg.NETWORK},
-            timeout=120,
-        )
-    except _req.exceptions.ConnectionError:
-        raise RuntimeError("Node wallet-helper is not running on port 3456")
-
-    data = r.json()
-    if r.status_code != 200 or data.get("error"):
-        raise RuntimeError(data.get("error", f"HTTP {r.status_code}"))
-
-    key    = bytes.fromhex(enc_key_hex)
-    nonce  = get_random_bytes(16)
-    cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
-    ct, tag = cipher.encrypt_and_digest(data["sessionPrivKey"].encode())
-    encrypted = base64.b64encode(nonce + tag + ct).decode()
-
-    payload = {
-        "encrypted_key":  encrypted,
-        "session_config": data["sessionConfig"],
-        "agw_address":    data["agwAddress"],
-        "expires_at":     data["expiresAt"],
-        "created_at":     time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
-    with open(_cfg.SESSION_FILE, "w") as f:
-        json.dump(payload, f)
-    print(f"[upvote] session ready: agw={data['agwAddress']} expires={data['expiresAt']}")
-    return True
+        raw  = base64.b64decode(b64)
+        data = json.loads(raw)
+        if data.get("expires_at", 0) <= time.time():
+            print("[upvote] UPVOTE_SESSION_B64 is expired — re-authorize at /portal-upvote")
+            return False
+        with open(_cfg.SESSION_FILE, "w") as f:
+            json.dump(data, f)
+        print(f"[upvote] session restored from env var, expires={data.get('expires_at')}")
+        return True
+    except Exception as e:
+        print(f"[upvote] restore_from_env error: {e}")
+        return False
