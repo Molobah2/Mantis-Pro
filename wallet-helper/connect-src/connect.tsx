@@ -4,6 +4,7 @@ import {
   AbstractWalletProvider,
   useLoginWithAbstract,
   useAbstractClient,
+  useCreateSession,
 } from "@abstract-foundation/agw-react";
 import { LimitType } from "@abstract-foundation/agw-client/sessions";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -24,77 +25,82 @@ declare global {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function runCreateSession(abstractClient: any) {
-  window._onSessionProgress?.("Generating session key…");
-
-  const sessionPrivKey = generatePrivateKey();
-  const sessionAccount = privateKeyToAccount(sessionPrivKey);
-  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
-
-  window._onSessionProgress?.("Approve the session key in your wallet…");
-  const { session } = await abstractClient.createSession({
-    session: {
-      signer: sessionAccount.address,
-      expiresAt,
-      feeLimit: {
-        limitType: LimitType.Lifetime,
-        limit: BigInt("500000000000000"),
-        period: 0n,
-      },
-      callPolicies: [
-        {
-          target: UPVOTE_CONTRACT,
-          selector: "0x7060a227" as `0x${string}`,
-          maxValuePerUse: 0n,
-          valueLimit: { limitType: LimitType.Unlimited, limit: 0n, period: 0n },
-          constraints: [],
-        },
-      ],
-      transferPolicies: [],
-    },
-  });
-
-  const agwAddress: string = abstractClient.account.address;
-  const sessionConfigJson = JSON.stringify(session, (_k, v) =>
-    typeof v === "bigint" ? v.toString() : v
-  );
-
-  window._onSessionProgress?.("Storing session…");
-  window._onSessionCreated(
-    sessionPrivKey,
-    sessionConfigJson,
-    agwAddress,
-    Number(expiresAt)
-  );
-}
-
 function AGWButton() {
   const { login } = useLoginWithAbstract();
-  const abstractClient = useAbstractClient();
+  // useAbstractClient returns React Query result: { data: AbstractClient | undefined, ... }
+  const { data: abstractClient } = useAbstractClient();
+  const { createSessionAsync } = useCreateSession();
   const [busy, setBusy] = useState(false);
   const pendingRef = useRef(false);
 
   useEffect(() => {
+    // Fires when abstractClient becomes available after login()
     if (!abstractClient || !pendingRef.current) return;
     pendingRef.current = false;
-    setBusy(true);
-    runCreateSession(abstractClient)
-      .catch((e: unknown) =>
-        window._agwConnectError?.(e instanceof Error ? e.message : String(e))
-      )
-      .finally(() => setBusy(false));
+    doCreateSession();
   }, [abstractClient]);
+
+  async function doCreateSession() {
+    if (!abstractClient) return;
+    setBusy(true);
+    try {
+      window._onSessionProgress?.("Generating session key…");
+
+      const sessionPrivKey = generatePrivateKey();
+      const sessionAccount = privateKeyToAccount(sessionPrivKey);
+      const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
+
+      window._onSessionProgress?.("Approve the session key in your wallet…");
+      const { session } = await createSessionAsync({
+        session: {
+          signer: sessionAccount.address,
+          expiresAt,
+          feeLimit: {
+            limitType: LimitType.Lifetime,
+            limit: BigInt("500000000000000"),
+            period: 0n,
+          },
+          callPolicies: [
+            {
+              target: UPVOTE_CONTRACT,
+              selector: "0x7060a227" as `0x${string}`,
+              maxValuePerUse: 0n,
+              valueLimit: {
+                limitType: LimitType.Unlimited,
+                limit: 0n,
+                period: 0n,
+              },
+              constraints: [],
+            },
+          ],
+          transferPolicies: [],
+        },
+      });
+
+      const agwAddress: string = abstractClient.account.address;
+      const sessionConfigJson = JSON.stringify(session, (_k, v) =>
+        typeof v === "bigint" ? v.toString() : v
+      );
+
+      window._onSessionProgress?.("Storing session…");
+      window._onSessionCreated(
+        sessionPrivKey,
+        sessionConfigJson,
+        agwAddress,
+        Number(expiresAt)
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      window._agwConnectError?.(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const handleClick = () => {
     if (busy) return;
     if (abstractClient) {
-      setBusy(true);
-      runCreateSession(abstractClient)
-        .catch((e: unknown) =>
-          window._agwConnectError?.(e instanceof Error ? e.message : String(e))
-        )
-        .finally(() => setBusy(false));
+      doCreateSession();
     } else {
       pendingRef.current = true;
       login();
@@ -154,7 +160,9 @@ function mountAGWConnect() {
   try {
     createRoot(el).render(<App />);
   } catch (e) {
-    el.innerHTML = `<p style="color:#ff4c6a;font-size:12px">Bundle error: ${e instanceof Error ? e.message : e}</p>`;
+    el.innerHTML = `<p style="color:#ff4c6a;font-size:12px">Bundle error: ${
+      e instanceof Error ? e.message : e
+    }</p>`;
   }
 }
 
