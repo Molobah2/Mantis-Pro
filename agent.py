@@ -2516,7 +2516,7 @@ def portal_upvote_connect_bundle():
     bundle_path = os.path.join(os.path.dirname(__file__), "wallet-helper", "dist", "connect.bundle.js")
     if not os.path.exists(bundle_path):
         return "/* connect bundle not built */", 404, {"Content-Type": "application/javascript"}
-    return _sf(bundle_path, mimetype="application/javascript", max_age=3600)
+    return _sf(bundle_path, mimetype="application/javascript", max_age=0)
 
 
 # ── START FLASK (main process) ───────────────

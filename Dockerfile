@@ -1,6 +1,5 @@
 FROM python:3.12
 
-# Flush Python stdout/stderr immediately so container logs are visible
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
@@ -9,16 +8,23 @@ WORKDIR /app
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs
 
+# ── Python deps (cached unless requirements.txt changes) ──────────────
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     playwright install --with-deps chromium
 
+# ── Node deps (cached unless package*.json files change) ──────────────
+COPY wallet-helper/package.json wallet-helper/package-lock.json ./wallet-helper/
+RUN cd wallet-helper && npm ci
+
+COPY wallet-helper/connect-src/package.json wallet-helper/connect-src/package-lock.json ./wallet-helper/connect-src/
+RUN cd wallet-helper/connect-src && npm ci
+
+# ── Copy source and build ─────────────────────────────────────────────
 COPY . .
 
-# Build the wallet-helper TypeScript (server)
-RUN cd wallet-helper && npm ci && npm run build
-# Build the AGW browser connect bundle (connect-src → dist/connect.bundle.js)
-RUN cd wallet-helper/connect-src && npm install && node build.mjs
+RUN cd wallet-helper && npm run build
+RUN cd wallet-helper/connect-src && node build.mjs
 
 EXPOSE 8080
 CMD ["python", "agent.py"]
