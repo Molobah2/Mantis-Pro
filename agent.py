@@ -2472,6 +2472,23 @@ try:
 except ImportError:
     print("[upvote] APScheduler not installed — add APScheduler>=3.10.0 to requirements.txt")
 
+
+def _startup_session_ensure():
+    """Wait for the node helper to come up, then create/renew the AGW session."""
+    for _ in range(30):
+        if _upvote_node.node_health():
+            break
+        time.sleep(2)
+    else:
+        print("[upvote] startup: node helper not ready after 60s — skipping session ensure")
+        return
+    try:
+        _upvote_node.ensure_session()
+    except Exception as e:
+        print(f"[upvote] startup session ensure failed: {e}")
+
+threading.Thread(target=_startup_session_ensure, daemon=True).start()
+
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

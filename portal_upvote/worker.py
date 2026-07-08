@@ -31,6 +31,8 @@ def run_daily_upvote():
         _status["running"] = True
 
     try:
+        node_client.ensure_session()  # renew if missing or expiring within 3 days
+
         app = selector.pick_next_app()
         if app is None:
             _set(running=False, last_run_ts=time.time(), last_run_ok=False,
