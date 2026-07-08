@@ -1907,8 +1907,13 @@ def upvote_status():
     worker_st  = _upvote_worker.get_status()
     node_ok    = _upvote_node.node_health()
     history    = _upvote_store.get_upvote_log(20)
-    catalog    = _upvote_catalog.get_catalog()   # auto-seeds from blockchain if DB is empty
-    next_app   = _upvote_selector.pick_next_app() if catalog else None
+    # Use stored DB apps (fast) — never triggers slow network fetch on every status poll.
+    # User clicks "Refresh Catalog" to trigger the network fetch explicitly.
+    catalog    = _upvote_store.get_apps()
+    next_app   = None
+    if catalog:
+        _last = _upvote_store.get_last_upvoted_per_app()
+        next_app = sorted(catalog, key=lambda a: _last.get(a["id"], 0.0))[0]
 
     last_run = None
     if history:

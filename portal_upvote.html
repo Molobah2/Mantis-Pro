@@ -283,8 +283,11 @@ function txLink(hash, network) {
 
 // ── load status ───────────────────────────────────────────────────────
 async function loadStatus() {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 12000);
   try {
-    const r    = await fetch("/api/upvote-status");
+    const r    = await fetch("/api/upvote-status", { signal: ctrl.signal });
+    clearTimeout(tid);
     const data = await r.json();
     window._upvoteStatus = data;
 
@@ -292,6 +295,10 @@ async function loadStatus() {
       document.getElementById("authorized-section").style.display = "";
       document.getElementById("authorize-section").style.display  = "none";
       renderStatus(data);
+      // If catalog is empty, auto-kick a background refresh so the next page load has data
+      if (!data.catalog_size) {
+        fetch("/api/upvote-refresh-catalog", { method: "POST" }).catch(() => {});
+      }
     } else {
       document.getElementById("authorized-section").style.display = "none";
       document.getElementById("authorize-section").style.display  = "";
@@ -300,7 +307,13 @@ async function loadStatus() {
       }
     }
   } catch (e) {
-    msg("Could not load status: " + e.message, "err");
+    clearTimeout(tid);
+    if (e.name === "AbortError") {
+      msg("Status check timed out — the server may still be starting up. Refresh in a moment.", "err");
+    } else {
+      msg("Could not load status: " + e.message, "err");
+    }
+    // Keep whichever section was showing (CSS default: authorize-section visible)
   }
 }
 
