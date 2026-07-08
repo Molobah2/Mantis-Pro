@@ -20,9 +20,11 @@ const UPVOTE_ABI = [
   },
 ] as const;
 
-/** Revive BigInt values serialized as digit strings from Python json.dumps. */
+/** Revive BigInt values serialized as digit strings from Python json.dumps.
+ *  Matches ANY pure-digit string (including "0", "1") — safe because BigInts
+ *  are the only values serialized this way; non-BigInt numbers are JSON numbers. */
 function reviveBigInt(_k: string, v: unknown): unknown {
-  if (typeof v === "string" && /^\d{10,}$/.test(v)) return BigInt(v);
+  if (typeof v === "string" && /^\d+$/.test(v)) return BigInt(v);
   return v;
 }
 
