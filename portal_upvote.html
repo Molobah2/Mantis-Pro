@@ -210,32 +210,26 @@
     <div class="card">
       <div class="card-title">How it works</div>
       <ol class="steps">
-        <li>Click <strong>Connect via WalletConnect</strong> — a QR code appears.</li>
-        <li>Scan the QR code with your Abstract Wallet mobile app (or any WalletConnect wallet).</li>
-        <li>Approve the one-time session key transaction in your wallet.</li>
-        <li>The session key is encrypted and stored server-side. Daily upvotes run automatically at 09:00 UTC.</li>
+        <li>Click <strong>Connect Abstract Global Wallet</strong> — the Abstract wallet popup opens.</li>
+        <li>Sign in with your AGW. A scoped session key is created automatically.</li>
+        <li>Add <strong>UPVOTE_SESSION_B64</strong> to Railway so the session survives restarts.</li>
+        <li>The agent upvotes the next Portal app daily at <strong>09:00 UTC</strong>.</li>
       </ol>
 
       <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px">
-        <!-- Option 1: Abstract browser extension (auto-detected) -->
-        <button id="btn-connect-abstract"
-          onclick="window.startBrowserWallet()"
-          style="display:flex;align-items:center;gap:12px;padding:14px 22px;border-radius:12px;
-                 background:var(--green);color:#000;border:none;cursor:pointer;
-                 font-size:15px;font-weight:700;width:100%;justify-content:center;transition:opacity .15s"
-          onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Connect Abstract Wallet (browser extension)
-        </button>
-        <!-- Option 2: WalletConnect (needs WC_PROJECT_ID) -->
+        <!-- Option 1: Native AGW popup via @abstract-foundation/agw-react (React + Privy) -->
+        <div id="agw-root" style="min-height:54px;display:flex;align-items:center">
+          <p style="color:var(--ink3);font-size:12px">Loading Abstract wallet connector…</p>
+        </div>
+        <!-- Option 2: WalletConnect (fallback) -->
         <button id="btn-wc"
           onclick="window.startWalletConnect()"
           style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-radius:10px;
-                 background:var(--l0);color:var(--ink1);border:1px solid var(--l1);cursor:pointer;
-                 font-size:13px;font-weight:600;width:100%;justify-content:center;transition:opacity .15s"
+                 background:var(--l0);color:var(--ink2);border:1px solid var(--l1);cursor:pointer;
+                 font-size:12px;font-weight:500;width:100%;justify-content:center;transition:opacity .15s"
           onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          Connect via WalletConnect (needs WC_PROJECT_ID)
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          WalletConnect (fallback — needs WC_PROJECT_ID)
         </button>
       </div>
       <div id="wallet-hint" style="color:var(--ink2);font-size:12px;margin-top:10px;text-align:center"></div>
@@ -244,10 +238,11 @@
     </div>
 
     <div class="warning-box" style="border-color:rgba(76,255,145,.2);color:var(--ink1)">
-      <strong style="color:var(--green)">How to connect your AGW</strong>
+      <strong style="color:var(--green)">How to connect</strong>
       <ol class="steps" style="margin-top:8px">
-        <li><strong>Easiest:</strong> Go to <a href="https://abs.xyz" target="_blank" style="color:var(--blue)">abs.xyz</a> in Chrome, open your Abstract Wallet — if it injects into the browser, the green button above will find it automatically.</li>
-        <li><strong>WalletConnect:</strong> Get a free <code>WC_PROJECT_ID</code> at <a href="https://cloud.reown.com" target="_blank" style="color:var(--blue)">cloud.reown.com</a> → add to Railway → use the grey button to scan QR from Abstract Portal.</li>
+        <li>Click <strong>Connect Abstract Global Wallet</strong> above — an Abstract popup will open (same as <a href="https://eyesetai.vercel.app/vote" target="_blank" style="color:var(--blue)">Eyeset</a>).</li>
+        <li>Sign in with your Abstract wallet. The agent generates a scoped session key automatically.</li>
+        <li>Copy the <strong>UPVOTE_SESSION_B64</strong> value shown to Railway → Variables so upvotes survive restarts.</li>
       </ol>
     </div>
   </div>
@@ -354,45 +349,21 @@ function renderStatus(d) {
   }
 }
 
-// ── shared: core auth logic given any EIP-1193 provider + EOA address ──
-async function _doAuthorize(provider, eoaAddress) {
-  setProgress("Loading AGW client library…");
-  const { createAbstractClient } =
-    await import("https://esm.sh/@abstract-foundation/agw-client");
+// ── create session key + store on server (shared by both auth paths) ──
+async function _doCreateAndStoreSession(abstractClient) {
   const { LimitType } =
     await import("https://esm.sh/@abstract-foundation/agw-client/sessions");
-  const { toAccount, privateKeyToAccount, generatePrivateKey } =
+  const { generatePrivateKey, privateKeyToAccount } =
     await import("https://esm.sh/viem/accounts");
-  const { abstract: absMainnet, abstractTestnet } =
-    await import("https://esm.sh/viem/chains");
-  const { createWalletClient, custom } =
-    await import("https://esm.sh/viem");
 
-  const network = window._upvoteStatus?.network || "mainnet";
-  const chain   = network === "testnet" ? abstractTestnet : absMainnet;
-
-  setProgress(`Building AGW signer for ${eoaAddress.slice(0,8)}…`);
-  const eoaWC = createWalletClient({ account: eoaAddress, chain, transport: custom(provider) });
-  const signerAccount = toAccount({
-    address:       eoaAddress,
-    signMessage:   (a) => eoaWC.signMessage({ ...a, account: eoaAddress }),
-    signTypedData: (a) => eoaWC.signTypedData({ ...a, account: eoaAddress }),
-    signTransaction:(a)=> eoaWC.signTransaction({ ...a, account: eoaAddress }),
-  });
-
-  const abstractClient = await createAbstractClient({
-    signer: signerAccount,
-    chain,
-    transport: custom(provider),
-  });
-  const agwAddress = abstractClient.account.address;
+  const agwAddress     = abstractClient.account.address;
   setProgress(`AGW: ${agwAddress.slice(0,10)}… — generating session key…`);
 
   const sessionPrivKey = generatePrivateKey();
   const sessionAccount = privateKeyToAccount(sessionPrivKey);
   const expiresAt      = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
 
-  setProgress("Submitting createSession — approve in your wallet…");
+  setProgress("Approve the session key in your wallet…");
   const { session } = await abstractClient.createSession({
     session: {
       signer:    sessionAccount.address,
@@ -429,7 +400,6 @@ async function _doAuthorize(provider, eoaAddress) {
   setProgress("");
   msg("Session authorized! Daily upvotes are now active.", "ok");
 
-  // Show Railway persistence step so the session survives container restarts
   if (storeData.session_b64) {
     const railwayDiv = document.getElementById("railway-persist-step");
     const railwayB64 = document.getElementById("railway-session-b64");
@@ -442,17 +412,129 @@ async function _doAuthorize(provider, eoaAddress) {
   setTimeout(loadStatus, 800);
 }
 
-function _lockButtons() {
-  ["btn-wc","btn-connect-abstract"].forEach(id => {
-    const b = document.getElementById(id); if (b) b.disabled = true;
+// ── EIP-1193 provider auth (WalletConnect path) ──────────────────────
+async function _doAuthorize(provider, eoaAddress) {
+  setProgress("Loading AGW client library…");
+  const { createAbstractClient } =
+    await import("https://esm.sh/@abstract-foundation/agw-client");
+  const { toAccount } =
+    await import("https://esm.sh/viem/accounts");
+  const { abstract: absMainnet, abstractTestnet } =
+    await import("https://esm.sh/viem/chains");
+  const { createWalletClient, custom } =
+    await import("https://esm.sh/viem");
+
+  const network = window._upvoteStatus?.network || "mainnet";
+  const chain   = network === "testnet" ? abstractTestnet : absMainnet;
+
+  setProgress(`Building AGW signer for ${eoaAddress.slice(0,8)}…`);
+  const eoaWC = createWalletClient({ account: eoaAddress, chain, transport: custom(provider) });
+  const signerAccount = toAccount({
+    address:       eoaAddress,
+    signMessage:   (a) => eoaWC.signMessage({ ...a, account: eoaAddress }),
+    signTypedData: (a) => eoaWC.signTypedData({ ...a, account: eoaAddress }),
+    signTransaction:(a)=> eoaWC.signTransaction({ ...a, account: eoaAddress }),
   });
+
+  const abstractClient = await createAbstractClient({
+    signer: signerAccount,
+    chain,
+    transport: custom(provider),
+  });
+
+  await _doCreateAndStoreSession(abstractClient);
+}
+
+// ── Native AGW popup via @abstract-foundation/agw-react ───────────────
+async function mountAGWConnect() {
+  try {
+    const { default: React } = await import("https://esm.sh/react@18");
+    const { createRoot }     = await import("https://esm.sh/react-dom@18/client");
+    const { AbstractWalletProvider, useLoginWithAbstract, useAbstractClient } =
+      await import("https://esm.sh/@abstract-foundation/agw-react@1.13.0");
+    const { abstract }       = await import("https://esm.sh/viem/chains");
+
+    function AGWButton() {
+      const { login }       = useLoginWithAbstract();
+      const abstractClient  = useAbstractClient();
+      const [busy, setBusy] = React.useState(false);
+      const pendingRef      = React.useRef(false);
+
+      React.useEffect(() => {
+        // Client became available after login() — run session creation
+        if (!abstractClient || !pendingRef.current) return;
+        pendingRef.current = false;
+        setBusy(true);
+        _doCreateAndStoreSession(abstractClient)
+          .catch(e => msg("AGW error: " + (e.message || e), "err"))
+          .finally(() => setBusy(false));
+      }, [abstractClient]);
+
+      const handleClick = () => {
+        if (busy) return;
+        if (abstractClient) {
+          setBusy(true);
+          _doCreateAndStoreSession(abstractClient)
+            .catch(e => msg("Error: " + (e.message || e), "err"))
+            .finally(() => setBusy(false));
+        } else {
+          pendingRef.current = true;
+          login();
+        }
+      };
+
+      return React.createElement("button", {
+        onClick: handleClick,
+        disabled: busy,
+        style: {
+          display: "flex", alignItems: "center", gap: "12px",
+          padding: "14px 22px", borderRadius: "12px",
+          background: "var(--green)", color: "#000",
+          border: "none", cursor: busy ? "not-allowed" : "pointer",
+          fontSize: "15px", fontWeight: "700", width: "100%",
+          justifyContent: "center", transition: "opacity .15s",
+          opacity: busy ? "0.6" : "1", fontFamily: "inherit",
+        }
+      },
+        React.createElement("svg", {
+          width: "20", height: "20", viewBox: "0 0 24 24",
+          fill: "none", stroke: "currentColor", strokeWidth: "2.5",
+          style: { flexShrink: 0 },
+        },
+          React.createElement("rect", { x: "3", y: "11", width: "18", height: "11", rx: "2" }),
+          React.createElement("path", { d: "M7 11V7a5 5 0 0 1 10 0v4" })
+        ),
+        busy ? "Connecting to Abstract…" : "Connect Abstract Global Wallet"
+      );
+    }
+
+    function AGWApp() {
+      return React.createElement(AbstractWalletProvider, { chain: abstract },
+        React.createElement(AGWButton)
+      );
+    }
+
+    const mount = document.getElementById("agw-root");
+    if (mount) {
+      mount.innerHTML = "";
+      createRoot(mount).render(React.createElement(AGWApp));
+    }
+  } catch (err) {
+    console.error("[agw-react mount]", err);
+    const mount = document.getElementById("agw-root");
+    if (mount) mount.innerHTML =
+      '<p style="color:var(--red);font-size:12px">Failed to load AGW connector: ' +
+      (err.message || err) + '</p>';
+  }
+}
+
+function _lockButtons() {
+  const b = document.getElementById("btn-wc"); if (b) b.disabled = true;
   document.getElementById("spinner").style.display = "block";
   clearMsg();
 }
 function _unlockButtons() {
-  ["btn-wc","btn-connect-abstract"].forEach(id => {
-    const b = document.getElementById(id); if (b) b.disabled = false;
-  });
+  const b = document.getElementById("btn-wc"); if (b) b.disabled = false;
   document.getElementById("spinner").style.display = "none";
 }
 
@@ -505,62 +587,6 @@ async function startWalletConnect() {
   }
 }
 window.startWalletConnect = startWalletConnect;
-
-// ── Browser-wallet (EIP-6963 first, then window.ethereum fallback) ───
-async function startBrowserWallet() {
-  _lockButtons();
-  setProgress("Scanning for wallets…");
-  try {
-    // EIP-6963: discover all announced wallet providers
-    const discovered = [];
-    const onAnnounce = (e) => discovered.push(e.detail);
-    window.addEventListener("eip6963:announceProvider", onAnnounce);
-    window.dispatchEvent(new Event("eip6963:requestProvider"));
-    await new Promise(r => setTimeout(r, 600));
-    window.removeEventListener("eip6963:announceProvider", onAnnounce);
-
-    let provider;
-    if (discovered.length > 0) {
-      // Prefer Abstract wallet, then any other discovered wallet
-      const abs = discovered.find(w =>
-        (w.info?.name  || "").toLowerCase().includes("abstract") ||
-        (w.info?.rdns  || "").includes("xyz.abs") ||
-        (w.info?.rdns  || "").includes("global.abs")
-      );
-      const chosen = abs || discovered[0];
-      setProgress(`Found: ${chosen.info?.name || "wallet"} — requesting accounts…`);
-      provider = chosen.provider;
-    } else if (window.ethereum) {
-      // Legacy fallback: window.ethereum (MetaMask or any injected)
-      setProgress("Using injected wallet — requesting accounts…");
-      const candidates = window.ethereum.providers || [window.ethereum];
-      provider = candidates.find(p => p.isAbstract || p.isAbstractGlobal)
-              || candidates.find(p => !p.isMetaMask)
-              || candidates[0];
-    } else {
-      throw new Error(
-        "No wallet extension found. " +
-        "Install the Abstract browser extension at abs.xyz, or use WalletConnect."
-      );
-    }
-
-    const accounts   = await provider.request({ method: "eth_requestAccounts" });
-    const eoaAddress = accounts[0];
-    if (!eoaAddress) throw new Error("No accounts returned from wallet");
-
-    setProgress(`Connected: ${eoaAddress.slice(0,8)}… — creating AGW session…`);
-    await _doAuthorize(provider, eoaAddress);
-
-  } catch (e) {
-    setProgress("");
-    msg("Wallet error: " + (e.message || e), "err");
-    console.error("[browser-wallet]", e);
-  } finally {
-    _unlockButtons();
-  }
-}
-window.startBrowserWallet = startBrowserWallet;
-window.startAuthorize = startBrowserWallet;
 
 // ── wallet hint ───────────────────────────────────────────────────────
 async function _showWalletHint() {
@@ -630,6 +656,7 @@ window.revokeSession = revokeSession;
 // ── bootstrap ─────────────────────────────────────────────────────────
 _showWalletHint();
 loadStatus();
+mountAGWConnect();
 </script>
 </body>
 </html>
