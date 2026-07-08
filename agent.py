@@ -2508,6 +2508,17 @@ def portal_upvote_export_session():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/portal-upvote/connect.bundle.js")
+def portal_upvote_connect_bundle():
+    """Serve the pre-built AGW React connect bundle (built by wallet-helper/connect-src)."""
+    from flask import send_file as _sf
+    bundle_path = os.path.join(os.path.dirname(__file__), "wallet-helper", "dist", "connect.bundle.js")
+    if not os.path.exists(bundle_path):
+        return "/* connect bundle not built */", 404, {"Content-Type": "application/javascript"}
+    return _sf(bundle_path, mimetype="application/javascript", max_age=3600)
+
+
 # ── START FLASK (main process) ───────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

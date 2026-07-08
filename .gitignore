@@ -11,3 +11,4 @@ spark-install.ps1
 test.json
 wallet-helper/node_modules/
 wallet-helper/dist/
+wallet-helper/connect-src/node_modules/

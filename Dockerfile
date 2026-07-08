@@ -15,8 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 
 COPY . .
 
-# Build the wallet-helper TypeScript
+# Build the wallet-helper TypeScript (server)
 RUN cd wallet-helper && npm ci && npm run build
+# Build the AGW browser connect bundle (connect-src → dist/connect.bundle.js)
+RUN cd wallet-helper/connect-src && npm install && node build.mjs
 
 EXPOSE 8080
 CMD ["python", "agent.py"]

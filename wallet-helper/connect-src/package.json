@@ -1,0 +1,22 @@
+{
+  "name": "agw-connect-bundle",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@abstract-foundation/agw-react": "latest",
+    "@tanstack/react-query": "^5",
+    "react": "^18",
+    "react-dom": "^18",
+    "viem": "^2",
+    "wagmi": "^2"
+  },
+  "devDependencies": {
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "esbuild": "^0.25"
+  }
+}
