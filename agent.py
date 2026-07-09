@@ -1802,6 +1802,12 @@ def portal_upvote_store_session():
     except Exception as e:
         return jsonify({"error": f"Could not write session file: {e}"}), 500
 
+    # Also register the owner in the multi-user users table
+    try:
+        _upvote_store.upsert_user(agw_addr, encrypted, str(session_cfg), expires_at)
+    except Exception as e:
+        print(f"[upvote] upsert_user (owner) failed: {e}")
+
     # Return the session as base64 so the UI can prompt the user to set UPVOTE_SESSION_B64 in Railway
     import base64 as _b64
     session_b64 = _b64.b64encode(_json.dumps(payload).encode()).decode()
@@ -1977,10 +1983,63 @@ def wc_config():
 
 @app.route("/portal-upvote/dashboard")
 def portal_upvote_dashboard():
-    import json as _json
     path = os.path.join(os.path.dirname(__file__), "portal_upvote_dashboard.html")
     with open(path, "r") as f:
         return f.read(), 200, {"Content-Type": "text/html"}
+
+
+@app.route("/portal-upvote/register")
+def portal_upvote_register():
+    path = os.path.join(os.path.dirname(__file__), "portal_upvote_register.html")
+    with open(path, "r") as f:
+        return f.read(), 200, {"Content-Type": "text/html"}
+
+
+@app.route("/portal-upvote/register-session", methods=["POST"])
+def portal_upvote_register_session():
+    """Store a new user's AGW session in the users DB table (no SESSION_FILE, no Railway step)."""
+    from flask import request as freq
+    from Crypto.Cipher import AES
+    from Crypto.Random import get_random_bytes
+    import json as _json
+
+    enc_key_hex = os.environ.get("SESSION_KEY_ENCRYPTION_KEY", "")
+    if len(enc_key_hex) != 64:
+        return jsonify({"error": "Service temporarily unavailable — please try again later"}), 503
+
+    body          = freq.get_json(force=True) or {}
+    priv_key      = body.get("sessionPrivKey", "")
+    session_cfg   = body.get("sessionConfig",  "")
+    agw_addr      = body.get("agwAddress",     "")
+    expires_at    = body.get("expiresAt",       0)
+
+    if not priv_key or not session_cfg or not agw_addr:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    key    = bytes.fromhex(enc_key_hex)
+    nonce  = get_random_bytes(16)
+    cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
+    ct, tag = cipher.encrypt_and_digest(priv_key.encode())
+    encrypted = base64.b64encode(nonce + tag + ct).decode()
+
+    try:
+        _upvote_store.upsert_user(agw_addr, encrypted, str(session_cfg), expires_at)
+    except Exception as e:
+        return jsonify({"error": f"Could not save session: {e}"}), 500
+
+    user_count = _upvote_store.get_user_count()
+    return jsonify({"ok": True, "agw_address": agw_addr, "expires_at": expires_at,
+                    "user_count": user_count})
+
+
+@app.route("/api/upvote-leaderboard")
+def upvote_leaderboard():
+    try:
+        board = _upvote_store.get_leaderboard(20)
+        total_users = _upvote_store.get_user_count()
+        return jsonify({"ok": True, "leaderboard": board, "total_users": total_users})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/upvote-dashboard")

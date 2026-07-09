@@ -6,7 +6,7 @@ from . import config as _cfg
 
 
 def _load_session():
-    """Read and decrypt the session key from .upvote_session file."""
+    """Read and decrypt the session key from .upvote_session file (owner / single-user path)."""
     from Crypto.Cipher import AES
 
     enc_key_hex = os.getenv("SESSION_KEY_ENCRYPTION_KEY", "")
@@ -32,12 +32,55 @@ def _load_session():
     return session_priv, data.get("session_config", "{}"), data.get("agw_address", _cfg.AGW_ADDRESS)
 
 
+def _decrypt_user_session(user):
+    """Decrypt a user row's encrypted_key from the users DB table."""
+    from Crypto.Cipher import AES
+
+    enc_key_hex = os.getenv("SESSION_KEY_ENCRYPTION_KEY", "")
+    if len(enc_key_hex) != 64:
+        raise RuntimeError("SESSION_KEY_ENCRYPTION_KEY not set or invalid")
+
+    raw            = base64.b64decode(user["encrypted_key"])
+    nonce, tag, ct = raw[:16], raw[16:32], raw[32:]
+    cipher         = AES.new(bytes.fromhex(enc_key_hex), AES.MODE_EAX, nonce=nonce)
+    session_priv   = cipher.decrypt_and_verify(ct, tag).decode()
+
+    return session_priv, user.get("session_config", "{}"), user["address"]
+
+
 def call_upvote(app_id):
     """
-    Decrypt session key, forward upvote request to Node helper.
+    Decrypt session key (owner/file path), forward upvote request to Node helper.
     Returns {"txHash": "0x..."} or raises RuntimeError.
     """
     session_priv, session_config, agw_address = _load_session()
+
+    payload = {
+        "sessionPrivKey": session_priv,
+        "agwAddress":     agw_address,
+        "sessionConfig":  session_config,
+        "appId":          int(app_id),
+        "network":        _cfg.NETWORK,
+    }
+
+    try:
+        r = _req.post(f"{_cfg.NODE_HELPER_URL}/upvote", json=payload, timeout=30)
+    except _req.exceptions.ConnectionError:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+
+    result = r.json()
+    if r.status_code != 200 or result.get("error"):
+        raise RuntimeError(result.get("error", f"HTTP {r.status_code}"))
+    return result
+
+
+def call_upvote_for_user(user, app_id):
+    """
+    Decrypt session key from DB user row and forward upvote request to Node helper.
+    user: dict with keys address, encrypted_key, session_config.
+    Returns {"txHash": "0x..."} or raises RuntimeError.
+    """
+    session_priv, session_config, agw_address = _decrypt_user_session(user)
 
     payload = {
         "sessionPrivKey": session_priv,

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join Portal Auto-Upvote — Mantis Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0d11;--surface:rgba(26,26,32,0.72);--border:rgba(255,255,255,0.09);
+  --t0:#f0f0f4;--t1:rgba(240,240,244,0.58);--t2:rgba(240,240,244,0.32);--t3:rgba(240,240,244,0.16);
+  --ok:rgba(208,208,228,0.90);--err:rgba(248,113,113,0.88);--r:22px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--t0);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;}
+
+/* ORBS */
+.orb{position:fixed;border-radius:50%;pointer-events:none;z-index:0}
+.orb-1{width:900px;height:800px;background:radial-gradient(ellipse,rgba(190,192,222,0.18) 0%,rgba(170,172,210,0.06) 38%,transparent 68%);filter:blur(80px);top:-220px;left:-300px;animation:od1 55s ease-in-out infinite}
+.orb-2{width:800px;height:720px;background:radial-gradient(ellipse,rgba(200,198,230,0.15) 0%,transparent 68%);filter:blur(100px);bottom:-280px;right:-200px;animation:od2 68s ease-in-out infinite}
+.orb-3{width:600px;height:600px;background:radial-gradient(ellipse,rgba(215,212,240,0.13) 0%,transparent 65%);filter:blur(85px);top:40%;left:50%;transform:translate(-50%,-50%);animation:od3 80s ease-in-out infinite}
+@keyframes od1{0%,100%{transform:translate(0,0)}50%{transform:translate(70px,90px) scale(1.08)}}
+@keyframes od2{0%,100%{transform:translate(0,0)}50%{transform:translate(-80px,-70px) scale(1.10)}}
+@keyframes od3{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.18)}}
+#bubble-canvas{position:fixed;inset:0;z-index:1;pointer-events:none}
+.scan{position:fixed;top:0;left:-90%;width:65%;height:100%;pointer-events:none;z-index:2;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.012) 38%,rgba(255,255,255,0.022) 50%,rgba(255,255,255,0.012) 62%,transparent 100%);animation:scan-mv 28s ease-in-out infinite}
+@keyframes scan-mv{0%,100%{left:-90%;opacity:0}7%{opacity:1}50%{left:145%;opacity:1}57%{opacity:0}}
+.vignette{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at 50% 20%,transparent 25%,rgba(0,0,0,0.50) 100%)}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:200;padding:18px 34px;display:flex;align-items:center;justify-content:space-between}
+.logo-mark{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-size:14px;font-weight:600;letter-spacing:-0.03em;color:rgba(240,240,244,0.78);background:rgba(255,255,255,0.06);box-shadow:inset 0 1px 0 rgba(255,255,255,0.16)}
+.pill-nav{display:flex;background:rgba(12,12,16,0.88);border:1px solid rgba(255,255,255,0.11);border-radius:100px;padding:4px;gap:2px;backdrop-filter:blur(48px);-webkit-backdrop-filter:blur(48px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.15),0 8px 28px rgba(0,0,0,0.40)}
+.pill-nav a{padding:7px 20px;border-radius:100px;font-size:12.5px;font-weight:400;color:var(--t2);transition:all 0.24s cubic-bezier(0.16,1,0.3,1);white-space:nowrap}
+.pill-nav a:hover{color:var(--t1);text-decoration:none}
+.pill-nav a.active{background:rgba(255,255,255,0.10);color:var(--t0);box-shadow:inset 0 1px 0 rgba(255,255,255,0.16),0 2px 8px rgba(0,0,0,0.40)}
+a{color:inherit;text-decoration:none}
+
+/* PAGE */
+.page{position:relative;z-index:10;max-width:540px;margin:0 auto;padding:60px 24px 120px}
+
+/* GLASS CARD */
+.card{position:relative;background:var(--surface);backdrop-filter:blur(60px) saturate(1.5) brightness(1.06);-webkit-backdrop-filter:blur(60px) saturate(1.5) brightness(1.06);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:0 44px 100px -16px rgba(0,0,0,0.65),0 10px 32px -5px rgba(0,0,0,0.48),inset 0 1px 0 rgba(255,255,255,0.16);transition:box-shadow 0.45s ease,transform 0.45s cubic-bezier(0.16,1,0.3,1)}
+.card::after{content:'';position:absolute;top:0;left:7%;right:7%;height:1px;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.22) 28%,rgba(255,255,255,0.28) 50%,rgba(255,255,255,0.22) 72%,transparent)}
+.card>*{position:relative;z-index:1}
+
+/* MAIN CARD CONTENT */
+.card-inner{padding:48px 44px}
+.kicker{font-size:10.5px;font-weight:400;color:var(--t3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:14px}
+.headline{font-size:32px;font-weight:250;color:var(--t0);letter-spacing:-0.045em;line-height:1.15;margin-bottom:12px}
+.headline span{background:linear-gradient(155deg,#eeeeF2 0%,rgba(185,183,218,0.85) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subline{font-size:13px;font-weight:400;color:var(--t2);line-height:1.6;margin-bottom:36px}
+
+/* BENEFITS */
+.benefits{display:flex;flex-direction:column;gap:12px;margin-bottom:36px}
+.benefit{display:flex;align-items:flex-start;gap:14px}
+.benefit-icon{width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,0.14)}
+.benefit-icon svg{opacity:0.60}
+.benefit-text{padding-top:6px}
+.benefit-title{font-size:12.5px;font-weight:440;color:var(--t1);margin-bottom:2px}
+.benefit-desc{font-size:11.5px;font-weight:400;color:var(--t3)}
+
+/* DIVIDER */
+.divider{height:1px;background:rgba(255,255,255,0.06);margin:28px 0}
+
+/* WALLET SECTION */
+#wallet-section{display:flex;flex-direction:column;gap:12px}
+#agw-root{min-height:48px;display:flex;align-items:center}
+.wc-btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 22px;border-radius:14px;background:rgba(255,255,255,0.06);color:var(--t1);border:1px solid rgba(255,255,255,0.11);cursor:pointer;font-size:13px;font-weight:400;width:100%;transition:all 0.22s cubic-bezier(0.16,1,0.3,1);font-family:inherit;box-shadow:inset 0 1px 0 rgba(255,255,255,0.14)}
+.wc-btn:hover{background:rgba(255,255,255,0.10);color:var(--t0);box-shadow:inset 0 1px 0 rgba(255,255,255,0.20),0 6px 22px rgba(0,0,0,0.35);transform:scale(1.01) translateY(-1px)}
+.wc-btn:active{transform:scale(0.98)}
+.wc-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.wc-note{font-size:11px;color:var(--t3);text-align:center;line-height:1.5}
+
+/* PROGRESS */
+#progress-area{font-size:12px;color:var(--t2);text-align:center;min-height:18px;transition:opacity 0.2s}
+.spinner{display:inline-block;width:14px;height:14px;border:1.5px solid rgba(255,255,255,0.15);border-top-color:rgba(200,198,238,0.80);border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* STATUS BANNER */
+#status-banner{display:none;padding:14px 18px;border-radius:14px;font-size:12.5px;margin-bottom:24px;line-height:1.5}
+#status-banner.ok{background:rgba(200,198,238,0.08);color:var(--ok);border:1px solid rgba(200,198,238,0.18)}
+#status-banner.err{background:rgba(248,113,113,0.08);color:var(--err);border:1px solid rgba(248,113,113,0.18)}
+
+/* SUCCESS STATE */
+#success-card{display:none}
+#success-card .card-inner{text-align:center;padding:52px 44px}
+.success-icon{width:64px;height:64px;border-radius:20px;background:rgba(200,198,238,0.10);border:1px solid rgba(200,198,238,0.18);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.20)}
+.success-headline{font-size:26px;font-weight:250;color:var(--t0);letter-spacing:-0.04em;margin-bottom:10px}
+.success-sub{font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:28px}
+.address-pill{display:inline-block;font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;color:var(--t1);background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:100px;padding:6px 16px;margin-bottom:28px;letter-spacing:0.02em}
+.next-vote{font-size:11.5px;color:var(--t3);margin-bottom:32px}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;padding:13px 28px;border-radius:100px;background:rgba(255,255,255,0.09);color:var(--t0);border:1px solid rgba(255,255,255,0.14);font-size:13px;font-weight:440;font-family:inherit;cursor:pointer;transition:all 0.22s cubic-bezier(0.16,1,0.3,1);box-shadow:inset 0 1px 0 rgba(255,255,255,0.18);text-decoration:none}
+.btn-primary:hover{background:rgba(255,255,255,0.14);box-shadow:inset 0 1px 0 rgba(255,255,255,0.24),0 6px 22px rgba(0,0,0,0.35);transform:scale(1.02) translateY(-1px)}
+
+/* FOOTER NOTE */
+.footer-note{margin-top:24px;text-align:center;font-size:11px;color:var(--t3);line-height:1.6}
+
+/* ENTRANCE */
+.fade{opacity:0;transform:translateY(22px);transition:opacity 0.72s cubic-bezier(0.16,1,0.3,1),transform 0.72s cubic-bezier(0.16,1,0.3,1)}
+.fade.in{opacity:1;transform:translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+<canvas id="bubble-canvas"></canvas>
+<div class="scan"></div>
+<div class="vignette"></div>
+
+<header>
+  <div class="logo-mark">M</div>
+  <nav class="pill-nav">
+    <a href="/">Home</a>
+    <a href="/portal-upvote/dashboard">Dashboard</a>
+    <a href="/portal-upvote/register" class="active">Register</a>
+  </nav>
+</header>
+
+<div class="page">
+
+  <!-- REGISTER CARD -->
+  <div class="card fade" id="register-card">
+    <div class="card-inner">
+      <div class="kicker">Abstract Portal · Auto-Upvote</div>
+      <h1 class="headline">Vote every day,<br><span>automatically.</span></h1>
+      <p class="subline">Connect your Abstract Global Wallet once. Mantis Pro handles the rest — your wallet casts one Portal upvote every day at 09:00 UTC, completely hands-free.</p>
+
+      <div class="benefits">
+        <div class="benefit">
+          <div class="benefit-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div class="benefit-text">
+            <div class="benefit-title">Scoped session key</div>
+            <div class="benefit-desc">Mantis never holds your funds. The session key is limited exclusively to the upvote contract.</div>
+          </div>
+        </div>
+        <div class="benefit">
+          <div class="benefit-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="benefit-text">
+            <div class="benefit-title">Daily at 09:00 UTC</div>
+            <div class="benefit-desc">One vote per day. Rotating across Portal apps so every project gets support.</div>
+          </div>
+        </div>
+        <div class="benefit">
+          <div class="benefit-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <div class="benefit-text">
+            <div class="benefit-title">Track on the dashboard</div>
+            <div class="benefit-desc">View your full vote history and stats at any time on the public dashboard.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div id="status-banner"></div>
+
+      <div id="wallet-section">
+        <div id="agw-root">
+          <p style="color:var(--t3);font-size:12px">Loading wallet connector…</p>
+        </div>
+        <button class="wc-btn" id="btn-wc" onclick="startWalletConnect()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          WalletConnect QR
+        </button>
+        <div id="progress-area"></div>
+        <p class="wc-note">Session expires in 30 days. You can re-register any time to refresh.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUCCESS CARD -->
+  <div class="card fade" id="success-card" style="transition-delay:.05s">
+    <div class="card-inner">
+      <div class="success-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(210,208,238,0.88)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="success-headline">You're registered.</div>
+      <p class="success-sub">Your wallet will automatically cast one upvote every day at 09:00 UTC. No further action needed.</p>
+      <div class="address-pill" id="success-addr">—</div>
+      <div class="next-vote">Next vote: tomorrow at 09:00 UTC</div>
+      <a href="/portal-upvote/dashboard" class="btn-primary">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        View dashboard
+      </a>
+    </div>
+  </div>
+
+  <p class="footer-note fade" style="transition-delay:.10s">
+    Mantis Pro is open and permissionless. Sessions are encrypted server-side.<br>
+    Questions? <a href="https://abs.xyz" style="color:var(--t2)">abs.xyz</a>
+  </p>
+
+</div>
+
+<!-- BUBBLE CANVAS -->
+<script>
+(function(){
+  const cv=document.getElementById('bubble-canvas');const ctx=cv.getContext('2d');
+  let W,H,mx=-2000,my=-2000;
+  window.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY},{passive:true});
+  function resize(){const dpr=devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';ctx.scale(dpr,dpr);}
+  function mk(s){const r=55+Math.random()*145;return{x:Math.random()*W,y:s?Math.random()*H:H+r+Math.random()*200,vx:(Math.random()-.5)*.35,vy:-(0.18+Math.random()*0.38),r,baseAlpha:0.055+Math.random()*0.065-r*0.0001,alpha:0,targetAlpha:0,wobble:Math.random()*Math.PI*2,wobbleS:0.006+Math.random()*0.010,repVx:0,repVy:0};}
+  let bubbles=[];
+  function init(){resize();bubbles=Array.from({length:18},()=>mk(true));bubbles.forEach(b=>{b.alpha=b.baseAlpha*Math.random();});}
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    bubbles.forEach(b=>{
+      b.wobble+=b.wobbleS;b.repVx*=0.88;b.repVy*=0.88;
+      const dx=b.x-mx,dy=b.y-my,dist=Math.sqrt(dx*dx+dy*dy);let boost=0;
+      if(dist<230){const n=dist<1?1:dist,f=(230-dist)/230;b.repVx+=(dx/n)*f*4.5;b.repVy+=(dy/n)*f*4.5;boost=f*0.045;}
+      b.x+=b.vx+Math.sin(b.wobble)*0.45+b.repVx;b.y+=b.vy+b.repVy;
+      b.targetAlpha=b.baseAlpha+boost;b.alpha+=(b.targetAlpha-b.alpha)*0.05;
+      if(b.y<-b.r*2.5){b.x=Math.random()*W;b.y=H+b.r+Math.random()*180;b.vx=(Math.random()-.5)*.35;b.vy=-(0.18+Math.random()*0.38);b.repVx=0;b.repVy=0;b.baseAlpha=0.055+Math.random()*0.065-b.r*0.0001;b.alpha=0;}
+      if(b.x<-b.r*1.5)b.x=W+b.r;if(b.x>W+b.r*1.5)b.x=-b.r;
+      const a=Math.max(0,b.alpha);const g=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
+      g.addColorStop(0,`rgba(222,220,248,${a})`);g.addColorStop(0.35,`rgba(205,203,238,${a*.72})`);g.addColorStop(0.70,`rgba(185,183,222,${a*.30})`);g.addColorStop(1,`rgba(165,163,208,0)`);
+      ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  init();requestAnimationFrame(draw);window.addEventListener('resize',init,{passive:true});
+})();
+</script>
+
+<!-- MAIN LOGIC -->
+<script type="module">
+function setProgress(txt){
+  const el=document.getElementById('progress-area');
+  el.innerHTML=txt?`<span class="spinner"></span>${txt}`:'';
+}
+function showBanner(msg,type='ok'){
+  const el=document.getElementById('status-banner');
+  el.textContent=msg;el.className=type;el.style.display='block';
+}
+function hideBanner(){document.getElementById('status-banner').style.display='none';}
+function lock(){document.getElementById('btn-wc').disabled=true;}
+function unlock(){document.getElementById('btn-wc').disabled=false;}
+function shortAddr(a){return a?a.slice(0,8)+'…'+a.slice(-6):'—';}
+
+function showSuccess(agwAddr){
+  document.getElementById('register-card').style.display='none';
+  const sc=document.getElementById('success-card');
+  document.getElementById('success-addr').textContent=agwAddr;
+  sc.style.display='';
+  requestAnimationFrame(()=>sc.classList.add('in'));
+}
+
+async function storeSession(sessionPrivKey, sessionConfigJson, agwAddress, expiresAt){
+  setProgress('Saving your session…');
+  const r=await fetch('/portal-upvote/register-session',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({sessionPrivKey,sessionConfig:sessionConfigJson,agwAddress,expiresAt}),
+  });
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok||data.error) throw new Error(data.error||`HTTP ${r.status}`);
+  return data;
+}
+
+// Shared session creation — same policy as owner (upvote contract only)
+async function createAndStore(abstractClient){
+  const {LimitType}=await import('https://esm.sh/@abstract-foundation/agw-client/sessions');
+  const {generatePrivateKey,privateKeyToAccount}=await import('https://esm.sh/viem/accounts');
+  const agwAddress=abstractClient.account.address;
+  setProgress(`AGW: ${shortAddr(agwAddress)} — generating session key…`);
+  const sessionPrivKey=generatePrivateKey();
+  const sessionAccount=privateKeyToAccount(sessionPrivKey);
+  const expiresAt=BigInt(Math.floor(Date.now()/1000)+30*24*3600);
+  setProgress('Approve the session in your wallet…');
+  const {session}=await abstractClient.createSession({
+    session:{
+      signer:sessionAccount.address,expiresAt,
+      feeLimit:{limitType:LimitType.Lifetime,limit:BigInt('500000000000000'),period:0n},
+      callPolicies:[{
+        target:'0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a',
+        selector:'0x7060a227',
+        maxValuePerUse:0n,
+        valueLimit:{limitType:LimitType.Unlimited,limit:0n,period:0n},
+        constraints:[],
+      }],
+      transferPolicies:[],
+    },
+  });
+  const sessionConfigJson=JSON.stringify(session,(_k,v)=>typeof v==='bigint'?v.toString():v);
+  const data=await storeSession(sessionPrivKey,sessionConfigJson,agwAddress,Number(expiresAt));
+  setProgress('');
+  showSuccess(agwAddress);
+}
+
+async function doAuthorize(provider,eoaAddress){
+  setProgress('Loading AGW library…');
+  const {createAbstractClient}=await import('https://esm.sh/@abstract-foundation/agw-client');
+  const {toAccount}=await import('https://esm.sh/viem/accounts');
+  const {abstract:absMainnet}=await import('https://esm.sh/viem/chains');
+  const {createWalletClient,custom}=await import('https://esm.sh/viem');
+  setProgress(`Building signer for ${shortAddr(eoaAddress)}…`);
+  const eoaWC=createWalletClient({account:eoaAddress,chain:absMainnet,transport:custom(provider)});
+  const signerAccount=toAccount({
+    address:eoaAddress,
+    signMessage:(a)=>eoaWC.signMessage({...a,account:eoaAddress}),
+    signTypedData:(a)=>eoaWC.signTypedData({...a,account:eoaAddress}),
+    signTransaction:(a)=>eoaWC.signTransaction({...a,account:eoaAddress}),
+  });
+  const abstractClient=await createAbstractClient({signer:signerAccount,chain:absMainnet,transport:custom(provider)});
+  await createAndStore(abstractClient);
+}
+
+window.startWalletConnect=async function(){
+  lock();hideBanner();setProgress('Fetching WalletConnect config…');
+  try{
+    const cfg=await fetch('/api/wc-config').then(r=>r.json());
+    if(!cfg.projectId) throw new Error('WC_PROJECT_ID not set — contact site owner');
+    setProgress('Loading WalletConnect SDK…');
+    const {EthereumProvider}=await import('https://esm.sh/@walletconnect/ethereum-provider@2');
+    setProgress('Scan QR with your Abstract wallet…');
+    const wcProvider=await EthereumProvider.init({
+      projectId:cfg.projectId,chains:[2741],optionalChains:[1],showQrModal:true,
+      rpcMap:{2741:'https://api.mainnet.abs.xyz'},
+      metadata:{name:'Mantis Pro',description:'Portal Auto-Upvote',url:window.location.origin,icons:[]},
+    });
+    await wcProvider.connect();
+    const accounts=await wcProvider.request({method:'eth_accounts'});
+    if(!accounts?.[0]) throw new Error('No account returned from wallet');
+    setProgress(`Connected: ${shortAddr(accounts[0])} — authorizing…`);
+    await doAuthorize(wcProvider,accounts[0]);
+  }catch(e){
+    setProgress('');showBanner(e.message||String(e),'err');unlock();
+  }
+};
+
+// AGW React bundle callbacks
+window._onSessionProgress=(t)=>setProgress(t);
+window._agwConnectError=(e)=>{setProgress('');showBanner('AGW error: '+e,'err');unlock();};
+window._onSessionCreated=async(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt)=>{
+  try{
+    await storeSession(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt);
+    setProgress('');showSuccess(agwAddress);
+  }catch(e){setProgress('');showBanner(e.message,'err');unlock();}
+};
+
+// Entrance animation
+requestAnimationFrame(()=>{
+  document.querySelectorAll('.fade').forEach((el,i)=>
+    setTimeout(()=>el.classList.add('in'),i*80+60)
+  );
+});
+</script>
+
+<!-- AGW React bundle (native popup option) -->
+<script src="/portal-upvote/connect.bundle.js" type="module" onerror="console.log('AGW bundle not loaded')"></script>
+</body>
+</html>
