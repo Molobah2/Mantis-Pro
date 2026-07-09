@@ -80,3 +80,40 @@ def get_last_upvoted_per_app():
                             WHERE status='success' GROUP BY app_id""").fetchall()
         c.close()
     return {r[0]: r[1] for r in rows}
+
+
+def get_upvote_log_since(since_ts, limit=500):
+    """Returns upvote log rows since a given Unix timestamp."""
+    with _lock:
+        c = _conn()
+        rows = c.execute("""
+            SELECT ul.id, ul.app_id, pa.name, ul.upvoted_at, ul.tx_hash, ul.status
+            FROM upvote_log ul
+            LEFT JOIN portal_apps pa ON pa.id = ul.app_id
+            WHERE ul.upvoted_at >= ?
+            ORDER BY ul.upvoted_at DESC LIMIT ?
+        """, (since_ts, limit)).fetchall()
+        c.close()
+    return [{"id": r[0], "app_id": r[1], "app_name": r[2],
+             "upvoted_at": r[3], "tx_hash": r[4], "status": r[5]} for r in rows]
+
+
+def get_stats():
+    """Returns vote counts for today, 7d, 30d, and all time."""
+    now = time.time()
+    midnight_utc = now - (now % 86400)
+    with _lock:
+        c = _conn()
+        def count_since(ts):
+            return c.execute(
+                "SELECT COUNT(*) FROM upvote_log WHERE status='success' AND upvoted_at >= ?", (ts,)
+            ).fetchone()[0]
+        stats = {
+            "today":    count_since(midnight_utc),
+            "week":     count_since(now - 7  * 86400),
+            "month":    count_since(now - 30 * 86400),
+            "all_time": c.execute("SELECT COUNT(*) FROM upvote_log WHERE status='success'").fetchone()[0],
+            "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status!='success'").fetchone()[0],
+        }
+        c.close()
+    return stats

@@ -1964,6 +1964,70 @@ def wc_config():
     return jsonify({"projectId": project_id, "ok": bool(project_id)})
 
 
+@app.route("/portal-upvote/dashboard")
+def portal_upvote_dashboard():
+    import json as _json
+    path = os.path.join(os.path.dirname(__file__), "portal_upvote_dashboard.html")
+    with open(path, "r") as f:
+        return f.read(), 200, {"Content-Type": "text/html"}
+
+
+@app.route("/api/upvote-dashboard")
+def upvote_dashboard_api():
+    import json as _json
+    import time as _time
+
+    now = _time.time()
+    midnight_utc = now - (now % 86400)
+
+    # Session
+    authorized = os.path.exists(SESSION_FILE)
+    sess_data  = {}
+    if authorized:
+        try:
+            with open(SESSION_FILE) as f:
+                sess_data = _json.load(f)
+        except Exception:
+            authorized = False
+
+    # Stats
+    stats    = _upvote_store.get_stats()
+    catalog  = _upvote_store.get_apps()
+    node_ok  = _upvote_node.node_health()
+    worker   = _upvote_worker.get_status()
+
+    # Next app
+    next_app = None
+    if catalog:
+        _last = _upvote_store.get_last_upvoted_per_app()
+        next_app = sorted(catalog, key=lambda a: _last.get(a["id"], 0.0))[0]
+
+    # Logs per period
+    today_votes = _upvote_store.get_upvote_log_since(midnight_utc)
+    week_votes  = _upvote_store.get_upvote_log_since(now - 7  * 86400)
+    month_votes = _upvote_store.get_upvote_log_since(now - 30 * 86400)
+    all_votes   = _upvote_store.get_upvote_log(200)
+
+    resp = jsonify({
+        "authorized":   authorized,
+        "agw_address":  sess_data.get("agw_address", AGW_ADDRESS),
+        "expires_at":   sess_data.get("expires_at"),
+        "network":      NETWORK,
+        "node_ok":      node_ok,
+        "worker":       worker,
+        "stats":        stats,
+        "catalog_size": len(catalog),
+        "next_app":     next_app,
+        "today":        today_votes,
+        "week":         week_votes,
+        "month":        month_votes,
+        "history":      all_votes,
+        "server_ts":    now,
+    })
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 def run_identity_refresh():
     time.sleep(30)
     while True:

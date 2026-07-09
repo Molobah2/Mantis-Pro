@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upvote Dashboard — Mantis Pro</title>
+<style>
+  :root {
+    --bg:     #0a0b0d;
+    --bg1:    #10121a;
+    --bg2:    #161820;
+    --l0:     rgba(255,255,255,.06);
+    --l1:     rgba(255,255,255,.10);
+    --ink0:   #f0f0f8;
+    --ink1:   rgba(240,240,248,.70);
+    --ink2:   rgba(240,240,248,.45);
+    --ink3:   rgba(240,240,248,.28);
+    --green:  #4cff91;
+    --red:    #ff4c6a;
+    --blue:   #4ca8ff;
+    --purple: #b48eff;
+    --yellow: #ffd560;
+    --radius: 10px;
+    font-size: 14px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink0); font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; min-height: 100vh; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { background: var(--bg1); border-bottom: 1px solid var(--l0); padding: 14px 24px;
+           display: flex; align-items: center; gap: 16px; }
+  header .logo { font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+  header .logo span { color: var(--green); }
+  header nav a { color: var(--ink2); font-size: 13px; margin-left: 20px; }
+  header nav a:hover, header nav a.active { color: var(--ink0); }
+  header .spacer { flex: 1; }
+  header .refresh-info { font-size: 11px; color: var(--ink3); }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+  h2 { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+       color: var(--ink3); margin-bottom: 14px; }
+
+  /* ── stat cards ── */
+  .stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media(max-width:700px){ .stat-row { grid-template-columns: repeat(2,1fr); } }
+  .stat-card { background: var(--bg1); border: 1px solid var(--l0); border-radius: var(--radius);
+               padding: 18px 16px; }
+  .stat-card .label { font-size: 11px; color: var(--ink3); font-weight: 600;
+                      letter-spacing: .07em; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-card .number { font-size: 32px; font-weight: 700; line-height: 1; }
+  .stat-card .sub { font-size: 11px; color: var(--ink2); margin-top: 4px; }
+  .stat-card.green  { border-color: rgba(76,255,145,.2); }
+  .stat-card.blue   { border-color: rgba(76,168,255,.15); }
+  .stat-card.purple { border-color: rgba(180,142,255,.15); }
+
+  /* ── info row ── */
+  .info-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  @media(max-width:700px){ .info-row { grid-template-columns: 1fr; } }
+  .card { background: var(--bg1); border: 1px solid var(--l0); border-radius: var(--radius);
+          padding: 18px; }
+  .card-title { font-size: 11px; font-weight: 600; letter-spacing: .08em;
+                text-transform: uppercase; color: var(--ink3); margin-bottom: 14px; }
+  .row { display: flex; justify-content: space-between; align-items: center;
+         padding: 7px 0; border-bottom: 1px solid var(--l0); }
+  .row:last-child { border-bottom: none; }
+  .row .lbl { color: var(--ink2); font-size: 12px; }
+  .row .val { color: var(--ink0); font-size: 12px; font-weight: 500; text-align: right; max-width: 60%; word-break: break-all; }
+
+  /* ── badges ── */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px;
+           font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+  .badge-green  { background: rgba(76,255,145,.12); color: var(--green); }
+  .badge-red    { background: rgba(255,76,106,.12);  color: var(--red); }
+  .badge-yellow { background: rgba(255,213,96,.12);  color: var(--yellow); }
+  .badge-blue   { background: rgba(76,168,255,.12);  color: var(--blue); }
+  .badge-purple { background: rgba(180,142,255,.12); color: var(--purple); }
+
+  /* ── section ── */
+  .section { margin-bottom: 24px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between;
+                    margin-bottom: 10px; }
+  .section-header h2 { margin-bottom: 0; }
+  .count-badge { background: var(--l0); border-radius: 20px; padding: 2px 10px;
+                 font-size: 11px; color: var(--ink2); font-weight: 600; }
+
+  /* ── table ── */
+  .tbl-wrap { background: var(--bg1); border: 1px solid var(--l0); border-radius: var(--radius); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--ink3); font-weight: 600; font-size: 10px;
+       letter-spacing: .07em; text-transform: uppercase; padding: 10px 14px;
+       border-bottom: 1px solid var(--l0); background: var(--bg2); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--l0); color: var(--ink1); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink2); }
+  .empty-row td { color: var(--ink3); text-align: center; padding: 24px; }
+
+  /* ── buttons ── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
+         border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+         border: none; transition: opacity .15s; font-family: inherit; }
+  .btn:hover { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-green { background: var(--green); color: #000; }
+  .btn-ghost { background: var(--l0); color: var(--ink0); }
+  .btn-row   { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+  /* ── top bar ── */
+  .topbar { display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 22px; flex-wrap: wrap; gap: 10px; }
+  .topbar h1 { font-size: 20px; font-weight: 700; }
+  .topbar .meta { font-size: 12px; color: var(--ink2); }
+
+  /* ── activity timeline ── */
+  .timeline { position: relative; padding-left: 24px; }
+  .timeline::before { content: ''; position: absolute; left: 7px; top: 6px; bottom: 0;
+                       width: 1px; background: var(--l0); }
+  .tl-item { position: relative; margin-bottom: 14px; }
+  .tl-dot { position: absolute; left: -21px; top: 4px; width: 10px; height: 10px;
+             border-radius: 50%; border: 2px solid var(--bg1); }
+  .tl-dot.success { background: var(--green); }
+  .tl-dot.fail    { background: var(--red); }
+  .tl-time { font-size: 10px; color: var(--ink3); margin-bottom: 2px; }
+  .tl-body { font-size: 12px; color: var(--ink1); }
+  .tl-tx   { font-family: monospace; font-size: 10px; color: var(--ink3); }
+
+  /* ── pulse ── */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+              animation: pulse 2s ease-in-out infinite; display: inline-block; margin-right: 5px; }
+
+  #status-msg { padding: 10px 14px; border-radius: 8px; font-size: 12px; margin-bottom: 16px; display: none; }
+  #status-msg.ok  { background: rgba(76,255,145,.10); color: var(--green); border: 1px solid rgba(76,255,145,.2); }
+  #status-msg.err { background: rgba(255,76,106,.10); color: var(--red);   border: 1px solid rgba(255,76,106,.2); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Mantis <span>Pro</span></div>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/portal-upvote">Auth</a>
+    <a href="/portal-upvote/dashboard" class="active">Dashboard</a>
+    <a href="/operator/0x9d60f5906d43aa12b0496765ec202bf498e9cd1f">Operator</a>
+  </nav>
+  <div class="spacer"></div>
+  <span class="refresh-info" id="refresh-info">—</span>
+</header>
+
+<div class="page">
+
+  <div class="topbar">
+    <div>
+      <h1>Portal Upvote Dashboard</h1>
+      <div class="meta" id="meta-line">Loading…</div>
+    </div>
+    <div class="btn-row" style="margin-top:0">
+      <button class="btn btn-green" id="btn-now" onclick="triggerNow()">▶ Run Now</button>
+      <button class="btn btn-ghost" onclick="load()">↺ Refresh</button>
+    </div>
+  </div>
+
+  <div id="status-msg"></div>
+
+  <!-- ── STAT CARDS ── -->
+  <div class="stat-row">
+    <div class="stat-card green">
+      <div class="label">Today</div>
+      <div class="number" id="s-today">—</div>
+      <div class="sub">votes since midnight UTC</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">7 Days</div>
+      <div class="number" id="s-week">—</div>
+      <div class="sub">rolling 7-day window</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="label">30 Days</div>
+      <div class="number" id="s-month">—</div>
+      <div class="sub">rolling 30-day window</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="label">All Time</div>
+      <div class="number" id="s-all">—</div>
+      <div class="sub">total successful votes</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Failed</div>
+      <div class="number" id="s-fail" style="color:var(--red)">—</div>
+      <div class="sub">error count all time</div>
+    </div>
+  </div>
+
+  <!-- ── INFO ROW ── -->
+  <div class="info-row">
+
+    <div class="card">
+      <div class="card-title">Session</div>
+      <div class="row"><span class="lbl">Status</span><span class="val" id="i-status">—</span></div>
+      <div class="row"><span class="lbl">AGW Address</span><span class="val mono" id="i-agw">—</span></div>
+      <div class="row"><span class="lbl">Network</span><span class="val" id="i-network">—</span></div>
+      <div class="row"><span class="lbl">Expires</span><span class="val" id="i-expires">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">System Health</div>
+      <div class="row"><span class="lbl">Node Helper</span><span class="val" id="i-node">—</span></div>
+      <div class="row"><span class="lbl">Scheduler</span><span class="val"><span class="badge badge-green">Daily 09:00 UTC</span></span></div>
+      <div class="row"><span class="lbl">Catalog Size</span><span class="val" id="i-catalog">—</span></div>
+      <div class="row"><span class="lbl">Worker</span><span class="val" id="i-worker">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Next Scheduled</div>
+      <div class="row"><span class="lbl">App</span><span class="val" id="i-next-app">—</span></div>
+      <div class="row"><span class="lbl">App ID</span><span class="val" id="i-next-id">—</span></div>
+      <div class="row"><span class="lbl">Fires At</span><span class="val">Daily 09:00 UTC</span></div>
+      <div class="row"><span class="lbl">Countdown</span><span class="val" id="i-countdown">—</span></div>
+    </div>
+
+  </div>
+
+  <!-- ── TODAY ── -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Today's Votes</h2>
+      <span class="count-badge" id="c-today">0</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Time (UTC)</th><th>App</th><th>Transaction</th><th>Status</th></tr></thead>
+        <tbody id="tbl-today"><tr class="empty-row"><td colspan="4">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 7 DAYS ── -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Last 7 Days</h2>
+      <span class="count-badge" id="c-week">0</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Date (UTC)</th><th>App</th><th>Transaction</th><th>Status</th></tr></thead>
+        <tbody id="tbl-week"><tr class="empty-row"><td colspan="4">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 30 DAYS ── -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Last 30 Days</h2>
+      <span class="count-badge" id="c-month">0</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Date (UTC)</th><th>App</th><th>Transaction</th><th>Status</th></tr></thead>
+        <tbody id="tbl-month"><tr class="empty-row"><td colspan="4">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── FULL HISTORY ── -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Full History</h2>
+      <span class="count-badge" id="c-all">0</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Date &amp; Time (UTC)</th><th>App</th><th>Transaction Hash</th><th>Status</th></tr></thead>
+        <tbody id="tbl-history"><tr class="empty-row"><td colspan="5">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let _data = null;
+const ABSCAN = "https://abscan.org/tx/";
+
+function fmtTs(ts, full) {
+  if (!ts) return "—";
+  const d = new Date(ts * 1000);
+  if (full) return d.toUTCString().replace(" GMT", " UTC");
+  return d.toLocaleString("en-US", { timeZone:"UTC", month:"short", day:"numeric",
+                                      hour:"2-digit", minute:"2-digit", hour12:false }) + " UTC";
+}
+function fmtDate(ts) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleDateString("en-US",
+    { timeZone:"UTC", weekday:"short", year:"numeric", month:"short", day:"numeric" });
+}
+function shortAddr(a) {
+  if (!a || a.length < 10) return a || "—";
+  return a.slice(0, 8) + "…" + a.slice(-6);
+}
+function shortTx(h) {
+  if (!h) return "—";
+  return h.slice(0, 12) + "…" + h.slice(-6);
+}
+function txLink(hash) {
+  if (!hash) return "—";
+  return `<a href="${ABSCAN}${hash}" target="_blank" title="${hash}">${shortTx(hash)}</a>`;
+}
+function statusBadge(s) {
+  return s === "success"
+    ? '<span class="badge badge-green">✓ Success</span>'
+    : `<span class="badge badge-red">✗ ${s || "fail"}</span>`;
+}
+function el(id) { return document.getElementById(id); }
+function msg(text, type) {
+  const e = el("status-msg");
+  e.textContent = text; e.className = type; e.style.display = "block";
+  setTimeout(() => { e.style.display = "none"; }, 5000);
+}
+
+function buildRows(rows, showDate) {
+  if (!rows || rows.length === 0)
+    return '<tr class="empty-row"><td colspan="5">No votes recorded yet.</td></tr>';
+  return rows.map(r => `
+    <tr>
+      <td>${showDate ? fmtDate(r.upvoted_at) : fmtTs(r.upvoted_at)}</td>
+      <td><a href="https://abs.xyz/apps/${r.app_id}" target="_blank">${r.app_name || "App #" + r.app_id}</a></td>
+      <td class="mono">${txLink(r.tx_hash)}</td>
+      <td>${statusBadge(r.status)}</td>
+    </tr>`).join("");
+}
+
+function buildHistoryRows(rows) {
+  if (!rows || rows.length === 0)
+    return '<tr class="empty-row"><td colspan="5">No votes recorded yet.</td></tr>';
+  return rows.map((r, i) => `
+    <tr>
+      <td style="color:var(--ink3);font-size:11px">${rows.length - i}</td>
+      <td>${fmtTs(r.upvoted_at, true)}</td>
+      <td><a href="https://abs.xyz/apps/${r.app_id}" target="_blank">${r.app_name || "App #" + r.app_id}</a></td>
+      <td class="mono">${txLink(r.tx_hash)}</td>
+      <td>${statusBadge(r.status)}</td>
+    </tr>`).join("");
+}
+
+function updateCountdown() {
+  const now = Date.now() / 1000;
+  const tomorrow9utc = Math.floor(now / 86400) * 86400 + 86400 + 9 * 3600;
+  const next9utc = (now % 86400) < (9 * 3600)
+    ? Math.floor(now / 86400) * 86400 + 9 * 3600
+    : tomorrow9utc;
+  const secs = Math.max(0, Math.floor(next9utc - now));
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  const e = el("i-countdown");
+  if (e) e.textContent = `${h}h ${m}m ${s}s`;
+}
+
+function render(d) {
+  _data = d;
+
+  // Stats
+  el("s-today").textContent = d.stats.today;
+  el("s-week").textContent  = d.stats.week;
+  el("s-month").textContent = d.stats.month;
+  el("s-all").textContent   = d.stats.all_time;
+  el("s-fail").textContent  = d.stats.failed;
+
+  // Session
+  const expired = d.expires_at && d.expires_at < Date.now() / 1000;
+  el("i-status").innerHTML = d.authorized
+    ? (expired
+        ? '<span class="badge badge-red">Expired</span>'
+        : '<span class="badge badge-green"><span class="live-dot"></span>Active</span>')
+    : '<span class="badge badge-red">Not Authorized</span>';
+  el("i-agw").textContent     = shortAddr(d.agw_address);
+  el("i-agw").title           = d.agw_address || "";
+  el("i-network").innerHTML   = `<span class="badge badge-blue">${d.network || "mainnet"}</span>`;
+  el("i-expires").textContent = d.expires_at
+    ? new Date(d.expires_at * 1000).toLocaleDateString("en-US",
+        { timeZone:"UTC", month:"short", day:"numeric", year:"numeric" }) + " UTC"
+    : "—";
+
+  // System
+  el("i-node").innerHTML = d.node_ok
+    ? '<span class="badge badge-green">● Online</span>'
+    : '<span class="badge badge-red">● Offline</span>';
+  el("i-catalog").textContent = d.catalog_size + " apps";
+  el("i-worker").innerHTML = d.worker?.running
+    ? '<span class="badge badge-yellow">Running…</span>'
+    : (d.worker?.last_run_ok === false
+        ? `<span class="badge badge-red">Last run failed</span>`
+        : '<span class="badge badge-green">Idle</span>');
+
+  // Next
+  el("i-next-app").textContent = d.next_app?.name || "—";
+  el("i-next-id").innerHTML = d.next_app
+    ? `<a href="https://abs.xyz/apps/${d.next_app.id}" target="_blank">#${d.next_app.id}</a>`
+    : "—";
+
+  // Tables
+  el("c-today").textContent = d.today.length;
+  el("c-week").textContent  = d.week.length;
+  el("c-month").textContent = d.month.length;
+  el("c-all").textContent   = d.history.length;
+
+  el("tbl-today").innerHTML   = buildRows(d.today, false);
+  el("tbl-week").innerHTML    = buildRows(d.week, true);
+  el("tbl-month").innerHTML   = buildRows(d.month, true);
+  el("tbl-history").innerHTML = buildHistoryRows(d.history);
+
+  // Meta
+  el("meta-line").innerHTML =
+    `AGW: <span style="color:var(--ink1)">${shortAddr(d.agw_address)}</span>` +
+    ` &nbsp;·&nbsp; Network: <span style="color:var(--ink1)">${d.network || "mainnet"}</span>` +
+    ` &nbsp;·&nbsp; ${d.catalog_size} apps in catalog`;
+
+  el("refresh-info").textContent = "Updated " + new Date().toLocaleTimeString();
+}
+
+async function load() {
+  try {
+    const r = await fetch("/api/upvote-dashboard");
+    const d = await r.json();
+    render(d);
+  } catch (e) {
+    el("meta-line").textContent = "Error loading data: " + e.message;
+  }
+}
+
+async function triggerNow() {
+  const btn = el("btn-now");
+  btn.disabled = true;
+  btn.textContent = "Running…";
+  try {
+    const r = await fetch("/api/upvote-trigger", { method: "POST" });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    msg(`✓ Upvoted ${d.app_name} — tx: ${d.tx_hash?.slice(0,18)}…`, "ok");
+    setTimeout(load, 1500);
+  } catch(e) {
+    msg("Error: " + e.message, "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "▶ Run Now";
+  }
+}
+
+// Boot
+load();
+setInterval(load, 30000);          // auto-refresh every 30s
+setInterval(updateCountdown, 1000); // countdown ticks every second
+</script>
+</body>
+</html>
