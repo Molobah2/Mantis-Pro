@@ -12,7 +12,7 @@ app.use(express.json({ limit: "64kb" }));
 const UPVOTE_CONTRACT = "0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a" as `0x${string}`;
 const UPVOTE_ABI = [
   {
-    name: "upvote",
+    name: "voteForApp",
     type: "function",
     stateMutability: "nonpayable",
     inputs:  [{ name: "appId", type: "uint256" }],
@@ -67,7 +67,7 @@ app.post("/upvote", async (req, res) => {
     const txHash = await (sessionClient as any).writeContract({
       address:      UPVOTE_CONTRACT,
       abi:          UPVOTE_ABI,
-      functionName: "upvote",
+      functionName: "voteForApp",
       args:         [BigInt(appId)],
       chain,
       account:      agwAddress as `0x${string}`,
@@ -148,7 +148,7 @@ app.post("/create-session", async (req, res) => {
   }
 });
 
-// POST /direct-upvote — call upvote(uint256) directly from an EOA, no AGW session needed
+// POST /direct-upvote — call voteForApp(uint256) directly from an EOA, no AGW session needed
 app.post("/direct-upvote", async (req, res) => {
   const { ownerPrivKey, appId, network } = req.body as {
     ownerPrivKey: string;
@@ -171,7 +171,7 @@ app.post("/direct-upvote", async (req, res) => {
     const txHash = await (walletClient as any).writeContract({
       address:      UPVOTE_CONTRACT,
       abi:          UPVOTE_ABI,
-      functionName: "upvote",
+      functionName: "voteForApp",
       args:         [BigInt(appId)],
     });
     return res.json({ txHash });
