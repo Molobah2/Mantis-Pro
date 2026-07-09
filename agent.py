@@ -1752,18 +1752,31 @@ from portal_upvote import node_client as _upvote_node
 from portal_upvote import catalog as _upvote_catalog
 from portal_upvote import store as _upvote_store
 from portal_upvote import selector as _upvote_selector
+from portal_upvote import security as _sec
 from portal_upvote.config import SESSION_FILE, AGW_ADDRESS, NETWORK
+
+# Hard cap on request body size for all upvote API endpoints (256 KB)
+app.config.setdefault("MAX_CONTENT_LENGTH", 256 * 1024)
+
+# Security headers on every response
+app.after_request(_sec.security_headers)
 
 @app.route("/portal-upvote")
 def portal_upvote_page():
-    import os
+    import json as _json
     path = os.path.join(os.path.dirname(__file__), "portal_upvote.html")
     with open(path, "r", encoding="utf-8") as f:
         html = f.read()
+    # Inject ADMIN_SECRET as a JS global so the owner page can sign its requests.
+    # Never exposed to the public — this page is the admin management UI.
+    admin_key = os.getenv("ADMIN_SECRET", "")
+    injection = f'<script>window.__ADMIN_KEY__={_json.dumps(admin_key)};</script>'
+    html = html.replace("</head>", injection + "\n</head>", 1)
     from flask import Response
     return Response(html, mimetype="text/html")
 
 @app.route("/portal-upvote/store-session", methods=["POST"])
+@_sec.require_admin
 def portal_upvote_store_session():
     from flask import request as freq
     from Crypto.Cipher import AES
@@ -1774,14 +1787,18 @@ def portal_upvote_store_session():
     if len(enc_key_hex) != 64:
         return jsonify({"error": "SESSION_KEY_ENCRYPTION_KEY not set or invalid in env"}), 503
 
-    body = freq.get_json(force=True) or {}
+    body = freq.get_json(force=True, silent=True) or {}
     priv_key      = body.get("sessionPrivKey", "")
     session_cfg   = body.get("sessionConfig",  "")
     agw_addr      = body.get("agwAddress",     AGW_ADDRESS)
     expires_at    = body.get("expiresAt",      0)
 
-    if not priv_key or not session_cfg:
-        return jsonify({"error": "Missing sessionPrivKey or sessionConfig"}), 400
+    err = _sec.validate_session_input({
+        "sessionPrivKey": priv_key, "agwAddress": agw_addr,
+        "sessionConfig": session_cfg, "expiresAt": expires_at,
+    })
+    if err:
+        return jsonify({"error": err}), 400
 
     key    = bytes.fromhex(enc_key_hex)
     nonce  = get_random_bytes(16)
@@ -1815,6 +1832,7 @@ def portal_upvote_store_session():
                     "session_b64": session_b64})
 
 @app.route("/portal-upvote/server-authorize", methods=["POST"])
+@_sec.require_admin
 def portal_upvote_server_authorize():
     """Create AGW session server-side using OWNER_PRIVATE_KEY env var."""
     import requests as _r
@@ -1863,6 +1881,7 @@ def portal_upvote_server_authorize():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/portal-upvote/direct-upvote", methods=["POST"])
+@_sec.require_admin
 def portal_upvote_direct():
     """Send upvote(appId) directly from OWNER_PRIVATE_KEY — no AGW session needed."""
     import requests as _r
@@ -1890,6 +1909,7 @@ def portal_upvote_direct():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/portal-upvote/revoke-session", methods=["POST"])
+@_sec.require_admin
 def portal_upvote_revoke():
     try:
         if os.path.exists(SESSION_FILE):
@@ -1943,7 +1963,12 @@ def upvote_status():
     return resp
 
 @app.route("/api/upvote-trigger", methods=["POST"])
+@_sec.require_admin
 def upvote_trigger():
+    from flask import request as freq
+    ip = _sec.get_client_ip(freq)
+    if not _sec.rate_limit(ip, "trigger", limit=5, window=3600):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
     try:
         apps = _upvote_store.get_apps()
         if not apps:
@@ -1965,15 +1990,22 @@ def upvote_trigger():
                 raise
         return jsonify({"error": "All candidate apps reverted — may have already voted today"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"[upvote] trigger error: {e}")
+        return jsonify({"error": "Trigger failed"}), 500
 
 @app.route("/api/upvote-refresh-catalog", methods=["POST"])
+@_sec.require_admin
 def upvote_refresh_catalog():
+    from flask import request as freq
+    ip = _sec.get_client_ip(freq)
+    if not _sec.rate_limit(ip, "catalog", limit=3, window=300):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
     try:
         apps = _upvote_catalog.get_catalog(force_refresh=True)
         return jsonify({"ok": True, "count": len(apps)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"[catalog] refresh error: {e}")
+        return jsonify({"error": "Catalog refresh failed"}), 500
 
 @app.route("/api/wc-config")
 def wc_config():
@@ -2003,18 +2035,27 @@ def portal_upvote_register_session():
     from Crypto.Random import get_random_bytes
     import json as _json
 
+    # Rate limit: 5 registrations per IP per 10 minutes
+    ip = _sec.get_client_ip(freq)
+    if not _sec.rate_limit(ip, "register", limit=5, window=600):
+        return jsonify({"error": "Too many registration attempts — please wait and try again"}), 429
+
     enc_key_hex = os.environ.get("SESSION_KEY_ENCRYPTION_KEY", "")
     if len(enc_key_hex) != 64:
         return jsonify({"error": "Service temporarily unavailable — please try again later"}), 503
 
-    body          = freq.get_json(force=True) or {}
+    body          = freq.get_json(force=True, silent=True) or {}
     priv_key      = body.get("sessionPrivKey", "")
     session_cfg   = body.get("sessionConfig",  "")
     agw_addr      = body.get("agwAddress",     "")
     expires_at    = body.get("expiresAt",       0)
 
-    if not priv_key or not session_cfg or not agw_addr:
-        return jsonify({"error": "Missing required fields"}), 400
+    err = _sec.validate_session_input({
+        "sessionPrivKey": priv_key, "agwAddress": agw_addr,
+        "sessionConfig": session_cfg, "expiresAt": expires_at,
+    })
+    if err:
+        return jsonify({"error": err}), 400
 
     key    = bytes.fromhex(enc_key_hex)
     nonce  = get_random_bytes(16)
@@ -2025,7 +2066,8 @@ def portal_upvote_register_session():
     try:
         _upvote_store.upsert_user(agw_addr, encrypted, str(session_cfg), expires_at)
     except Exception as e:
-        return jsonify({"error": f"Could not save session: {e}"}), 500
+        print(f"[register] upsert_user error: {e}")
+        return jsonify({"error": "Could not save session — please try again"}), 500
 
     user_count = _upvote_store.get_user_count()
     return jsonify({"ok": True, "agw_address": agw_addr, "expires_at": expires_at,
@@ -2631,6 +2673,7 @@ threading.Thread(target=_startup_session_restore, daemon=True).start()
 
 
 @app.route("/portal-upvote/export-session")
+@_sec.require_admin
 def portal_upvote_export_session():
     """Return the current session file as base64 so it can be set as UPVOTE_SESSION_B64 in Railway."""
     import json as _json

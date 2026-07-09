@@ -252,6 +252,15 @@
 
 <script type="module">
 // ── helpers ──────────────────────────────────────────────────────────
+const _AK = window.__ADMIN_KEY__ || "";
+function adminHeaders(extra) {
+  return Object.assign({ "Content-Type": "application/json", "X-Admin-Key": _AK }, extra || {});
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
 function msg(text, type = "info") {
   const el = document.getElementById("status-msg");
   el.textContent = text;
@@ -276,10 +285,12 @@ function shortAddr(a) {
 }
 function txLink(hash, network) {
   if (!hash) return "—";
+  // Validate tx hash format before using in href
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) return esc(hash.slice(0,10)) + "…";
   const base = network === "testnet"
     ? "https://explorer.testnet.abs.xyz/tx/"
     : "https://abscan.org/tx/";
-  return `<a href="${base}${hash}" target="_blank">${hash.slice(0,10)}…</a>`;
+  return `<a href="${base}${esc(hash)}" target="_blank" rel="noopener noreferrer">${esc(hash.slice(0,10))}…</a>`;
 }
 
 // ── load status ───────────────────────────────────────────────────────
@@ -356,9 +367,9 @@ function renderStatus(d) {
     tbody.innerHTML = d.history.map(h => `
       <tr>
         <td>${h.upvoted_at ? fmtTs(h.upvoted_at) : "—"}</td>
-        <td>${h.app_name || "App #" + h.app_id}</td>
+        <td>${esc(h.app_name || "App #" + h.app_id)}</td>
         <td class="mono">${txLink(h.tx_hash, network)}</td>
-        <td><span class="badge ${h.status === "success" ? "badge-green" : "badge-red"}">${h.status}</span></td>
+        <td><span class="badge ${h.status === "success" ? "badge-green" : "badge-red"}">${esc(h.status)}</span></td>
       </tr>`).join("");
   }
 }
@@ -374,7 +385,7 @@ window._onSessionCreated  = async (sessionPrivKey, sessionConfigJson, agwAddress
   try {
     const storeResp = await fetch("/portal-upvote/store-session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: adminHeaders(),
       body: JSON.stringify({ sessionPrivKey, sessionConfig: sessionConfigJson, agwAddress, expiresAt }),
     });
     if (!storeResp.ok) {
@@ -549,7 +560,7 @@ async function triggerNow() {
   btn.disabled = true;
   clearMsg();
   try {
-    const r = await fetch("/api/upvote-trigger", { method: "POST" });
+    const r = await fetch("/api/upvote-trigger", { method: "POST", headers: adminHeaders() });
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     msg(`Upvote triggered: ${d.app_name} → tx: ${d.tx_hash?.slice(0, 16)}…`, "ok");
@@ -567,7 +578,7 @@ async function refreshCatalog() {
   btn.disabled = true;
   clearMsg();
   try {
-    const r = await fetch("/api/upvote-refresh-catalog", { method: "POST" });
+    const r = await fetch("/api/upvote-refresh-catalog", { method: "POST", headers: adminHeaders() });
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     msg(`Catalog refreshed: ${d.count} apps found.`, "ok");
@@ -584,7 +595,7 @@ async function revokeSession() {
   if (!confirm("Revoke the session key? Daily upvotes will stop until you re-authorize.")) return;
   clearMsg();
   try {
-    const r = await fetch("/portal-upvote/revoke-session", { method: "POST" });
+    const r = await fetch("/portal-upvote/revoke-session", { method: "POST", headers: adminHeaders() });
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     msg("Session revoked. Re-authorize to resume upvotes.", "info");

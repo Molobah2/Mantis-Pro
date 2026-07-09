@@ -706,6 +706,10 @@ requestAnimationFrame(()=>{
 /* UTILS */
 const $=id=>document.getElementById(id);
 const ABSCAN='https://abscan.org/tx/';
+const _TX_RE=/^0x[0-9a-fA-F]{64}$/;
+const _APP_ID_RE=/^\d+$/;
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
 function fmtTime(ts){return!ts?'—':new Date(ts*1000).toLocaleTimeString('en-US',{timeZone:'UTC',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}
 function fmtDate(ts){return!ts?'—':new Date(ts*1000).toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric'})}
@@ -715,9 +719,22 @@ function fmtDT(ts){
   return d.toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric'})+' · '+d.toLocaleTimeString('en-US',{timeZone:'UTC',hour:'2-digit',minute:'2-digit',hour12:false});
 }
 function shortTx(h){return h?h.slice(0,10)+'…'+h.slice(-6):'—'}
-function txA(h){return h?`<a href="${ABSCAN}${h}" target="_blank" class="hash" title="${h}">${shortTx(h)}</a>`:'<span style="color:var(--t3)">—</span>'}
-function appA(id,name){const l=name||`App #${id}`;return id?`<a href="https://abs.xyz/apps/${id}" target="_blank" style="color:var(--t0)">${l}</a>`:l}
-function statusCell(s){return s==='success'?'<span class="st-ok">Confirmed</span>':`<span class="st-err">${s==='reverted'?'Reverted':'Failed'}</span>`}
+function txA(h){
+  if(!h)return'<span style="color:var(--t3)">—</span>';
+  if(!_TX_RE.test(h))return esc(h.slice(0,16));  // invalid format — render as text only
+  const safe=esc(h);
+  return`<a href="${ABSCAN}${safe}" target="_blank" rel="noopener noreferrer" class="hash" title="${safe}">${esc(shortTx(h))}</a>`;
+}
+function appA(id,name){
+  const label=esc(name||`App #${id}`);
+  if(!id||!_APP_ID_RE.test(String(id)))return label;
+  return`<a href="https://abs.xyz/apps/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer" style="color:var(--t0)">${label}</a>`;
+}
+function statusCell(s){
+  if(s==='success')return'<span class="st-ok">Confirmed</span>';
+  if(s==='reverted')return'<span class="st-err">Reverted</span>';
+  return'<span class="st-err">Failed</span>';
+}
 function copyVal(el){navigator.clipboard.writeText(el.title||el.textContent).then(()=>toast('Copied','ok'))}
 
 let _tt;
