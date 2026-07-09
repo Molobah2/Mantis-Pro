@@ -172,7 +172,7 @@ a{color:inherit;text-decoration:none}
         </button>
         <div id="progress-area"></div>
         <div id="wallet-hint" style="font-size:11.5px;color:var(--t3);text-align:center;min-height:16px"></div>
-        <p class="wc-fallback">On mobile? <a id="btn-wc-fallback" style="cursor:pointer">Use WalletConnect instead</a></p>
+        <p class="wc-note" style="font-size:11px;color:var(--t3);text-align:center">Works with your Abstract wallet app on iOS &amp; Android</p>
       </div>
     </div>
   </div>
@@ -294,7 +294,7 @@ async function _showHint(){
   if(!hint)return;
   const detected=await _discoverProvider();
   if(!detected){
-    hint.innerHTML='No wallet extension detected — <a href="https://abs.xyz/wallet" target="_blank" style="color:var(--t2);text-decoration:underline">install Abstract Wallet</a>';
+    hint.textContent='Opens Abstract wallet via QR — works on iOS & Android';
     return;
   }
   try{
@@ -317,14 +317,16 @@ async function storeSession(sessionPrivKey,sessionConfigJson,agwAddress,expiresA
   return data;
 }
 
-// ── main EIP-6963 connect flow (mirrors owner page exactly) ──────────
+// ── main connect flow — extension if available, WalletConnect otherwise ──
 window.startConnect=async function(){
   lock();hideBanner();setProgress('Detecting wallet…');
   const detected=await _discoverProvider();
   if(!detected){
-    setProgress('');
-    showBanner('No wallet extension found — install Abstract Wallet or use WalletConnect below.','err');
-    unlock();return;
+    // Abstract Global Wallet is mobile-first — no browser extension.
+    // Fall through to WalletConnect so the Abstract app can connect.
+    unlock();
+    window.startWalletConnect();
+    return;
   }
   const {provider}=detected;
   try{
@@ -466,8 +468,6 @@ window.startWalletConnect=async function(){
 // ── init ──────────────────────────────────────────────────────────────
 // Wire clicks from inside the module — inline onclick can't reach module scope
 document.getElementById('btn-connect-agw').addEventListener('click', startConnect);
-const wcLink=document.getElementById('btn-wc-fallback');
-if(wcLink) wcLink.addEventListener('click', startWalletConnect);
 
 _showHint();
 requestAnimationFrame(()=>{
