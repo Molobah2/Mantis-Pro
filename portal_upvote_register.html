@@ -166,13 +166,11 @@ a{color:inherit;text-decoration:none}
       <div id="status-banner"></div>
 
       <div id="wallet-section">
-        <button class="btn-connect" id="btn-connect-agw">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Connect Abstract Global Wallet
-        </button>
+        <div id="agw-root" style="min-height:56px;display:flex;align-items:center;width:100%">
+          <p style="color:var(--t3);font-size:12px;width:100%;text-align:center">Loading wallet connector…</p>
+        </div>
         <div id="progress-area"></div>
-        <div id="wallet-hint" style="font-size:11.5px;color:var(--t3);text-align:center;min-height:16px"></div>
-        <p class="wc-note" style="font-size:11px;color:var(--t3);text-align:center">Works with your Abstract wallet app on iOS &amp; Android</p>
+        <p style="font-size:11px;color:var(--t3);text-align:center;line-height:1.5">No seed phrase required. Connects via your Abstract account.</p>
       </div>
     </div>
   </div>
@@ -232,8 +230,7 @@ a{color:inherit;text-decoration:none}
 </script>
 
 <!-- MAIN LOGIC -->
-<script type="module">
-// ── utilities ─────────────────────────────────────────────────────────
+<script>
 function setProgress(txt){
   const el=document.getElementById('progress-area');
   el.innerHTML=txt?`<span class="spinner"></span>${txt}`:'';
@@ -243,9 +240,6 @@ function showBanner(msg,type='ok'){
   el.textContent=msg;el.className=type;el.style.display='block';
 }
 function hideBanner(){document.getElementById('status-banner').style.display='none';}
-function lock(){document.getElementById('btn-connect-agw').disabled=true;}
-function unlock(){document.getElementById('btn-connect-agw').disabled=false;}
-function shortAddr(a){return a?a.slice(0,8)+'…'+a.slice(-6):'—';}
 
 function showSuccess(agwAddr){
   document.getElementById('register-card').style.display='none';
@@ -258,53 +252,6 @@ function showSuccess(agwAddr){
   sc.scrollIntoView({behavior:'smooth',block:'center'});
 }
 
-// ── EIP-6963 + legacy wallet discovery (same as owner page — proven working) ──
-async function _discoverProvider(){
-  const eip6963=[];
-  const handler=(e)=>{if(e.detail?.provider)eip6963.push(e.detail);};
-  window.addEventListener('eip6963:announceProvider',handler);
-  window.dispatchEvent(new Event('eip6963:requestProvider'));
-  await new Promise(r=>setTimeout(r,200));
-  window.removeEventListener('eip6963:announceProvider',handler);
-
-  if(eip6963.length>0){
-    const abs=eip6963.find(p=>
-      (p.info?.rdns||'').toLowerCase().includes('abstract')||
-      (p.info?.name||'').toLowerCase().includes('abstract')||
-      p.provider?.isAbstract
-    );
-    const best=abs||eip6963[0];
-    return {provider:best.provider,name:best.info?.name||'Wallet'};
-  }
-
-  if(window.ethereum){
-    const candidates=window.ethereum.providers||[window.ethereum];
-    const abs=candidates.find(p=>p.isAbstract);
-    const meta=candidates.find(p=>p.isMetaMask);
-    const best=abs||meta||candidates[0];
-    const name=best.isAbstract?'Abstract Wallet':best.isMetaMask?'MetaMask':best.isCoinbaseWallet?'Coinbase Wallet':'Browser Wallet';
-    return {provider:best,name};
-  }
-  return null;
-}
-
-// ── show hint under button ────────────────────────────────────────────
-async function _showHint(){
-  const hint=document.getElementById('wallet-hint');
-  if(!hint)return;
-  const detected=await _discoverProvider();
-  if(!detected){
-    hint.textContent='Opens Abstract wallet via QR — works on iOS & Android';
-    return;
-  }
-  try{
-    const accts=await detected.provider.request({method:'eth_accounts'});
-    if(accts&&accts[0]){hint.textContent=`${detected.name}: ${shortAddr(accts[0])}`;return;}
-  }catch(_){}
-  hint.textContent=`Ready to connect with: ${detected.name}`;
-}
-
-// ── save session to server ────────────────────────────────────────────
 async function storeSession(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt){
   setProgress('Saving your session…');
   const r=await fetch('/portal-upvote/register-session',{
@@ -317,164 +264,33 @@ async function storeSession(sessionPrivKey,sessionConfigJson,agwAddress,expiresA
   return data;
 }
 
-// ── main connect flow — extension if available, WalletConnect otherwise ──
-window.startConnect=async function(){
-  lock();hideBanner();setProgress('Detecting wallet…');
-  const detected=await _discoverProvider();
-  if(!detected){
-    // Abstract Global Wallet is mobile-first — no browser extension.
-    // Fall through to WalletConnect so the Abstract app can connect.
-    unlock();
-    window.startWalletConnect();
-    return;
-  }
-  const {provider}=detected;
+// Callbacks the AGW bundle calls after session creation
+window._onSessionCreated=async function(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt){
   try{
-    setProgress('Requesting wallet accounts…');
-    await provider.request({method:'eth_requestAccounts'});
-
-    setProgress('Switching to Abstract chain…');
-    try{
-      await provider.request({method:'wallet_switchEthereumChain',params:[{chainId:'0xAB5'}]});
-    }catch(sw){
-      if(sw.code===4902){
-        await provider.request({method:'wallet_addEthereumChain',params:[{
-          chainId:'0xAB5',chainName:'Abstract',
-          nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},
-          rpcUrls:['https://api.mainnet.abs.xyz'],
-          blockExplorerUrls:['https://abscan.org'],
-        }]});
-      }
-    }
-
-    setProgress('Loading AGW library…');
-    const {createAbstractClient}=await import('https://esm.sh/@abstract-foundation/agw-client');
-    const {LimitType}=await import('https://esm.sh/@abstract-foundation/agw-client/sessions');
-    const {generatePrivateKey,privateKeyToAccount}=await import('https://esm.sh/viem/accounts');
-    const {abstract:absMainnet}=await import('https://esm.sh/viem/chains');
-    const {createWalletClient,custom,http}=await import('https://esm.sh/viem');
-
-    setProgress('Connecting wallet client…');
-    const walletClient=createWalletClient({chain:absMainnet,transport:custom(provider)});
-    const [signerAddress]=await walletClient.getAddresses();
-
-    setProgress(`Creating AGW client for ${shortAddr(signerAddress)}…`);
-    const abstractClient=await createAbstractClient({
-      signer:walletClient,
-      chain:absMainnet,
-      transport:http('https://api.mainnet.abs.xyz'),
-    });
-    const agwAddress=abstractClient.account.address;
-
-    setProgress('Generating session key…');
-    const sessionPrivKey=generatePrivateKey();
-    const sessionAccount=privateKeyToAccount(sessionPrivKey);
-    const expiresAt=BigInt(Math.floor(Date.now()/1000)+30*24*3600);
-
-    setProgress('Approve the session key in your wallet…');
-    const {session}=await abstractClient.createSession({
-      session:{
-        signer:sessionAccount.address,expiresAt,
-        feeLimit:{limitType:LimitType.Lifetime,limit:BigInt('500000000000000'),period:0n},
-        callPolicies:[{
-          target:'0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a',
-          selector:'0x7060a227',
-          maxValuePerUse:0n,
-          valueLimit:{limitType:LimitType.Unlimited,limit:0n,period:0n},
-          constraints:[],
-        }],
-        transferPolicies:[],
-      },
-    });
-
-    const sessionConfigJson=JSON.stringify(session,(_k,v)=>typeof v==='bigint'?v.toString():v);
-    await storeSession(sessionPrivKey,sessionConfigJson,agwAddress,Number(expiresAt));
+    await storeSession(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt);
     setProgress('');
     showSuccess(agwAddress);
   }catch(e){
     setProgress('');
-    let m=e.message||String(e);
-    if(/rejected|cancel|dismiss/i.test(m))m='Connection cancelled. Try again when ready.';
-    else if(/Failed to fetch|network/i.test(m))m='Network error — check your connection and try again.';
-    showBanner(m,'err');
-    unlock();
+    showBanner(e.message||String(e),'err');
   }
 };
-
-// ── WalletConnect fallback (for mobile users) ─────────────────────────
-window.startWalletConnect=async function(){
-  lock();hideBanner();setProgress('Fetching WalletConnect config…');
-  try{
-    const cfg=await fetch('/api/wc-config').then(r=>r.json());
-    if(!cfg.projectId)throw new Error('WC_PROJECT_ID not set — contact site owner');
-    setProgress('Loading WalletConnect SDK…');
-    const {EthereumProvider}=await import('https://esm.sh/@walletconnect/ethereum-provider@2');
-    setProgress('Scan the QR code with your Abstract wallet…');
-    const wcProvider=await EthereumProvider.init({
-      projectId:cfg.projectId,chains:[2741],optionalChains:[1],showQrModal:true,
-      rpcMap:{2741:'https://api.mainnet.abs.xyz'},
-      metadata:{name:'Mantis Pro',description:'Portal Auto-Upvote',url:window.location.origin,icons:[]},
-    });
-    await wcProvider.connect();
-    const accounts=await wcProvider.request({method:'eth_accounts'});
-    if(!accounts?.[0])throw new Error('No account returned');
-
-    // Re-use the same AGW flow with the WC provider
-    setProgress('Loading AGW library…');
-    const {createAbstractClient}=await import('https://esm.sh/@abstract-foundation/agw-client');
-    const {LimitType}=await import('https://esm.sh/@abstract-foundation/agw-client/sessions');
-    const {generatePrivateKey,privateKeyToAccount}=await import('https://esm.sh/viem/accounts');
-    const {abstract:absMainnet}=await import('https://esm.sh/viem/chains');
-    const {createWalletClient,custom,http}=await import('https://esm.sh/viem');
-
-    const walletClient=createWalletClient({chain:absMainnet,transport:custom(wcProvider)});
-    setProgress(`Creating AGW client for ${shortAddr(accounts[0])}…`);
-    const abstractClient=await createAbstractClient({
-      signer:walletClient,chain:absMainnet,
-      transport:http('https://api.mainnet.abs.xyz'),
-    });
-    const agwAddress=abstractClient.account.address;
-
-    const sessionPrivKey=generatePrivateKey();
-    const sessionAccount=privateKeyToAccount(sessionPrivKey);
-    const expiresAt=BigInt(Math.floor(Date.now()/1000)+30*24*3600);
-
-    setProgress('Approve the session key in your wallet app…');
-    const {session}=await abstractClient.createSession({
-      session:{
-        signer:sessionAccount.address,expiresAt,
-        feeLimit:{limitType:LimitType.Lifetime,limit:BigInt('500000000000000'),period:0n},
-        callPolicies:[{
-          target:'0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a',
-          selector:'0x7060a227',
-          maxValuePerUse:0n,
-          valueLimit:{limitType:LimitType.Unlimited,limit:0n,period:0n},
-          constraints:[],
-        }],
-        transferPolicies:[],
-      },
-    });
-    const sessionConfigJson=JSON.stringify(session,(_k,v)=>typeof v==='bigint'?v.toString():v);
-    await storeSession(sessionPrivKey,sessionConfigJson,agwAddress,Number(expiresAt));
-    setProgress('');showSuccess(agwAddress);
-  }catch(e){
-    setProgress('');
-    let m=e.message||String(e);
-    if(/rejected|cancel/i.test(m))m='Cancelled. Try again when ready.';
-    showBanner(m,'err');unlock();
-  }
+window._onSessionProgress=function(txt){setProgress(txt);};
+window._agwConnectError=function(msg){
+  setProgress('');
+  let m=msg||'Unknown error';
+  if(/rejected|cancel|dismiss/i.test(m))m='Connection cancelled. Try again when ready.';
+  showBanner(m,'err');
 };
 
-// ── init ──────────────────────────────────────────────────────────────
-// Wire clicks from inside the module — inline onclick can't reach module scope
-document.getElementById('btn-connect-agw').addEventListener('click', startConnect);
-
-_showHint();
 requestAnimationFrame(()=>{
   document.querySelectorAll('.fade').forEach((el,i)=>
     setTimeout(()=>el.classList.add('in'),i*80+60)
   );
 });
 </script>
+
+<!-- AGW React bundle — renders the Connect button into #agw-root -->
+<script src="/portal-upvote/connect.bundle.js"></script>
 </body>
 </html>
