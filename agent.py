@@ -1939,14 +1939,25 @@ def upvote_status():
 @app.route("/api/upvote-trigger", methods=["POST"])
 def upvote_trigger():
     try:
-        app_ = _upvote_selector.pick_next_app()
-        if app_ is None:
+        apps = _upvote_store.get_apps()
+        if not apps:
             return jsonify({"error": "Catalog empty — refresh catalog first"}), 400
-        result = _upvote_node.call_upvote(app_["id"])
-        tx_hash = result.get("txHash", "")
-        _upvote_store.record_upvote(app_["id"], tx_hash, "success")
-        return jsonify({"ok": True, "app_name": app_["name"], "app_id": app_["id"],
-                        "tx_hash": tx_hash})
+        last = _upvote_store.get_last_upvoted_per_app()
+        sorted_apps = sorted(apps, key=lambda a: last.get(a["id"], 0.0))
+        for app_ in sorted_apps[:10]:
+            try:
+                result  = _upvote_node.call_upvote(app_["id"])
+                tx_hash = result.get("txHash", "")
+                _upvote_store.record_upvote(app_["id"], tx_hash, "success")
+                return jsonify({"ok": True, "app_name": app_["name"], "app_id": app_["id"],
+                                "tx_hash": tx_hash})
+            except Exception as inner:
+                err = str(inner)
+                if "revert" in err.lower() or "0xda1a7ce4" in err:
+                    _upvote_store.record_upvote(app_["id"], "", "reverted")
+                    continue
+                raise
+        return jsonify({"error": "All candidate apps reverted — may have already voted today"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
