@@ -3,7 +3,8 @@ import os
 import time
 import threading
 
-_DB   = os.path.join(os.path.dirname(os.path.dirname(__file__)), "portal_upvote.db")
+_DATA_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.dirname(__file__)))
+_DB       = os.path.join(_DATA_DIR, "portal_upvote.db")
 _lock = threading.Lock()
 
 
