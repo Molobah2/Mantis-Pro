@@ -2027,6 +2027,37 @@ def portal_upvote_register():
         return f.read(), 200, {"Content-Type": "text/html"}
 
 
+@app.route("/portal-upvote/my-votes")
+def portal_upvote_myvotes():
+    path = os.path.join(os.path.dirname(__file__), "portal_upvote_myvotes.html")
+    with open(path, "r") as f:
+        return f.read(), 200, {"Content-Type": "text/html"}
+
+
+@app.route("/api/upvote-user-votes")
+def upvote_user_votes():
+    """Per-user vote history and stats. ?address=0x…"""
+    from flask import request as freq
+    import time as _time
+
+    address = freq.args.get("address", "").strip()
+    if not _sec.ETH_ADDR_RE.match(address):
+        return jsonify({"error": "Invalid address format"}), 400
+
+    now = _time.time()
+    user = _upvote_store.get_user(address)
+    votes = _upvote_store.get_upvote_log_since(0, limit=200, user_address=address)
+    stats = _upvote_store.get_stats(user_address=address)
+
+    return jsonify({
+        "address":    address.lower(),
+        "registered": user is not None,
+        "expires_at": user["expires_at"] if user else None,
+        "stats":      stats,
+        "votes":      votes,
+    })
+
+
 @app.route("/portal-upvote/register-session", methods=["POST"])
 def portal_upvote_register_session():
     """Store a new user's AGW session in the users DB table (no SESSION_FILE, no Railway step)."""

@@ -189,9 +189,9 @@ a{color:inherit;text-decoration:none}
       <p class="success-sub">Your wallet will automatically cast one upvote every day at 09:00 UTC. No further action needed.</p>
       <div class="address-pill" id="success-addr">—</div>
       <div class="next-vote">Next vote: tomorrow at 09:00 UTC</div>
-      <a href="/portal-upvote/dashboard" class="btn-primary">
+      <a href="/portal-upvote/my-votes" id="my-votes-link" class="btn-primary">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        View dashboard
+        View my votes
       </a>
     </div>
   </div>
@@ -252,8 +252,14 @@ function showSuccess(agwAddr){
   document.getElementById('register-card').style.display='none';
   const sc=document.getElementById('success-card');
   document.getElementById('success-addr').textContent=agwAddr;
-  sc.style.display='';
+  // Must set 'block' explicitly — sc.style.display='' would let the CSS
+  // `#success-card{display:none}` rule win and keep the card hidden.
+  sc.style.display='block';
+  // Update "view my votes" link with the connected wallet address
+  const link=document.getElementById('my-votes-link');
+  if(link) link.href='/portal-upvote/my-votes?address='+encodeURIComponent(agwAddr);
   requestAnimationFrame(()=>sc.classList.add('in'));
+  sc.scrollIntoView({behavior:'smooth',block:'center'});
 }
 
 async function storeSession(sessionPrivKey, sessionConfigJson, agwAddress, expiresAt){

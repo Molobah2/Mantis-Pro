@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Votes — Mantis Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0d11;--surface:rgba(26,26,32,0.72);--border:rgba(255,255,255,0.09);
+  --t0:#f0f0f4;--t1:rgba(240,240,244,0.58);--t2:rgba(240,240,244,0.32);--t3:rgba(240,240,244,0.16);
+  --ok:rgba(208,208,228,0.90);--err:rgba(248,113,113,0.88);--r:22px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t0);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;}
+a{color:inherit;text-decoration:none}
+
+/* ENVIRONMENT */
+.orb{position:fixed;border-radius:50%;pointer-events:none;z-index:0}
+.orb-1{width:900px;height:800px;background:radial-gradient(ellipse,rgba(190,192,222,0.15) 0%,transparent 65%);filter:blur(80px);top:-220px;left:-300px;animation:od1 55s ease-in-out infinite}
+.orb-2{width:700px;height:700px;background:radial-gradient(ellipse,rgba(200,198,230,0.12) 0%,transparent 65%);filter:blur(100px);bottom:-200px;right:-200px;animation:od2 68s ease-in-out infinite}
+@keyframes od1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,80px) scale(1.06)}}
+@keyframes od2{0%,100%{transform:translate(0,0)}50%{transform:translate(-60px,-60px) scale(1.08)}}
+#bubble-canvas{position:fixed;inset:0;z-index:1;pointer-events:none}
+.vignette{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at 50% 20%,transparent 25%,rgba(0,0,0,0.45) 100%)}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:200;padding:18px 34px;display:flex;align-items:center;justify-content:space-between}
+.logo-mark{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-size:14px;font-weight:600;color:rgba(240,240,244,0.78);background:rgba(255,255,255,0.06);box-shadow:inset 0 1px 0 rgba(255,255,255,0.16)}
+.pill-nav{display:flex;background:rgba(12,12,16,0.88);border:1px solid rgba(255,255,255,0.11);border-radius:100px;padding:4px;gap:2px;backdrop-filter:blur(48px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.15),0 8px 28px rgba(0,0,0,0.40)}
+.pill-nav a{padding:7px 20px;border-radius:100px;font-size:12.5px;font-weight:400;color:var(--t2);transition:all 0.24s cubic-bezier(0.16,1,0.3,1);white-space:nowrap}
+.pill-nav a:hover{color:var(--t1)}
+.pill-nav a.active{background:rgba(255,255,255,0.10);color:var(--t0);box-shadow:inset 0 1px 0 rgba(255,255,255,0.16),0 2px 8px rgba(0,0,0,0.40)}
+
+/* PAGE */
+.page{position:relative;z-index:10;max-width:900px;margin:0 auto;padding:48px 24px 120px}
+
+/* GLASS CARD */
+.card{position:relative;background:var(--surface);backdrop-filter:blur(60px) saturate(1.5) brightness(1.06);-webkit-backdrop-filter:blur(60px) saturate(1.5) brightness(1.06);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:0 44px 100px -16px rgba(0,0,0,0.65),inset 0 1px 0 rgba(255,255,255,0.16)}
+.card::after{content:'';position:absolute;top:0;left:7%;right:7%;height:1px;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.22) 28%,rgba(255,255,255,0.28) 50%,rgba(255,255,255,0.22) 72%,transparent)}
+.card>*{position:relative;z-index:1}
+
+/* IDENTITY HEADER */
+.identity-card{padding:40px 48px;display:flex;align-items:center;gap:28px;margin-bottom:16px}
+.id-avatar{width:56px;height:56px;border-radius:16px;background:rgba(200,198,238,0.10);border:1px solid rgba(200,198,238,0.16);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;font-weight:250;color:var(--t1)}
+.id-info{flex:1;min-width:0}
+.id-address{font-family:'JetBrains Mono','Fira Code',monospace;font-size:13px;color:var(--t1);margin-bottom:6px;cursor:pointer;transition:color 0.15s}
+.id-address:hover{color:var(--t0)}
+.id-label{font-size:11px;color:var(--t3);letter-spacing:0.04em}
+.id-right{display:flex;gap:24px;text-align:right}
+.id-stat{display:flex;flex-direction:column;gap:4px}
+.id-stat-num{font-size:32px;font-weight:250;color:var(--t0);letter-spacing:-0.04em;font-variant-numeric:tabular-nums}
+.id-stat-lbl{font-size:10.5px;color:var(--t3)}
+.id-divider{width:1px;background:rgba(255,255,255,0.07);align-self:stretch}
+
+/* NOT FOUND */
+.not-found{padding:80px 48px;text-align:center}
+.nf-icon{font-size:32px;margin-bottom:16px;opacity:0.3}
+.nf-title{font-size:18px;font-weight:300;color:var(--t1);margin-bottom:8px}
+.nf-sub{font-size:12.5px;color:var(--t3);line-height:1.6}
+
+/* METRICS STRIP */
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.met-card{padding:24px 28px}
+.met-label{font-size:10.5px;color:var(--t3);font-weight:400;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:10px}
+.met-num{font-size:36px;font-weight:250;color:var(--t0);letter-spacing:-0.048em;font-variant-numeric:tabular-nums}
+
+/* STATUS BADGE */
+.badge-ok{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:100px;background:rgba(200,198,238,0.10);border:1px solid rgba(200,198,238,0.16);font-size:11px;color:var(--ok)}
+.badge-exp{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:100px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.18);font-size:11px;color:var(--err)}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* TABLE */
+.log-card{padding:28px 36px}
+.sh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px}
+.sh-title{font-size:13px;font-weight:440;color:var(--t1)}
+.sh-count{font-size:11.5px;color:var(--t3)}
+table{width:100%;border-collapse:collapse}
+thead th{padding:0 18px 12px 0;font-size:11px;font-weight:440;color:var(--t3);text-align:left;border-bottom:1px solid rgba(255,255,255,0.055)}
+thead th:last-child{padding-right:0}
+tbody td{padding:12px 18px 12px 0;font-size:12px;color:var(--t1);border-bottom:1px solid rgba(255,255,255,0.035);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:rgba(255,255,255,0.012)}
+td.mono{font-family:'JetBrains Mono','Fira Code',monospace;font-size:10.5px;color:var(--t2)}
+a.txlink{color:var(--t2);transition:color 0.15s}
+a.txlink:hover{color:var(--t0)}
+.st-ok{color:var(--ok);font-weight:440}
+.st-err{color:var(--err)}
+.empty-row td{text-align:center;padding:48px 0;color:var(--t3);font-size:12.5px;border-bottom:none}
+
+/* REGISTER CTA */
+.cta-card{padding:32px 40px;display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:16px}
+.cta-text{font-size:13px;color:var(--t2);line-height:1.6;max-width:420px}
+.cta-link{display:inline-flex;align-items:center;gap:8px;padding:11px 24px;border-radius:100px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.13);font-size:12.5px;color:var(--t0);font-weight:440;white-space:nowrap;transition:all 0.22s cubic-bezier(0.16,1,0.3,1);box-shadow:inset 0 1px 0 rgba(255,255,255,0.18)}
+.cta-link:hover{background:rgba(255,255,255,0.13);transform:scale(1.02) translateY(-1px)}
+
+/* ENTRANCE */
+.fade{opacity:0;transform:translateY(18px);transition:opacity 0.65s cubic-bezier(0.16,1,0.3,1),transform 0.65s cubic-bezier(0.16,1,0.3,1)}
+.fade.in{opacity:1;transform:translateY(0)}
+
+/* SKELETON */
+.skel{background:linear-gradient(90deg,rgba(255,255,255,0.04) 25%,rgba(255,255,255,0.08) 50%,rgba(255,255,255,0.04) 75%);background-size:200% 100%;animation:skel 1.4s ease infinite;border-radius:6px;height:14px}
+@keyframes skel{0%{background-position:200% 0}100%{background-position:-200% 0}}
+</style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<canvas id="bubble-canvas"></canvas>
+<div class="vignette"></div>
+
+<header>
+  <div class="logo-mark">M</div>
+  <nav class="pill-nav">
+    <a href="/">Home</a>
+    <a href="/portal-upvote/register">Register</a>
+    <a href="/portal-upvote/dashboard">All votes</a>
+    <a href="/portal-upvote/my-votes" class="active">My votes</a>
+  </nav>
+</header>
+
+<div class="page" id="page-root">
+
+  <!-- skeleton while loading -->
+  <div class="card fade in" id="loading-card" style="padding:48px 48px">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="skel" style="width:240px"></div>
+      <div class="skel" style="width:160px;height:10px;opacity:0.5"></div>
+    </div>
+  </div>
+
+  <!-- populated by JS -->
+
+</div>
+
+<script>
+/* BUBBLES — same as dashboard */
+(function(){
+  const cv=document.getElementById('bubble-canvas');const ctx=cv.getContext('2d');
+  let W,H,mx=-2000,my=-2000;
+  window.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY},{passive:true});
+  function resize(){const dpr=devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';ctx.scale(dpr,dpr);}
+  function mk(s){const r=50+Math.random()*120;return{x:Math.random()*W,y:s?Math.random()*H:H+r+100,vx:(Math.random()-.5)*.3,vy:-(0.15+Math.random()*0.3),r,baseAlpha:0.045+Math.random()*0.055,alpha:0,wobble:Math.random()*Math.PI*2,wobbleS:0.006+Math.random()*0.008,repVx:0,repVy:0};}
+  let bubbles=[];
+  function init(){resize();bubbles=Array.from({length:14},()=>mk(true));bubbles.forEach(b=>{b.alpha=b.baseAlpha*Math.random();});}
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    bubbles.forEach(b=>{
+      b.wobble+=b.wobbleS;b.repVx*=0.88;b.repVy*=0.88;
+      const dx=b.x-mx,dy=b.y-my,dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<200){const n=dist<1?1:dist,f=(200-dist)/200;b.repVx+=(dx/n)*f*4;b.repVy+=(dy/n)*f*4;}
+      b.x+=b.vx+Math.sin(b.wobble)*0.4+b.repVx;b.y+=b.vy+b.repVy;
+      b.alpha+=(b.baseAlpha-b.alpha)*0.04;
+      if(b.y<-b.r*2){b.x=Math.random()*W;b.y=H+b.r;b.repVx=0;b.repVy=0;b.alpha=0;}
+      if(b.x<-b.r)b.x=W+b.r;if(b.x>W+b.r)b.x=-b.r;
+      const a=Math.max(0,b.alpha);const g=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
+      g.addColorStop(0,`rgba(222,220,248,${a})`);g.addColorStop(0.5,`rgba(200,198,235,${a*.5})`);g.addColorStop(1,`rgba(180,178,220,0)`);
+      ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  init();requestAnimationFrame(draw);window.addEventListener('resize',init,{passive:true});
+})();
+
+/* MAIN */
+const ABSCAN='https://abscan.org/tx/';
+const TX_RE=/^0x[0-9a-fA-F]{64}$/;
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+function fmtDT(ts){
+  if(!ts)return'—';
+  const d=new Date(ts*1000);
+  return d.toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'})
+    +' · '+d.toLocaleTimeString('en-US',{timeZone:'UTC',hour:'2-digit',minute:'2-digit',hour12:false})+' UTC';
+}
+function fmtDate(ts){
+  return ts?new Date(ts*1000).toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'}):'—';
+}
+function txA(h){
+  if(!h)return'<span style="color:var(--t3)">—</span>';
+  if(!TX_RE.test(h))return esc(h.slice(0,16));
+  const safe=esc(h);
+  return`<a href="${ABSCAN}${safe}" target="_blank" rel="noopener noreferrer" class="txlink" title="${safe}">${esc(h.slice(0,10)+'…'+h.slice(-6))}</a>`;
+}
+function appName(r){return esc(r.app_name||`App #${r.app_id}`)}
+function statusCell(s){
+  if(s==='success')return'<span class="st-ok">Confirmed</span>';
+  if(s==='reverted')return'<span class="st-err">Reverted</span>';
+  return'<span class="st-err">Failed</span>';
+}
+
+function shortAddr(a){return a?a.slice(0,10)+'…'+a.slice(-6):'—'}
+
+function copyAddr(addr){
+  navigator.clipboard.writeText(addr).then(()=>{
+    const el=document.getElementById('addr-display');
+    if(el){const orig=el.textContent;el.textContent='Copied!';setTimeout(()=>el.textContent=orig,1500);}
+  });
+}
+
+async function load(){
+  const params=new URLSearchParams(location.search);
+  const address=params.get('address')||'';
+  const root=document.getElementById('page-root');
+
+  if(!address||!/^0x[0-9a-fA-F]{40}$/.test(address)){
+    root.innerHTML=`
+      <div class="card fade in not-found">
+        <div class="nf-icon">◎</div>
+        <div class="nf-title">No wallet address provided</div>
+        <div class="nf-sub">
+          Share your link as <code style="color:var(--t1)">/portal-upvote/my-votes?address=0x…</code><br>
+          or <a href="/portal-upvote/register" style="color:var(--t1)">register your wallet</a> to get started.
+        </div>
+      </div>`;
+    return;
+  }
+
+  let data;
+  try{
+    const r=await fetch(`/api/upvote-user-votes?address=${encodeURIComponent(address)}`);
+    data=await r.json();
+  }catch(e){
+    root.innerHTML=`<div class="card fade in not-found"><div class="nf-title">Failed to load</div><div class="nf-sub">${esc(e.message)}</div></div>`;
+    return;
+  }
+
+  const st=data.stats||{};
+  const now=Date.now()/1000;
+  const expired=data.expires_at&&data.expires_at<now;
+  const sessionBadge=data.registered
+    ? (expired
+       ?'<span class="badge-exp"><span class="badge-dot"></span>Session expired — re-register to resume</span>'
+       :'<span class="badge-ok"><span class="badge-dot"></span>Active · auto-votes daily at 09:00 UTC</span>')
+    :'<span class="badge-exp"><span class="badge-dot"></span>Not registered</span>';
+
+  const votes=data.votes||[];
+
+  root.innerHTML=`
+    <div class="card identity-card fade" style="transition-delay:0s">
+      <div class="id-avatar">${esc(address.slice(2,4))}</div>
+      <div class="id-info">
+        <div class="id-address" id="addr-display" onclick="copyAddr('${esc(address)}')" title="Click to copy">${esc(shortAddr(address))}</div>
+        <div class="id-label">${sessionBadge}</div>
+      </div>
+      <div class="id-right">
+        <div class="id-stat">
+          <span class="id-stat-num">${st.all_time||0}</span>
+          <span class="id-stat-lbl">total votes</span>
+        </div>
+        <div class="id-divider"></div>
+        <div class="id-stat">
+          <span class="id-stat-num">${st.today||0}</span>
+          <span class="id-stat-lbl">today</span>
+        </div>
+        <div class="id-divider"></div>
+        <div class="id-stat">
+          <span class="id-stat-num">${st.week||0}</span>
+          <span class="id-stat-lbl">this week</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card log-card fade" style="transition-delay:.06s">
+      <div class="sh">
+        <span class="sh-title">Vote history</span>
+        <span class="sh-count">${votes.length} record${votes.length!==1?'s':''}</span>
+      </div>
+      <table>
+        <thead><tr><th>Date &amp; time (UTC)</th><th>App</th><th>Transaction</th><th>Result</th></tr></thead>
+        <tbody>${
+          votes.length===0
+            ? '<tr class="empty-row"><td colspan="4">No votes yet — first vote runs at 09:00 UTC tomorrow.</td></tr>'
+            : votes.map(r=>`<tr>
+                <td style="font-size:11.5px;color:var(--t2)">${fmtDT(r.upvoted_at)}</td>
+                <td>${appName(r)}</td>
+                <td class="mono">${txA(r.tx_hash)}</td>
+                <td>${statusCell(r.status)}</td>
+              </tr>`).join('')
+        }</tbody>
+      </table>
+    </div>
+
+    ${!data.registered?`
+    <div class="card cta-card fade" style="transition-delay:.10s">
+      <div class="cta-text">This wallet hasn't registered for auto-upvote yet. Connect once and every daily vote happens automatically.</div>
+      <a href="/portal-upvote/register" class="cta-link">Register this wallet</a>
+    </div>`:''}
+  `;
+
+  // Trigger entrance animations
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.fade:not(.in)').forEach((el,i)=>
+      setTimeout(()=>el.classList.add('in'),i*70)
+    );
+  });
+}
+
+load();
+</script>
+</body>
+</html>
