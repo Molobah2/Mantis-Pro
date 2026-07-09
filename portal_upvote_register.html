@@ -166,13 +166,13 @@ a{color:inherit;text-decoration:none}
       <div id="status-banner"></div>
 
       <div id="wallet-section">
-        <button class="btn-connect" id="btn-connect-agw" onclick="startConnect()">
+        <button class="btn-connect" id="btn-connect-agw">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           Connect Abstract Global Wallet
         </button>
         <div id="progress-area"></div>
         <div id="wallet-hint" style="font-size:11.5px;color:var(--t3);text-align:center;min-height:16px"></div>
-        <p class="wc-fallback">On mobile? <a onclick="startWalletConnect()">Use WalletConnect instead</a></p>
+        <p class="wc-fallback">On mobile? <a id="btn-wc-fallback" style="cursor:pointer">Use WalletConnect instead</a></p>
       </div>
     </div>
   </div>
@@ -464,6 +464,11 @@ window.startWalletConnect=async function(){
 };
 
 // ── init ──────────────────────────────────────────────────────────────
+// Wire clicks from inside the module — inline onclick can't reach module scope
+document.getElementById('btn-connect-agw').addEventListener('click', startConnect);
+const wcLink=document.getElementById('btn-wc-fallback');
+if(wcLink) wcLink.addEventListener('click', startWalletConnect);
+
 _showHint();
 requestAnimationFrame(()=>{
   document.querySelectorAll('.fade').forEach((el,i)=>
