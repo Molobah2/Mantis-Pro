@@ -2013,6 +2013,29 @@ def wc_config():
     return jsonify({"projectId": project_id, "ok": bool(project_id)})
 
 
+@app.route("/api/rpc", methods=["POST"])
+def rpc_proxy():
+    """Same-origin proxy to Abstract mainnet RPC — lets browser wallet clients submit
+    transactions without hitting the CORS restriction on api.mainnet.abs.xyz."""
+    import requests as _req
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(ip, "rpc", 120, 60):  # 120 req/min per IP
+        return jsonify({"jsonrpc": "2.0", "error": {"code": -32000, "message": "Rate limited"}, "id": None}), 429
+    body = request.get_json(silent=True, force=True)
+    if not body:
+        return jsonify({"jsonrpc": "2.0", "error": {"code": -32700, "message": "Invalid JSON"}, "id": None}), 400
+    try:
+        r = _req.post(
+            "https://api.mainnet.abs.xyz",
+            json=body,
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
+        return r.content, r.status_code, {"Content-Type": "application/json"}
+    except Exception as e:
+        return jsonify({"jsonrpc": "2.0", "error": {"code": -32000, "message": str(e)}, "id": None}), 502
+
+
 @app.route("/portal-upvote/dashboard")
 def portal_upvote_dashboard():
     path = os.path.join(os.path.dirname(__file__), "portal_upvote_dashboard.html")

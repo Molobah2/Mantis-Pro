@@ -2,7 +2,10 @@
 cmds = ["curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs"]
 
 [phases.build]
-cmds = ["cd wallet-helper && npm ci && npm run build"]
+cmds = [
+  "cd wallet-helper && npm ci && npm run build",
+  "cd wallet-helper/connect-src && npm install && node build.mjs"
+]
 
 [start]
 cmd = "python agent.py"

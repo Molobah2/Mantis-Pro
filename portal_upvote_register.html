@@ -68,11 +68,10 @@ a{color:inherit;text-decoration:none}
 
 /* WALLET SECTION */
 #wallet-section{display:flex;flex-direction:column;gap:14px}
-.btn-connect{display:flex;align-items:center;justify-content:center;gap:12px;padding:18px 28px;border-radius:16px;background:linear-gradient(135deg,rgba(90,220,140,0.16) 0%,rgba(50,180,105,0.10) 100%);color:#78f0a8;border:1px solid rgba(90,220,140,0.26);cursor:pointer;font-size:14.5px;font-weight:500;width:100%;font-family:inherit;box-shadow:inset 0 1px 0 rgba(150,255,190,0.18),0 6px 32px rgba(50,180,100,0.14);transition:all 0.22s cubic-bezier(0.16,1,0.3,1);letter-spacing:-0.01em}
-.btn-connect:hover{background:linear-gradient(135deg,rgba(90,220,140,0.24) 0%,rgba(50,180,105,0.18) 100%);box-shadow:inset 0 1px 0 rgba(150,255,190,0.26),0 10px 40px rgba(50,180,100,0.22);transform:scale(1.015) translateY(-1px)}
-.btn-connect:active{transform:scale(0.98)}
-.btn-connect:disabled{opacity:0.38;cursor:not-allowed;transform:none}
+#agw-root{min-height:56px;display:flex;align-items:center}
 .wc-note{font-size:11px;color:var(--t3);text-align:center;line-height:1.5}
+.wc-fallback{font-size:11px;color:var(--t3);text-align:center;line-height:1.5}
+.wc-fallback a{color:var(--t2);text-decoration:underline;cursor:pointer}
 
 /* PROGRESS */
 #progress-area{font-size:12px;color:var(--t2);text-align:center;min-height:18px;transition:opacity 0.2s}
@@ -165,12 +164,12 @@ a{color:inherit;text-decoration:none}
       <div id="status-banner"></div>
 
       <div id="wallet-section">
-        <button class="btn-connect" id="btn-wc" onclick="startWalletConnect()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>
-          Connect Your Abstract Wallet
-        </button>
+        <div id="agw-root">
+          <p style="color:var(--t3);font-size:12px;width:100%;text-align:center">Loading wallet connector…</p>
+        </div>
         <div id="progress-area"></div>
-        <p class="wc-note">Scan the QR code with your Abstract wallet app — works on iOS &amp; Android.</p>
+        <p class="wc-note">Connects via your Abstract Global Wallet — no seed phrase required.</p>
+        <p class="wc-fallback">On mobile? <a onclick="startWalletConnect()">Scan with WalletConnect instead</a></p>
       </div>
     </div>
   </div>
@@ -240,8 +239,8 @@ function showBanner(msg,type='ok'){
   el.textContent=msg;el.className=type;el.style.display='block';
 }
 function hideBanner(){document.getElementById('status-banner').style.display='none';}
-function lock(){document.getElementById('btn-wc').disabled=true;}
-function unlock(){document.getElementById('btn-wc').disabled=false;}
+function lock(){const b=document.querySelector('#agw-root button');if(b)b.disabled=true;}
+function unlock(){const b=document.querySelector('#agw-root button');if(b)b.disabled=false;}
 function shortAddr(a){return a?a.slice(0,8)+'…'+a.slice(-6):'—';}
 
 function showSuccess(agwAddr){
@@ -350,6 +349,26 @@ window.startWalletConnect=async function(){
   }
 };
 
+// AGW bundle callbacks — bundle calls these after session creation
+window._onSessionProgress=(t)=>setProgress(t);
+window._agwConnectError=(e)=>{
+  setProgress('');
+  let msg=String(e);
+  if(/Failed to fetch|NetworkError|fetch/i.test(msg)){
+    msg='Connection failed — please try again or use the WalletConnect option below.';
+  } else if(/User rejected|rejected|cancel|dismiss/i.test(msg)){
+    msg='Cancelled. Try again when ready.';
+  }
+  showBanner('AGW error: '+msg,'err');
+  unlock();
+};
+window._onSessionCreated=async(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt)=>{
+  try{
+    await storeSession(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt);
+    setProgress('');showSuccess(agwAddress);
+  }catch(e){setProgress('');showBanner(e.message,'err');unlock();}
+};
+
 // Entrance animation
 requestAnimationFrame(()=>{
   document.querySelectorAll('.fade').forEach((el,i)=>
@@ -358,5 +377,7 @@ requestAnimationFrame(()=>{
 });
 </script>
 
+<!-- AGW React bundle — handles Privy login + session creation via same-origin RPC proxy -->
+<script src="/portal-upvote/connect.bundle.js" defer onerror="document.getElementById('agw-root').innerHTML='<p style=\'color:var(--t3);font-size:12px\'>Wallet connector unavailable — use the WalletConnect option below.</p>'"></script>
 </body>
 </html>
