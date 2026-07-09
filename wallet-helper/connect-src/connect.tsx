@@ -3,18 +3,15 @@ import { createRoot } from "react-dom/client";
 import {
   AbstractWalletProvider,
   useLoginWithAbstract,
+  useAbstractClient,
+  useCreateSession,
 } from "@abstract-foundation/agw-react";
-import { createAbstractClient } from "@abstract-foundation/agw-client";
 import { LimitType } from "@abstract-foundation/agw-client/sessions";
-import { generatePrivateKey, privateKeyToAccount, toAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { abstract } from "viem/chains";
 import { http } from "viem";
-import { useConnectorClient } from "wagmi";
 
 const UPVOTE_CONTRACT = "0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a" as const;
-// Same-origin RPC proxy — browser submits tx to our server, which forwards to Abstract.
-// This bypasses the CORS restriction on https://api.mainnet.abs.xyz.
-const RPC_PROXY = "/api/rpc";
 
 declare global {
   interface Window {
@@ -31,50 +28,30 @@ declare global {
 
 function AGWButton() {
   const { login } = useLoginWithAbstract();
-  // useConnectorClient gives the underlying EOA wallet client after login()
-  const { data: walletClient } = useConnectorClient();
+  const { data: abstractClient } = useAbstractClient();
+  const { createSessionAsync } = useCreateSession();
   const [busy, setBusy] = useState(false);
   const pendingRef = useRef(false);
 
   useEffect(() => {
-    // Fires after login() updates wagmi state with a connected wallet
-    if (!walletClient || !pendingRef.current) return;
+    // After login() completes, abstractClient becomes available — fire session creation
+    if (!abstractClient || !pendingRef.current) return;
     pendingRef.current = false;
-    doCreateSession(walletClient);
-  }, [walletClient]);
+    doCreateSession();
+  }, [abstractClient]);
 
-  async function doCreateSession(wc: any) {
+  async function doCreateSession() {
+    if (!abstractClient) return;
     setBusy(true);
     try {
       window._onSessionProgress?.("Generating session key…");
 
-      // Build a toAccount signer backed by the connected wallet (Privy or extension)
-      const signerAccount = toAccount({
-        address: wc.account.address as `0x${string}`,
-        signMessage: ({ message }: any) =>
-          wc.signMessage({ message, account: wc.account }),
-        signTypedData: (typedData: any) =>
-          wc.signTypedData({ ...typedData, account: wc.account }),
-        signTransaction: (tx: any) =>
-          wc.signTransaction({ ...tx, account: wc.account }),
-      });
-
-      // Build the abstractClient using our same-origin RPC proxy.
-      // Transaction submission goes to /api/rpc → our server → Abstract mainnet.
-      // No CORS issue because it's same-origin from the browser's perspective.
-      const abstractClient = await createAbstractClient({
-        signer: signerAccount,
-        chain: abstract,
-        transport: http(RPC_PROXY),
-      });
-
-      const agwAddress: string = abstractClient.account.address;
       const sessionPrivKey = generatePrivateKey();
       const sessionAccount = privateKeyToAccount(sessionPrivKey);
       const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
 
       window._onSessionProgress?.("Approve the session key in your wallet…");
-      const { session } = await abstractClient.createSession({
+      const { session } = await createSessionAsync({
         session: {
           signer: sessionAccount.address,
           expiresAt,
@@ -100,6 +77,7 @@ function AGWButton() {
         },
       });
 
+      const agwAddress: string = abstractClient.account.address;
       const sessionConfigJson = JSON.stringify(session, (_k, v) =>
         typeof v === "bigint" ? v.toString() : v
       );
@@ -121,11 +99,9 @@ function AGWButton() {
 
   const handleClick = () => {
     if (busy) return;
-    if (walletClient) {
-      // Already connected — go straight to session creation
-      doCreateSession(walletClient);
+    if (abstractClient) {
+      doCreateSession();
     } else {
-      // Trigger Privy login flow; doCreateSession fires via useEffect when walletClient arrives
       pendingRef.current = true;
       login();
     }
@@ -177,7 +153,10 @@ function AGWButton() {
 
 function App() {
   return (
-    <AbstractWalletProvider chain={abstract}>
+    // Pass our same-origin RPC proxy as the transport.
+    // All RPC calls (including createSession tx submission) go through /api/rpc
+    // on our server, which forwards to Abstract mainnet — no CORS restriction.
+    <AbstractWalletProvider chain={abstract} transport={http("/api/rpc")}>
       <AGWButton />
     </AbstractWalletProvider>
   );
