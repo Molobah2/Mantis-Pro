@@ -7,6 +7,7 @@ _catalog_cache = {"ts": 0.0, "apps": []}
 _CATALOG_TTL   = 3600  # 1-hour cache
 
 _PORTAL_APIS = [
+    "https://api.portal.abs.xyz/api/v1/app?limit=100",  # official Portal API
     "https://backend.portal.abs.xyz/api/apps",
     "https://abs.xyz/api/apps",
     "https://abs.xyz/api/discover/apps",
@@ -26,7 +27,7 @@ def _fetch_via_api():
             if r.status_code != 200:
                 continue
             data  = r.json()
-            items = (data.get("apps") or data.get("data") or data.get("items")
+            items = (data.get("items") or data.get("apps") or data.get("data")
                      or data.get("results") or (data if isinstance(data, list) else None))
             if not items:
                 continue
@@ -35,7 +36,7 @@ def _fetch_via_api():
                 app_id = item.get("id") or item.get("appId") or item.get("app_id")
                 name   = (item.get("name") or item.get("title") or item.get("appName")
                           or f"App #{app_id}")
-                app_url = item.get("url") or item.get("link") or ""
+                app_url = item.get("link") or item.get("url") or ""
                 if app_id is not None:
                     apps.append({"id": int(app_id), "name": str(name), "url": str(app_url)})
             if apps:
