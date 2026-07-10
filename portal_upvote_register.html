@@ -3,294 +3,1493 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Join Portal Auto-Upvote — Mantis Pro</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+<title>Register — Portal Upvote Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#0d0d11;--surface:rgba(26,26,32,0.72);--border:rgba(255,255,255,0.09);
-  --t0:#f0f0f4;--t1:rgba(240,240,244,0.58);--t2:rgba(240,240,244,0.32);--t3:rgba(240,240,244,0.16);
-  --ok:rgba(208,208,228,0.90);--err:rgba(248,113,113,0.88);--r:22px;
+/* ─── Design Tokens ─── */
+:root {
+  --bg: #08080a;
+  --surface: rgba(255,255,255,0.04);
+  --surface-hi: rgba(255,255,255,0.07);
+  --border: rgba(255,255,255,0.08);
+  --border-hi: rgba(255,255,255,0.15);
+  --t0: #f2f2f5;
+  --t1: rgba(242,242,245,0.62);
+  --t2: rgba(242,242,245,0.38);
+  --t3: rgba(242,242,245,0.18);
+  --chrome: rgba(215,215,228,0.88);
+  --r: 20px;
+  --r-sm: 12px;
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--t0);
-  font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
-  min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;}
 
-/* ORBS */
-.orb{position:fixed;border-radius:50%;pointer-events:none;z-index:0}
-.orb-1{width:900px;height:800px;background:radial-gradient(ellipse,rgba(190,192,222,0.18) 0%,rgba(170,172,210,0.06) 38%,transparent 68%);filter:blur(80px);top:-220px;left:-300px;animation:od1 55s ease-in-out infinite}
-.orb-2{width:800px;height:720px;background:radial-gradient(ellipse,rgba(200,198,230,0.15) 0%,transparent 68%);filter:blur(100px);bottom:-280px;right:-200px;animation:od2 68s ease-in-out infinite}
-.orb-3{width:600px;height:600px;background:radial-gradient(ellipse,rgba(215,212,240,0.13) 0%,transparent 65%);filter:blur(85px);top:40%;left:50%;transform:translate(-50%,-50%);animation:od3 80s ease-in-out infinite}
-@keyframes od1{0%,100%{transform:translate(0,0)}50%{transform:translate(70px,90px) scale(1.08)}}
-@keyframes od2{0%,100%{transform:translate(0,0)}50%{transform:translate(-80px,-70px) scale(1.10)}}
-@keyframes od3{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.18)}}
-#bubble-canvas{position:fixed;inset:0;z-index:1;pointer-events:none}
-.scan{position:fixed;top:0;left:-90%;width:65%;height:100%;pointer-events:none;z-index:2;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.012) 38%,rgba(255,255,255,0.022) 50%,rgba(255,255,255,0.012) 62%,transparent 100%);animation:scan-mv 28s ease-in-out infinite}
-@keyframes scan-mv{0%,100%{left:-90%;opacity:0}7%{opacity:1}50%{left:145%;opacity:1}57%{opacity:0}}
-.vignette{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at 50% 20%,transparent 25%,rgba(0,0,0,0.50) 100%)}
+/* ─── Reset & Base ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* HEADER */
-header{position:sticky;top:0;z-index:200;padding:18px 34px;display:flex;align-items:center;justify-content:space-between}
-.logo-mark{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.12);border-radius:10px;font-size:14px;font-weight:600;letter-spacing:-0.03em;color:rgba(240,240,244,0.78);background:rgba(255,255,255,0.06);box-shadow:inset 0 1px 0 rgba(255,255,255,0.16)}
-.pill-nav{display:flex;background:rgba(12,12,16,0.88);border:1px solid rgba(255,255,255,0.11);border-radius:100px;padding:4px;gap:2px;backdrop-filter:blur(48px);-webkit-backdrop-filter:blur(48px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.15),0 8px 28px rgba(0,0,0,0.40)}
-.pill-nav a{padding:7px 20px;border-radius:100px;font-size:12.5px;font-weight:400;color:var(--t2);transition:all 0.24s cubic-bezier(0.16,1,0.3,1);white-space:nowrap}
-.pill-nav a:hover{color:var(--t1);text-decoration:none}
-.pill-nav a.active{background:rgba(255,255,255,0.10);color:var(--t0);box-shadow:inset 0 1px 0 rgba(255,255,255,0.16),0 2px 8px rgba(0,0,0,0.40)}
-a{color:inherit;text-decoration:none}
+html { scroll-behavior: smooth; }
 
-/* PAGE */
-.page{position:relative;z-index:10;max-width:540px;margin:0 auto;padding:60px 24px 120px}
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--t0);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
-/* GLASS CARD */
-.card{position:relative;background:var(--surface);backdrop-filter:blur(60px) saturate(1.5) brightness(1.06);-webkit-backdrop-filter:blur(60px) saturate(1.5) brightness(1.06);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:0 44px 100px -16px rgba(0,0,0,0.65),0 10px 32px -5px rgba(0,0,0,0.48),inset 0 1px 0 rgba(255,255,255,0.16);transition:box-shadow 0.45s ease,transform 0.45s cubic-bezier(0.16,1,0.3,1)}
-.card::after{content:'';position:absolute;top:0;left:7%;right:7%;height:1px;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.22) 28%,rgba(255,255,255,0.28) 50%,rgba(255,255,255,0.22) 72%,transparent)}
-.card>*{position:relative;z-index:1}
+/* ─── Fixed Background Environment ─── */
+#env-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
 
-/* MAIN CARD CONTENT */
-.card-inner{padding:48px 44px}
-.kicker{font-size:10.5px;font-weight:400;color:var(--t3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:14px}
-.headline{font-size:32px;font-weight:250;color:var(--t0);letter-spacing:-0.045em;line-height:1.15;margin-bottom:12px}
-.headline span{background:linear-gradient(155deg,#eeeeF2 0%,rgba(185,183,218,0.85) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.subline{font-size:13px;font-weight:400;color:var(--t2);line-height:1.6;margin-bottom:36px}
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.18;
+  will-change: transform;
+}
 
-/* BENEFITS */
-.benefits{display:flex;flex-direction:column;gap:12px;margin-bottom:36px}
-.benefit{display:flex;align-items:flex-start;gap:14px}
-.benefit-icon{width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,0.14)}
-.benefit-icon svg{opacity:0.60}
-.benefit-text{padding-top:6px}
-.benefit-title{font-size:12.5px;font-weight:440;color:var(--t1);margin-bottom:2px}
-.benefit-desc{font-size:11.5px;font-weight:400;color:var(--t3)}
+.orb-1 {
+  width: 900px;
+  height: 900px;
+  background: radial-gradient(circle, rgba(180,175,210,0.6) 0%, rgba(140,130,180,0.2) 50%, transparent 70%);
+  top: -200px;
+  left: -250px;
+  animation: orb1-drift 65s ease-in-out infinite alternate;
+}
 
-/* DIVIDER */
-.divider{height:1px;background:rgba(255,255,255,0.06);margin:28px 0}
+.orb-2 {
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, rgba(200,195,225,0.5) 0%, rgba(160,155,200,0.15) 50%, transparent 70%);
+  bottom: -180px;
+  right: -200px;
+  animation: orb2-drift 55s ease-in-out infinite alternate;
+}
 
-/* WALLET SECTION */
-#wallet-section{display:flex;flex-direction:column;gap:12px}
-.btn-connect{display:flex;align-items:center;justify-content:center;gap:12px;padding:18px 22px;border-radius:16px;background:linear-gradient(135deg,rgba(76,255,145,0.16) 0%,rgba(40,200,100,0.10) 100%);color:#78f0a8;border:1px solid rgba(90,220,140,0.26);cursor:pointer;font-size:14.5px;font-weight:500;width:100%;font-family:inherit;box-shadow:inset 0 1px 0 rgba(150,255,190,0.18),0 6px 32px rgba(50,180,100,0.14);transition:all 0.22s cubic-bezier(0.16,1,0.3,1);letter-spacing:-0.01em}
-.btn-connect:hover{background:linear-gradient(135deg,rgba(76,255,145,0.24) 0%,rgba(40,200,100,0.18) 100%);box-shadow:inset 0 1px 0 rgba(150,255,190,0.26),0 10px 40px rgba(50,180,100,0.22);transform:scale(1.015) translateY(-1px)}
-.btn-connect:active{transform:scale(0.98)}
-.btn-connect:disabled{opacity:0.38;cursor:not-allowed;transform:none}
-.wc-fallback{font-size:11px;color:var(--t3);text-align:center;line-height:1.5}
-.wc-fallback a{color:var(--t2);text-decoration:underline;cursor:pointer}
+@keyframes orb1-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(80px, 60px) scale(1.05); }
+  66%  { transform: translate(-40px, 100px) scale(0.97); }
+  100% { transform: translate(60px, -40px) scale(1.03); }
+}
 
-/* PROGRESS */
-#progress-area{font-size:12px;color:var(--t2);text-align:center;min-height:18px;transition:opacity 0.2s}
-.spinner{display:inline-block;width:14px;height:14px;border:1.5px solid rgba(255,255,255,0.15);border-top-color:rgba(200,198,238,0.80);border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:8px}
-@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes orb2-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(-70px, -50px) scale(1.04); }
+  66%  { transform: translate(50px, -90px) scale(0.96); }
+  100% { transform: translate(-30px, 50px) scale(1.02); }
+}
 
-/* STATUS BANNER */
-#status-banner{display:none;padding:14px 18px;border-radius:14px;font-size:12.5px;margin-bottom:24px;line-height:1.5}
-#status-banner.ok{background:rgba(200,198,238,0.08);color:var(--ok);border:1px solid rgba(200,198,238,0.18)}
-#status-banner.err{background:rgba(248,113,113,0.08);color:var(--err);border:1px solid rgba(248,113,113,0.18)}
+#bubble-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.35;
+}
 
-/* SUCCESS STATE */
-#success-card{display:none}
-#success-card .card-inner{text-align:center;padding:52px 44px}
-.success-icon{width:64px;height:64px;border-radius:20px;background:rgba(200,198,238,0.10);border:1px solid rgba(200,198,238,0.18);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.20)}
-.success-headline{font-size:26px;font-weight:250;color:var(--t0);letter-spacing:-0.04em;margin-bottom:10px}
-.success-sub{font-size:13px;color:var(--t2);line-height:1.6;margin-bottom:28px}
-.address-pill{display:inline-block;font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;color:var(--t1);background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:100px;padding:6px 16px;margin-bottom:28px;letter-spacing:0.02em}
-.next-vote{font-size:11.5px;color:var(--t3);margin-bottom:32px}
-.btn-primary{display:inline-flex;align-items:center;gap:8px;padding:13px 28px;border-radius:100px;background:rgba(255,255,255,0.09);color:var(--t0);border:1px solid rgba(255,255,255,0.14);font-size:13px;font-weight:440;font-family:inherit;cursor:pointer;transition:all 0.22s cubic-bezier(0.16,1,0.3,1);box-shadow:inset 0 1px 0 rgba(255,255,255,0.18);text-decoration:none}
-.btn-primary:hover{background:rgba(255,255,255,0.14);box-shadow:inset 0 1px 0 rgba(255,255,255,0.24),0 6px 22px rgba(0,0,0,0.35);transform:scale(1.02) translateY(-1px)}
+#vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(8,8,10,0.7) 100%);
+}
 
-/* FOOTER NOTE */
-.footer-note{margin-top:24px;text-align:center;font-size:11px;color:var(--t3);line-height:1.6}
+#scanline {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255,255,255,0.008) 2px,
+    rgba(255,255,255,0.008) 4px
+  );
+  animation: scan-move 12s linear infinite;
+}
 
-/* ENTRANCE */
-.fade{opacity:0;transform:translateY(22px);transition:opacity 0.72s cubic-bezier(0.16,1,0.3,1),transform 0.72s cubic-bezier(0.16,1,0.3,1)}
-.fade.in{opacity:1;transform:translateY(0)}
+@keyframes scan-move {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 -400px; }
+}
+
+/* ─── Header ─── */
+#header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  height: 60px;
+  background: rgba(8,8,10,0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.logo-mark {
+  width: 34px;
+  height: 34px;
+  background: var(--surface-hi);
+  border: 1px solid var(--border-hi);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--chrome);
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+}
+
+.logo-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--t1);
+  letter-spacing: -0.1px;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 4px;
+  gap: 2px;
+}
+
+nav a {
+  display: block;
+  padding: 5px 16px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--t2);
+  text-decoration: none;
+  border-radius: 50px;
+  transition: color 0.2s, background 0.2s;
+  white-space: nowrap;
+}
+
+nav a:hover {
+  color: var(--t1);
+  background: var(--surface-hi);
+}
+
+nav a.active {
+  color: var(--t0);
+  background: rgba(255,255,255,0.10);
+  font-weight: 500;
+}
+
+/* ─── Layout ─── */
+main {
+  position: relative;
+  z-index: 1;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+/* ─── Scroll Reveal ─── */
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── Section Labels ─── */
+.section-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 18px;
+}
+
+/* ─── SECTION 1: Hero ─── */
+#hero {
+  padding: 120px 32px 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.hero-headline {
+  font-size: clamp(52px, 7vw, 88px);
+  font-weight: 200;
+  letter-spacing: -0.04em;
+  line-height: 1.0;
+  color: var(--t0);
+  margin-bottom: 24px;
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.9s cubic-bezier(0.22,1,0.36,1),
+              transform 0.9s cubic-bezier(0.22,1,0.36,1);
+}
+
+.hero-headline.loaded {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hero-subtitle {
+  font-size: clamp(15px, 2vw, 18px);
+  font-weight: 300;
+  color: var(--t1);
+  line-height: 1.65;
+  max-width: 560px;
+  margin-bottom: 56px;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.9s 0.12s cubic-bezier(0.22,1,0.36,1),
+              transform 0.9s 0.12s cubic-bezier(0.22,1,0.36,1);
+}
+
+.hero-subtitle.loaded {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── Register Card ─── */
+.register-card-wrap {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.9s 0.24s cubic-bezier(0.22,1,0.36,1),
+              transform 0.9s 0.24s cubic-bezier(0.22,1,0.36,1);
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.register-card-wrap.loaded {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.register-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 36px 32px 28px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+
+/* Shimmer sweep on hover */
+.register-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255,255,255,0.04) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  transition: left 0.65s cubic-bezier(0.22,1,0.36,1);
+}
+
+.register-card:hover {
+  border-color: var(--border-hi);
+}
+
+.register-card:hover::before {
+  left: 160%;
+}
+
+.register-card-title {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--t0);
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.register-card-desc {
+  font-size: 13.5px;
+  font-weight: 300;
+  color: var(--t2);
+  margin-bottom: 28px;
+  line-height: 1.55;
+}
+
+#agw-root {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.agw-placeholder {
+  font-size: 13px;
+  color: var(--t3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agw-placeholder .mini-spin {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--border-hi);
+  border-top-color: var(--chrome);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+#progress-area {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--t2);
+  margin-bottom: 8px;
+  transition: opacity 0.3s;
+}
+
+#progress-area .spin {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border-hi);
+  border-top-color: var(--chrome);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+#status-banner {
+  display: none;
+  padding: 11px 16px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  border: 1px solid;
+}
+
+#status-banner.err {
+  background: rgba(255,80,80,0.06);
+  border-color: rgba(255,80,80,0.18);
+  color: rgba(255,160,160,0.9);
+}
+
+#status-banner.ok {
+  background: rgba(255,255,255,0.04);
+  border-color: var(--border-hi);
+  color: var(--t1);
+}
+
+.register-card-footer {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--t3);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.register-card-footer .dot-sep {
+  display: inline-block;
+  margin: 0 8px;
+  color: var(--t3);
+}
+
+/* ─── Success Card ─── */
+#success-card {
+  display: none;
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r);
+  padding: 48px 36px 40px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+#success-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(200,200,220,0.05) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.success-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border-hi);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+}
+
+.success-icon svg {
+  width: 26px;
+  height: 26px;
+  stroke: var(--chrome);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.success-title {
+  font-size: 26px;
+  font-weight: 300;
+  color: var(--t0);
+  letter-spacing: -0.03em;
+  margin-bottom: 12px;
+}
+
+.success-desc {
+  font-size: 14px;
+  color: var(--t2);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.success-addr-pill {
+  display: inline-block;
+  background: var(--surface-hi);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 6px 18px;
+  font-size: 12.5px;
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
+  color: var(--chrome);
+  letter-spacing: 0.04em;
+  margin-bottom: 28px;
+  word-break: break-all;
+}
+
+.success-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 28px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--border-hi);
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--t0);
+  text-decoration: none;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.success-link:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.25);
+}
+
+.success-link svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── SECTION 2: How It Works ─── */
+#how-it-works {
+  padding: 120px 0 100px;
+  border-top: 1px solid var(--border);
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 64px;
+}
+
+.section-title {
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  color: var(--t0);
+  line-height: 1.1;
+}
+
+.step-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.step-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 36px 28px 32px;
+  position: relative;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.step-card:hover {
+  border-color: var(--border-hi);
+  background: var(--surface-hi);
+}
+
+.step-number {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 20px;
+}
+
+.step-icon {
+  width: 44px;
+  height: 44px;
+  background: var(--surface-hi);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.step-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: var(--chrome);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.step-title {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--t0);
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.step-desc {
+  font-size: 14px;
+  font-weight: 300;
+  color: var(--t1);
+  line-height: 1.65;
+}
+
+.step-duration {
+  margin-top: 20px;
+  display: inline-block;
+  font-size: 12px;
+  color: var(--t3);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 3px 12px;
+}
+
+/* ─── SECTION 3: Security ─── */
+#security {
+  padding: 100px 0;
+  border-top: 1px solid var(--border);
+}
+
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.security-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 32px 28px;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.security-card:hover {
+  border-color: var(--border-hi);
+  background: var(--surface-hi);
+}
+
+.security-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--surface-hi);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.security-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--chrome);
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.security-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--t0);
+  letter-spacing: -0.02em;
+  margin-bottom: 10px;
+}
+
+.security-desc {
+  font-size: 13.5px;
+  font-weight: 300;
+  color: var(--t1);
+  line-height: 1.65;
+}
+
+/* ─── SECTION 4: Timeline ─── */
+#timeline-section {
+  padding: 100px 0;
+  border-top: 1px solid var(--border);
+}
+
+.timeline-wrap {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.timeline {
+  position: relative;
+  padding-left: 36px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--border-hi) 15%,
+    var(--border-hi) 85%,
+    transparent
+  );
+}
+
+.timeline-item {
+  position: relative;
+  padding: 0 0 44px 28px;
+}
+
+.timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -29px;
+  top: 5px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1.5px solid var(--border-hi);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-dot::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--chrome);
+}
+
+.timeline-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 6px;
+}
+
+.timeline-title {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--t0);
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.timeline-desc {
+  font-size: 13.5px;
+  font-weight: 300;
+  color: var(--t1);
+  line-height: 1.6;
+}
+
+/* ─── SECTION 5: FAQ ─── */
+#faq {
+  padding: 100px 0;
+  border-top: 1px solid var(--border);
+}
+
+.faq-list {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.faq-item {
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.faq-item:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.faq-trigger {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 0;
+  text-align: left;
+  gap: 20px;
+  transition: color 0.2s;
+}
+
+.faq-q {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--t1);
+  line-height: 1.4;
+  transition: color 0.2s;
+}
+
+.faq-trigger:hover .faq-q {
+  color: var(--t0);
+}
+
+.faq-item.open .faq-q {
+  color: var(--t0);
+}
+
+.faq-chevron {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  background: var(--surface-hi);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), background 0.2s;
+}
+
+.faq-chevron svg {
+  width: 10px;
+  height: 10px;
+  stroke: var(--t2);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.2s;
+}
+
+.faq-item.open .faq-chevron {
+  transform: rotate(180deg);
+  background: rgba(255,255,255,0.08);
+}
+
+.faq-item.open .faq-chevron svg {
+  stroke: var(--chrome);
+}
+
+.faq-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.22,1,0.36,1);
+}
+
+.faq-body-inner {
+  padding: 0 0 24px;
+  font-size: 14px;
+  font-weight: 300;
+  color: var(--t1);
+  line-height: 1.7;
+}
+
+/* ─── Footer ─── */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 36px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  z-index: 1;
+}
+
+.footer-copy {
+  font-size: 13px;
+  color: var(--t3);
+}
+
+.footer-nav {
+  display: flex;
+  gap: 20px;
+}
+
+.footer-nav a {
+  font-size: 13px;
+  color: var(--t3);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-nav a:hover {
+  color: var(--t1);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  #header { padding: 0 20px; }
+
+  nav a { padding: 5px 11px; font-size: 12px; }
+
+  .logo-label { display: none; }
+
+  #hero { padding: 80px 20px 80px; }
+
+  .step-grid,
+  .security-grid { grid-template-columns: 1fr; }
+
+  .container { padding: 0 20px; }
+
+  #how-it-works,
+  #security,
+  #timeline-section,
+  #faq { padding: 80px 0; }
+
+  .register-card { padding: 28px 24px 24px; }
+
+  footer {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+    padding: 28px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  nav { display: none; }
+  .hero-headline { font-size: 42px; }
+}
 </style>
 </head>
 <body>
 
-<div class="orb orb-1"></div>
-<div class="orb orb-2"></div>
-<div class="orb orb-3"></div>
-<canvas id="bubble-canvas"></canvas>
-<div class="scan"></div>
-<div class="vignette"></div>
+<!-- ─── Fixed Background Environment ─── -->
+<div id="env-layer" aria-hidden="true">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <canvas id="bubble-canvas"></canvas>
+  <div id="vignette"></div>
+  <div id="scanline"></div>
+</div>
 
-<header>
-  <div class="logo-mark">M</div>
-  <nav class="pill-nav">
-    <a href="/">Home</a>
+<!-- ─── Header ─── -->
+<header id="header">
+  <a href="/portal-upvote" class="logo">
+    <div class="logo-mark">M</div>
+    <span class="logo-label">Mantis Pro</span>
+  </a>
+  <nav aria-label="Primary navigation">
+    <a href="/portal-upvote">Home</a>
+    <a href="/portal-upvote/register" class="active" aria-current="page">Register</a>
     <a href="/portal-upvote/dashboard">Dashboard</a>
-    <a href="/portal-upvote/register" class="active">Register</a>
+    <a href="/portal-upvote/my-votes">My Votes</a>
   </nav>
 </header>
 
-<div class="page">
+<!-- ─── Main ─── -->
+<main>
 
-  <!-- REGISTER CARD -->
-  <div class="card fade" id="register-card">
-    <div class="card-inner">
-      <div class="kicker">Abstract Portal · Auto-Upvote</div>
-      <h1 class="headline">Vote every day,<br><span>automatically.</span></h1>
-      <p class="subline">Connect your Abstract Global Wallet once. Mantis Pro handles the rest — your wallet casts one Portal upvote every day at 09:00 UTC, completely hands-free.</p>
+  <!-- ── Section 1: Hero ── -->
+  <section id="hero" aria-label="Hero">
+    <h1 class="hero-headline">Vote every day,<br>automatically.</h1>
 
-      <div class="benefits">
-        <div class="benefit">
-          <div class="benefit-icon">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <div class="benefit-text">
-            <div class="benefit-title">Scoped session key</div>
-            <div class="benefit-desc">Mantis never holds your funds. The session key is limited exclusively to the upvote contract.</div>
+    <p class="hero-subtitle">Connect your Abstract Global Wallet once. Mantis Pro handles the rest&thinsp;&mdash;&thinsp;casting one Portal upvote every day at 09:00&nbsp;UTC, completely hands-free.</p>
+
+    <!-- Register Card -->
+    <div class="register-card-wrap">
+      <div class="register-card" role="region" aria-label="Wallet registration">
+        <div class="register-card-title">Connect your wallet</div>
+        <div class="register-card-desc">One connection. Daily votes, automated forever.</div>
+
+        <!-- AGW bundle mounts here -->
+        <div id="agw-root" aria-live="polite">
+          <div class="agw-placeholder" aria-label="Loading wallet connector">
+            <div class="mini-spin" aria-hidden="true"></div>
+            Loading wallet connector&hellip;
           </div>
         </div>
-        <div class="benefit">
-          <div class="benefit-icon">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
-          <div class="benefit-text">
-            <div class="benefit-title">Daily at 09:00 UTC</div>
-            <div class="benefit-desc">One vote per day. Rotating across Portal apps so every project gets support.</div>
-          </div>
-        </div>
-        <div class="benefit">
-          <div class="benefit-icon">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          </div>
-          <div class="benefit-text">
-            <div class="benefit-title">Track on the dashboard</div>
-            <div class="benefit-desc">View your full vote history and stats at any time on the public dashboard.</div>
-          </div>
-        </div>
-      </div>
 
-      <div class="divider"></div>
+        <!-- Progress indicator -->
+        <div id="progress-area" aria-live="polite" aria-atomic="true"></div>
 
-      <div id="status-banner"></div>
+        <!-- Error / info banner -->
+        <div id="status-banner" role="alert" aria-live="assertive"></div>
 
-      <div id="wallet-section">
-        <div id="agw-root" style="min-height:56px;display:flex;align-items:center;width:100%">
-          <p style="color:var(--t3);font-size:12px;width:100%;text-align:center">Loading wallet connector…</p>
+        <div class="register-card-footer">
+          No seed phrase required<span class="dot-sep">&middot;</span>Connects via your Abstract account
         </div>
-        <div id="progress-area"></div>
-        <p style="font-size:11px;color:var(--t3);text-align:center;line-height:1.5">No seed phrase required. Connects via your Abstract account.</p>
       </div>
     </div>
-  </div>
 
-  <!-- SUCCESS CARD -->
-  <div class="card fade" id="success-card" style="transition-delay:.05s">
-    <div class="card-inner">
-      <div class="success-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(210,208,238,0.88)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    <!-- Success Card (hidden until registration completes) -->
+    <div id="success-card" role="status" aria-live="polite">
+      <div class="success-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
-      <div class="success-headline">You're registered.</div>
-      <p class="success-sub">Your wallet will automatically cast one upvote every day at 09:00 UTC. No further action needed.</p>
-      <div class="address-pill" id="success-addr">—</div>
-      <div class="next-vote">Next vote: tomorrow at 09:00 UTC</div>
-      <a href="/portal-upvote/my-votes" id="my-votes-link" class="btn-primary">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <div class="success-title">You're registered.</div>
+      <div class="success-desc">Your first automated vote executes at 09:00&nbsp;UTC tomorrow.</div>
+      <div class="success-addr-pill" id="success-addr" title="Your Abstract Global Wallet address">&mdash;</div>
+      <a id="success-link" href="/portal-upvote/my-votes" class="success-link">
         View my votes
+        <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </a>
     </div>
-  </div>
 
-  <p class="footer-note fade" style="transition-delay:.10s">
-    Mantis Pro is open and permissionless. Sessions are encrypted server-side.<br>
-    Questions? <a href="https://abs.xyz" style="color:var(--t2)">abs.xyz</a>
-  </p>
+  </section>
 
-</div>
+  <!-- ── Section 2: How It Works ── -->
+  <section id="how-it-works" aria-label="How it works">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">How it works</div>
+        <h2 class="section-title">Three steps. Then nothing.</h2>
+      </div>
 
-<!-- BUBBLE CANVAS -->
+      <div class="step-grid">
+        <div class="step-card reveal" style="transition-delay:0.05s">
+          <div class="step-number">Step 01</div>
+          <div class="step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <div class="step-title">Connect</div>
+          <div class="step-desc">Link your Abstract Global Wallet using the button above. No browser extension needed&thinsp;&mdash;&thinsp;your Abstract account is all you need.</div>
+          <div class="step-duration">Takes 30 seconds</div>
+        </div>
+
+        <div class="step-card reveal" style="transition-delay:0.12s">
+          <div class="step-number">Step 02</div>
+          <div class="step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <div class="step-title">Authorize</div>
+          <div class="step-desc">Approve a scoped session key&thinsp;&mdash;&thinsp;limited exclusively to the Portal upvote contract. It cannot transfer funds or touch anything else.</div>
+          <div class="step-duration">Expires in 30 days</div>
+        </div>
+
+        <div class="step-card reveal" style="transition-delay:0.19s">
+          <div class="step-number">Step 03</div>
+          <div class="step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div class="step-title">Relax</div>
+          <div class="step-desc">Mantis Pro votes for your wallet every morning at 09:00&nbsp;UTC. No browser extensions, no plugins, no manual effort required.</div>
+          <div class="step-duration">Every day at 09:00 UTC</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Section 3: Security ── -->
+  <section id="security" aria-label="Security">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">Security</div>
+        <h2 class="section-title">Built without compromise.</h2>
+      </div>
+
+      <div class="security-grid">
+        <div class="security-card reveal" style="transition-delay:0.05s">
+          <div class="security-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <div class="security-title">Scoped permissions</div>
+          <div class="security-desc">The session key can only call the Portal upvote contract. It cannot transfer funds, access your wallet, or interact with any other protocol.</div>
+        </div>
+
+        <div class="security-card reveal" style="transition-delay:0.12s">
+          <div class="security-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <div class="security-title">Encrypted at rest</div>
+          <div class="security-desc">Your session key is AES-256 encrypted before storage. It never exists unencrypted on our servers at any point in the process.</div>
+        </div>
+
+        <div class="security-card reveal" style="transition-delay:0.19s">
+          <div class="security-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </div>
+          <div class="security-title">Self-expiring</div>
+          <div class="security-desc">Every session key expires automatically after 30 days. Renew only when you want to continue&thinsp;&mdash;&thinsp;there is no auto-renewal.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Section 4: Timeline ── -->
+  <section id="timeline-section" aria-label="Automation lifecycle">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">Lifecycle</div>
+        <h2 class="section-title">What to expect.</h2>
+      </div>
+
+      <div class="timeline-wrap reveal">
+        <div class="timeline">
+
+          <div class="timeline-item">
+            <div class="timeline-dot" aria-hidden="true"></div>
+            <div class="timeline-label">Day 0</div>
+            <div class="timeline-title">You connect</div>
+            <div class="timeline-desc">Link your Abstract Global Wallet and approve the scoped session key. The entire process takes under two minutes.</div>
+          </div>
+
+          <div class="timeline-item">
+            <div class="timeline-dot" aria-hidden="true"></div>
+            <div class="timeline-label">Immediately after</div>
+            <div class="timeline-title">Session key created</div>
+            <div class="timeline-desc">Your encrypted session key is stored and scheduled. Mantis Pro confirms your wallet is registered for daily automation.</div>
+          </div>
+
+          <div class="timeline-item">
+            <div class="timeline-dot" aria-hidden="true"></div>
+            <div class="timeline-label">Every morning</div>
+            <div class="timeline-title">Daily vote at 09:00 UTC</div>
+            <div class="timeline-desc">Your wallet casts one upvote per day, timed precisely at 09:00&nbsp;UTC. You don't need to be online. You don't need to do anything.</div>
+          </div>
+
+          <div class="timeline-item">
+            <div class="timeline-dot" aria-hidden="true"></div>
+            <div class="timeline-label">Continuously</div>
+            <div class="timeline-title">Automatic rotation across Portal apps</div>
+            <div class="timeline-desc">Votes rotate across all registered Portal apps, ensuring every project receives equal exposure over time.</div>
+          </div>
+
+          <div class="timeline-item">
+            <div class="timeline-dot" aria-hidden="true"></div>
+            <div class="timeline-label">Day 30</div>
+            <div class="timeline-title">30 days later&thinsp;&mdash;&thinsp;renew to continue</div>
+            <div class="timeline-desc">Your session key expires and automation pauses. Return to this page and connect again in under a minute to keep going.</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Section 5: FAQ ── -->
+  <section id="faq" aria-label="Frequently asked questions">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-label">FAQ</div>
+        <h2 class="section-title">Questions answered.</h2>
+      </div>
+
+      <div class="faq-list reveal" role="list">
+
+        <div class="faq-item" role="listitem">
+          <button class="faq-trigger" aria-expanded="false" aria-controls="faq-body-1">
+            <span class="faq-q">Is this safe? Can Mantis Pro access my funds?</span>
+            <span class="faq-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <div class="faq-body" id="faq-body-1" role="region">
+            <div class="faq-body-inner">No. The session key is limited exclusively to the Portal upvote contract. It cannot transfer any tokens or ETH, cannot approve token spend, and has no access to your wallet's assets under any circumstances.</div>
+          </div>
+        </div>
+
+        <div class="faq-item" role="listitem">
+          <button class="faq-trigger" aria-expanded="false" aria-controls="faq-body-2">
+            <span class="faq-q">What is a session key?</span>
+            <span class="faq-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <div class="faq-body" id="faq-body-2" role="region">
+            <div class="faq-body-inner">A session key is a derived key that can perform a limited set of actions on behalf of your wallet. Abstract's smart wallet architecture makes them possible without exposing your main private key. Think of it as a valet key&thinsp;&mdash;&thinsp;it only opens specific doors, nothing else.</div>
+          </div>
+        </div>
+
+        <div class="faq-item" role="listitem">
+          <button class="faq-trigger" aria-expanded="false" aria-controls="faq-body-3">
+            <span class="faq-q">What apps will my wallet vote for?</span>
+            <span class="faq-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <div class="faq-body" id="faq-body-3" role="region">
+            <div class="faq-body-inner">Your wallet rotates votes across all registered Portal apps, giving every project equal exposure. The current catalog contains apps live on the Abstract network. The rotation is automatic&thinsp;&mdash;&thinsp;you don't choose or configure anything.</div>
+          </div>
+        </div>
+
+        <div class="faq-item" role="listitem">
+          <button class="faq-trigger" aria-expanded="false" aria-controls="faq-body-4">
+            <span class="faq-q">What happens when my session expires?</span>
+            <span class="faq-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <div class="faq-body" id="faq-body-4" role="region">
+            <div class="faq-body-inner">Your automation pauses automatically once the 30-day session key expires. Nothing breaks, and no action is required unless you want to continue. You can renew at any time by returning to this page and connecting again&thinsp;&mdash;&thinsp;the process takes under a minute.</div>
+          </div>
+        </div>
+
+        <div class="faq-item" role="listitem">
+          <button class="faq-trigger" aria-expanded="false" aria-controls="faq-body-5">
+            <span class="faq-q">How much does it cost?</span>
+            <span class="faq-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <div class="faq-body" id="faq-body-5" role="region">
+            <div class="faq-body-inner">Free. Mantis Pro covers all gas fees for every automated vote. You pay nothing to register and nothing to maintain the service for the duration of your session.</div>
+          </div>
+        </div>
+
+        <div class="faq-item" role="listitem">
+          <button class="faq-trigger" aria-expanded="false" aria-controls="faq-body-6">
+            <span class="faq-q">Can I cancel?</span>
+            <span class="faq-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <div class="faq-body" id="faq-body-6" role="region">
+            <div class="faq-body-inner">Sessions are self-expiring by design and cannot be force-revoked from our end. Simply not renewing when your session expires effectively cancels your automation. There is no account to delete and no subscription to manage.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ─── Footer ─── -->
+<footer>
+  <span class="footer-copy">Portal Upvote Tool &middot; Abstract Network &middot; mantispro.xyz</span>
+  <nav class="footer-nav" aria-label="Footer navigation">
+    <a href="/portal-upvote/dashboard">Dashboard</a>
+    <a href="/portal-upvote/my-votes">My Votes</a>
+  </nav>
+</footer>
+
+<!-- ─── Inline Scripts ─── -->
 <script>
-(function(){
-  const cv=document.getElementById('bubble-canvas');const ctx=cv.getContext('2d');
-  let W,H,mx=-2000,my=-2000;
-  window.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY},{passive:true});
-  function resize(){const dpr=devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;cv.style.width=W+'px';cv.style.height=H+'px';ctx.scale(dpr,dpr);}
-  function mk(s){const r=55+Math.random()*145;return{x:Math.random()*W,y:s?Math.random()*H:H+r+Math.random()*200,vx:(Math.random()-.5)*.35,vy:-(0.18+Math.random()*0.38),r,baseAlpha:0.055+Math.random()*0.065-r*0.0001,alpha:0,targetAlpha:0,wobble:Math.random()*Math.PI*2,wobbleS:0.006+Math.random()*0.010,repVx:0,repVy:0};}
-  let bubbles=[];
-  function init(){resize();bubbles=Array.from({length:18},()=>mk(true));bubbles.forEach(b=>{b.alpha=b.baseAlpha*Math.random();});}
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    bubbles.forEach(b=>{
-      b.wobble+=b.wobbleS;b.repVx*=0.88;b.repVy*=0.88;
-      const dx=b.x-mx,dy=b.y-my,dist=Math.sqrt(dx*dx+dy*dy);let boost=0;
-      if(dist<230){const n=dist<1?1:dist,f=(230-dist)/230;b.repVx+=(dx/n)*f*4.5;b.repVy+=(dy/n)*f*4.5;boost=f*0.045;}
-      b.x+=b.vx+Math.sin(b.wobble)*0.45+b.repVx;b.y+=b.vy+b.repVy;
-      b.targetAlpha=b.baseAlpha+boost;b.alpha+=(b.targetAlpha-b.alpha)*0.05;
-      if(b.y<-b.r*2.5){b.x=Math.random()*W;b.y=H+b.r+Math.random()*180;b.vx=(Math.random()-.5)*.35;b.vy=-(0.18+Math.random()*0.38);b.repVx=0;b.repVy=0;b.baseAlpha=0.055+Math.random()*0.065-b.r*0.0001;b.alpha=0;}
-      if(b.x<-b.r*1.5)b.x=W+b.r;if(b.x>W+b.r*1.5)b.x=-b.r;
-      const a=Math.max(0,b.alpha);const g=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
-      g.addColorStop(0,`rgba(222,220,248,${a})`);g.addColorStop(0.35,`rgba(205,203,238,${a*.72})`);g.addColorStop(0.70,`rgba(185,183,222,${a*.30})`);g.addColorStop(1,`rgba(165,163,208,0)`);
-      ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
-    });
-    requestAnimationFrame(draw);
+/* ── Bubble canvas ── */
+(function () {
+  var canvas = document.getElementById('bubble-canvas');
+  var ctx = canvas.getContext('2d');
+  var W, H, bubbles = [];
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
   }
-  init();requestAnimationFrame(draw);window.addEventListener('resize',init,{passive:true});
+
+  function mkBubble() {
+    var speed = 0.3 + Math.random() * 0.55;
+    return {
+      x: Math.random() * W,
+      y: H + 20,
+      r: 1.5 + Math.random() * 4,
+      speed: speed,
+      drift: (Math.random() - 0.5) * 0.4,
+      alpha: 0.04 + Math.random() * 0.1,
+      life: 0,
+      maxLife: (H + 60) / speed
+    };
+  }
+
+  function init() {
+    bubbles = [];
+    for (var i = 0; i < 55; i++) {
+      var b = mkBubble();
+      b.y = Math.random() * H;
+      b.life = Math.random() * b.maxLife;
+      bubbles.push(b);
+    }
+  }
+
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    for (var i = 0; i < bubbles.length; i++) {
+      var b = bubbles[i];
+      b.y -= b.speed;
+      b.x += b.drift;
+      b.life++;
+      if (b.life > b.maxLife) {
+        bubbles[i] = mkBubble();
+        continue;
+      }
+      var fade = Math.min(b.life / 60, 1) * Math.min((b.maxLife - b.life) / 60, 1);
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(210,210,230,' + (b.alpha * fade) + ')';
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  init();
+  frame();
+  window.addEventListener('resize', function () { resize(); init(); });
 })();
-</script>
 
-<!-- MAIN LOGIC -->
-<script>
-function setProgress(txt){
-  const el=document.getElementById('progress-area');
-  el.innerHTML=txt?`<span class="spinner"></span>${txt}`:'';
-}
-function showBanner(msg,type='ok'){
-  const el=document.getElementById('status-banner');
-  el.textContent=msg;el.className=type;el.style.display='block';
-}
-function hideBanner(){document.getElementById('status-banner').style.display='none';}
-
-function showSuccess(agwAddr){
-  document.getElementById('register-card').style.display='none';
-  const sc=document.getElementById('success-card');
-  document.getElementById('success-addr').textContent=agwAddr;
-  sc.style.display='block';
-  const link=document.getElementById('my-votes-link');
-  if(link) link.href='/portal-upvote/my-votes?address='+encodeURIComponent(agwAddr);
-  requestAnimationFrame(()=>sc.classList.add('in'));
-  sc.scrollIntoView({behavior:'smooth',block:'center'});
-}
-
-async function storeSession(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt){
-  setProgress('Saving your session…');
-  const r=await fetch('/portal-upvote/register-session',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({sessionPrivKey,sessionConfig:sessionConfigJson,agwAddress,expiresAt}),
+/* ── Hero stagger-in on load ── */
+window.addEventListener('DOMContentLoaded', function () {
+  requestAnimationFrame(function () {
+    setTimeout(function () {
+      document.querySelector('.hero-headline').classList.add('loaded');
+    }, 80);
+    setTimeout(function () {
+      document.querySelector('.hero-subtitle').classList.add('loaded');
+    }, 180);
+    setTimeout(function () {
+      document.querySelector('.register-card-wrap').classList.add('loaded');
+    }, 300);
   });
-  const data=await r.json().catch(()=>({}));
-  if(!r.ok||data.error)throw new Error(data.error||`HTTP ${r.status}`);
-  return data;
+});
+
+/* ── Scroll reveal ── */
+(function () {
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.reveal').forEach(function (el) { obs.observe(el); });
+})();
+
+/* ── FAQ accordion ── */
+(function () {
+  document.querySelectorAll('.faq-trigger').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var item = btn.closest('.faq-item');
+      var body = item.querySelector('.faq-body');
+      var inner = item.querySelector('.faq-body-inner');
+      var isOpen = item.classList.contains('open');
+
+      /* Close all open items */
+      document.querySelectorAll('.faq-item.open').forEach(function (oi) {
+        oi.classList.remove('open');
+        oi.querySelector('.faq-body').style.maxHeight = '0';
+        oi.querySelector('.faq-trigger').setAttribute('aria-expanded', 'false');
+      });
+
+      /* Open this item if it was closed */
+      if (!isOpen) {
+        item.classList.add('open');
+        body.style.maxHeight = inner.offsetHeight + 'px';
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+})();
+
+/* ── Helpers ── */
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
-// Callbacks the AGW bundle calls after session creation
-window._onSessionCreated=async function(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt){
-  try{
-    await storeSession(sessionPrivKey,sessionConfigJson,agwAddress,expiresAt);
+function setProgress(txt) {
+  var area = document.getElementById('progress-area');
+  if (!txt) {
+    area.innerHTML = '';
+    return;
+  }
+  area.innerHTML =
+    '<div class="spin" aria-hidden="true"></div>' +
+    '<span>' + escHtml(txt) + '</span>';
+}
+
+function showBanner(msg, type) {
+  var el = document.getElementById('status-banner');
+  el.textContent = msg;
+  el.className = (type === 'err') ? 'err' : 'ok';
+  el.style.display = 'block';
+}
+
+function hideBanner() {
+  var el = document.getElementById('status-banner');
+  el.style.display = 'none';
+  el.className = '';
+}
+
+function showSuccess(agwAddr) {
+  /* Hide the register card */
+  var wrap = document.querySelector('.register-card-wrap');
+  if (wrap) {
+    wrap.style.transition = 'opacity 0.4s ease';
+    wrap.style.opacity = '0';
+    setTimeout(function () { wrap.style.display = 'none'; }, 400);
+  }
+
+  /* Populate success card */
+  var card = document.getElementById('success-card');
+  var addrPill = document.getElementById('success-addr');
+  var link = document.getElementById('success-link');
+
+  var short = (agwAddr.length > 20)
+    ? agwAddr.slice(0, 10) + '…' + agwAddr.slice(-8)
+    : agwAddr;
+
+  addrPill.textContent = short;
+  addrPill.title = agwAddr;
+  link.href = '/portal-upvote/my-votes?address=' + encodeURIComponent(agwAddr);
+
+  /* Show with animation */
+  card.style.display = 'block';
+  card.style.opacity = '0';
+  card.style.transform = 'translateY(24px)';
+  card.style.transition = 'opacity 0.7s 0.35s cubic-bezier(0.22,1,0.36,1), transform 0.7s 0.35s cubic-bezier(0.22,1,0.36,1)';
+
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    });
+  });
+}
+
+/* ── Session persistence ── */
+async function storeSession(key, cfg, addr, exp) {
+  var r = await fetch('/portal-upvote/register-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionPrivKey: key,
+      sessionConfig: cfg,
+      agwAddress: addr,
+      expiresAt: exp
+    })
+  });
+  var d = await r.json().catch(function () { return {}; });
+  if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+}
+
+/* ── AGW bundle callbacks ── */
+window._onSessionCreated = async function (key, cfg, addr, exp) {
+  hideBanner();
+  setProgress('Saving your session…');
+  try {
+    await storeSession(key, cfg, addr, exp);
     setProgress('');
-    showSuccess(agwAddress);
-  }catch(e){
+    showSuccess(addr);
+  } catch (e) {
     setProgress('');
-    showBanner(e.message||String(e),'err');
+    showBanner(e.message, 'err');
   }
 };
-window._onSessionProgress=function(txt){setProgress(txt);};
-window._agwConnectError=function(msg){
-  setProgress('');
-  let m=msg||'Unknown error';
-  if(/rejected|cancel|dismiss/i.test(m))m='Connection cancelled. Try again when ready.';
-  showBanner(m,'err');
+
+window._onSessionProgress = function (txt) {
+  hideBanner();
+  setProgress(txt);
 };
 
-requestAnimationFrame(()=>{
-  document.querySelectorAll('.fade').forEach((el,i)=>
-    setTimeout(()=>el.classList.add('in'),i*80+60)
-  );
-});
+window._agwConnectError = function (msg) {
+  setProgress('');
+  showBanner(msg, 'err');
+};
 </script>
 
-<!-- AGW React bundle — renders the Connect button into #agw-root -->
+<!-- AGW wallet connector bundle — renders into #agw-root -->
 <script src="/portal-upvote/connect.bundle.js"></script>
 </body>
 </html>
