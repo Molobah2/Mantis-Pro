@@ -1462,6 +1462,10 @@ async function storeSession(key, cfg, addr, exp) {
   });
   var d = await r.json().catch(function () { return {}; });
   if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+  try {
+    localStorage.setItem('agw_address', addr.toLowerCase());
+    localStorage.setItem('agw_expires_at', String(exp));
+  } catch (_) {}
 }
 
 /* ── AGW bundle callbacks ── */

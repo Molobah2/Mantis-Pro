@@ -1321,6 +1321,13 @@
 
   /* ── State ─────────────────────────────────────────────────────── */
   var address = new URLSearchParams(location.search).get('address');
+  if (!address) {
+    try {
+      var _stored = localStorage.getItem('agw_address');
+      var _exp    = parseFloat(localStorage.getItem('agw_expires_at') || '0');
+      if (_stored && _exp > Date.now() / 1000) address = _stored;
+    } catch (_) {}
+  }
   var allVotes = [];
   var visibleCount = 50;
   var currentFilter = 'all';
