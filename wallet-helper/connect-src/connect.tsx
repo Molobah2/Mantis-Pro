@@ -2,10 +2,10 @@ import React, { useRef, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AbstractWalletProvider,
-  useLoginWithAbstract,
   useAbstractClient,
   useCreateSession,
 } from "@abstract-foundation/agw-react";
+import { useConnect, useDisconnect } from "wagmi";
 import { LimitType } from "@abstract-foundation/agw-client/sessions";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { abstract } from "viem/chains";
@@ -27,14 +27,21 @@ declare global {
 }
 
 function AGWButton() {
-  const { login } = useLoginWithAbstract();
+  const { connect, connectors, isPending: isConnecting, error: connectError } = useConnect();
   const { data: abstractClient } = useAbstractClient();
   const { createSessionAsync } = useCreateSession();
   const [busy, setBusy] = useState(false);
   const pendingRef = useRef(false);
 
+  // Surface wagmi connect errors immediately
   useEffect(() => {
-    // After login() completes, abstractClient becomes available — fire session creation
+    if (connectError) {
+      window._agwConnectError?.(connectError.message);
+    }
+  }, [connectError]);
+
+  // Once abstractClient is available after login, create the session
+  useEffect(() => {
     if (!abstractClient || !pendingRef.current) return;
     pendingRef.current = false;
     doCreateSession();
@@ -98,14 +105,26 @@ function AGWButton() {
   }
 
   const handleClick = () => {
-    if (busy) return;
+    if (busy || isConnecting) return;
+
     if (abstractClient) {
       doCreateSession();
-    } else {
-      pendingRef.current = true;
-      login();
+      return;
     }
+
+    const connector = connectors.find((c) => c.id === "xyz.abs.privy");
+    if (!connector) {
+      window._agwConnectError?.(
+        "Abstract wallet connector not found. Please reload the page and try again."
+      );
+      return;
+    }
+
+    pendingRef.current = true;
+    connect({ connector });
   };
+
+  const isLoading = busy || isConnecting;
 
   const btnStyle: React.CSSProperties = {
     display: "flex",
@@ -117,12 +136,12 @@ function AGWButton() {
       "linear-gradient(135deg, rgba(76,255,145,0.16) 0%, rgba(40,200,100,0.10) 100%)",
     color: "#78f0a8",
     border: "1px solid rgba(90,220,140,0.26)",
-    cursor: busy ? "not-allowed" : "pointer",
+    cursor: isLoading ? "not-allowed" : "pointer",
     fontSize: "14.5px",
     fontWeight: 500,
     width: "100%",
     justifyContent: "center",
-    opacity: busy ? 0.55 : 1,
+    opacity: isLoading ? 0.55 : 1,
     fontFamily: "inherit",
     transition: "all 0.22s cubic-bezier(0.16,1,0.3,1)",
     boxShadow:
@@ -131,7 +150,7 @@ function AGWButton() {
   };
 
   return (
-    <button onClick={handleClick} disabled={busy} style={btnStyle}>
+    <button onClick={handleClick} disabled={isLoading} style={btnStyle}>
       <svg
         width="16"
         height="16"
@@ -146,16 +165,13 @@ function AGWButton() {
         <rect x="3" y="11" width="18" height="11" rx="2" />
         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
-      {busy ? "Connecting…" : "Connect Abstract Global Wallet"}
+      {isLoading ? "Connecting…" : "Connect Abstract Global Wallet"}
     </button>
   );
 }
 
 function App() {
   return (
-    // Pass our same-origin RPC proxy as the transport.
-    // All RPC calls (including createSession tx submission) go through /api/rpc
-    // on our server, which forwards to Abstract mainnet — no CORS restriction.
     <AbstractWalletProvider chain={abstract} transport={http("/api/rpc")}>
       <AGWButton />
     </AbstractWalletProvider>
