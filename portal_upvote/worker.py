@@ -43,7 +43,9 @@ def run_daily_upvote():
                  last_error="Catalog empty — trigger a catalog refresh at /portal-upvote")
             return
 
-        last        = store.get_last_upvoted_per_app()
+        from .config import AGW_ADDRESS
+        owner_addr  = (AGW_ADDRESS or "").lower()
+        last        = store.get_last_upvoted_per_app_for_user(owner_addr) if owner_addr else store.get_last_upvoted_per_app()
         sorted_apps = sorted(apps, key=lambda a: last.get(a["id"], 0.0))
         success     = False
 
@@ -52,7 +54,7 @@ def run_daily_upvote():
                 print(f"[upvote] daily job (owner) → app_id={app['id']} name={app['name']!r}")
                 result  = node_client.call_upvote(app["id"])
                 tx_hash = result.get("txHash", "")
-                store.record_upvote(app["id"], tx_hash, "success")
+                store.record_upvote(app["id"], tx_hash, "success", owner_addr or None)
                 _set(running=False, last_run_ts=time.time(), last_run_ok=True,
                      last_run_app=app, last_tx_hash=tx_hash, last_error=None)
                 print(f"[upvote] owner done → tx={tx_hash}")
@@ -61,7 +63,7 @@ def run_daily_upvote():
             except Exception as inner:
                 err = str(inner)
                 if "revert" in err.lower() or "0xda1a7ce4" in err:
-                    store.record_upvote(app["id"], "", "reverted")
+                    store.record_upvote(app["id"], "", "reverted", owner_addr or None)
                     print(f"[upvote] owner: app {app['id']} reverted, trying next")
                     continue
                 raise
