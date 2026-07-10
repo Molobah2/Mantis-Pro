@@ -133,9 +133,9 @@ function AGWButton() {
     padding: "18px 22px",
     borderRadius: "16px",
     background:
-      "linear-gradient(135deg, rgba(76,255,145,0.16) 0%, rgba(40,200,100,0.10) 100%)",
-    color: "#78f0a8",
-    border: "1px solid rgba(90,220,140,0.26)",
+      "linear-gradient(135deg, rgba(255,255,255,0.72) 0%, rgba(225,230,252,0.52) 100%)",
+    color: "rgba(20,23,46,0.85)",
+    border: "1px solid rgba(148,158,215,0.42)",
     cursor: isLoading ? "not-allowed" : "pointer",
     fontSize: "14.5px",
     fontWeight: 500,
@@ -145,7 +145,7 @@ function AGWButton() {
     fontFamily: "inherit",
     transition: "all 0.22s cubic-bezier(0.16,1,0.3,1)",
     boxShadow:
-      "inset 0 1px 0 rgba(150,255,190,0.18), 0 6px 32px rgba(50,180,100,0.14)",
+      "inset 0 1px 0 rgba(255,255,255,0.95), 0 4px 20px rgba(90,108,200,0.1)",
     letterSpacing: "-0.01em",
   };
 
