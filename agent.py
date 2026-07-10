@@ -1994,10 +1994,13 @@ def upvote_trigger():
         return jsonify({"error": "Trigger failed"}), 500
 
 @app.route("/api/upvote-run-all", methods=["POST"])
-@_sec.require_admin
 def upvote_run_all():
     """Trigger the full daily upvote run (owner + all registered users) immediately."""
     import threading
+    from flask import request as freq
+    ip = _sec.get_client_ip(freq)
+    if not _sec.rate_limit(ip, "run-all", limit=5, window=3600):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
     if _upvote_worker.get_status()["running"]:
         return jsonify({"error": "A run is already in progress"}), 409
     t = threading.Thread(
