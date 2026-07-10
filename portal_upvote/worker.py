@@ -120,7 +120,11 @@ def _run_user_votes(apps):
                     raise
 
             if not voted:
-                print(f"[upvote] user {user['address'][:10]}… — all apps reverted")
+                # All apps reverted — user most likely voted manually today.
+                # Record as already_voted so streak counters aren't penalised.
+                first_app = sorted_apps[0] if sorted_apps else apps[0]
+                store.record_upvote(first_app["id"], "", "already_voted", user["address"])
+                print(f"[upvote] user {user['address'][:10]}… — all apps reverted, treating as already voted today")
 
         except Exception as e:
             print(f"[upvote] user {user['address'][:10]}… error: {e}")

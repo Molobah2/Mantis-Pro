@@ -136,7 +136,7 @@ def get_leaderboard(limit=20):
                 u.expires_at
             FROM users u
             LEFT JOIN upvote_log ul
-                ON LOWER(ul.user_address) = u.address AND ul.status = 'success'
+                ON LOWER(ul.user_address) = u.address AND ul.status IN ('success','already_voted')
             GROUP BY u.address
             ORDER BY vote_count DESC, last_voted DESC
             LIMIT ?
@@ -233,27 +233,27 @@ def get_stats(user_address=None):
             addr = user_address.lower()
             def count_since(ts):
                 return c.execute(
-                    "SELECT COUNT(*) FROM upvote_log WHERE status='success' AND upvoted_at>=? AND LOWER(user_address)=?",
+                    "SELECT COUNT(*) FROM upvote_log WHERE status IN ('success','already_voted') AND upvoted_at>=? AND LOWER(user_address)=?",
                     (ts, addr)
                 ).fetchone()[0]
             stats = {
                 "today":    count_since(midnight_utc),
                 "week":     count_since(now - 7  * 86400),
                 "month":    count_since(now - 30 * 86400),
-                "all_time": c.execute("SELECT COUNT(*) FROM upvote_log WHERE status='success' AND LOWER(user_address)=?", (addr,)).fetchone()[0],
-                "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status!='success' AND LOWER(user_address)=?", (addr,)).fetchone()[0],
+                "all_time": c.execute("SELECT COUNT(*) FROM upvote_log WHERE status IN ('success','already_voted') AND LOWER(user_address)=?", (addr,)).fetchone()[0],
+                "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status NOT IN ('success','already_voted') AND LOWER(user_address)=?", (addr,)).fetchone()[0],
             }
         else:
             def count_since(ts):
                 return c.execute(
-                    "SELECT COUNT(*) FROM upvote_log WHERE status='success' AND upvoted_at >= ?", (ts,)
+                    "SELECT COUNT(*) FROM upvote_log WHERE status IN ('success','already_voted') AND upvoted_at >= ?", (ts,)
                 ).fetchone()[0]
             stats = {
                 "today":    count_since(midnight_utc),
                 "week":     count_since(now - 7  * 86400),
                 "month":    count_since(now - 30 * 86400),
-                "all_time": c.execute("SELECT COUNT(*) FROM upvote_log WHERE status='success'").fetchone()[0],
-                "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status!='success'").fetchone()[0],
+                "all_time": c.execute("SELECT COUNT(*) FROM upvote_log WHERE status IN ('success','already_voted')").fetchone()[0],
+                "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status NOT IN ('success','already_voted')").fetchone()[0],
             }
         c.close()
     return stats
