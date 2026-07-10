@@ -11,7 +11,7 @@ import base64
 from web3 import Web3
 from dotenv import load_dotenv
 import anthropic
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 load_dotenv()
 
