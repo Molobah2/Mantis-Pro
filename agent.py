@@ -2073,11 +2073,12 @@ def upvote_user_votes():
     stats = _upvote_store.get_stats(user_address=address)
 
     return jsonify({
-        "address":    address.lower(),
-        "registered": user is not None,
-        "expires_at": user["expires_at"] if user else None,
-        "stats":      stats,
-        "votes":      votes,
+        "address":       address.lower(),
+        "registered":    user is not None,
+        "expires_at":    user["expires_at"]    if user else None,
+        "registered_at": user["registered_at"] if user else None,
+        "stats":         stats,
+        "votes":         votes,
     })
 
 
