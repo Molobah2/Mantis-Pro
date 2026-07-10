@@ -1993,6 +1993,21 @@ def upvote_trigger():
         print(f"[upvote] trigger error: {e}")
         return jsonify({"error": "Trigger failed"}), 500
 
+@app.route("/api/upvote-run-all", methods=["POST"])
+@_sec.require_admin
+def upvote_run_all():
+    """Trigger the full daily upvote run (owner + all registered users) immediately."""
+    import threading
+    if _upvote_worker.get_status()["running"]:
+        return jsonify({"error": "A run is already in progress"}), 409
+    t = threading.Thread(
+        target=_upvote_worker.run_daily_upvote,
+        daemon=True,
+        name="manual-upvote-run",
+    )
+    t.start()
+    return jsonify({"ok": True, "message": "Full upvote run started for all registered users"})
+
 @app.route("/api/upvote-refresh-catalog", methods=["POST"])
 @_sec.require_admin
 def upvote_refresh_catalog():
