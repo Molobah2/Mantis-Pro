@@ -1991,6 +1991,17 @@ def upvote_run_all():
     t.start()
     return jsonify({"ok": True, "message": "Full upvote run started for all registered users"})
 
+@app.route("/api/upvote-clear-log", methods=["POST"])
+@_sec.require_admin
+def upvote_clear_log():
+    import sqlite3, os
+    db = os.path.join(os.getenv("DATA_DIR", "."), "portal_upvote.db")
+    con = sqlite3.connect(db)
+    con.execute("DELETE FROM upvote_log")
+    con.commit()
+    con.close()
+    return jsonify({"ok": True, "message": "upvote_log cleared"})
+
 @app.route("/api/upvote-refresh-catalog", methods=["POST"])
 @_sec.require_admin
 def upvote_refresh_catalog():
