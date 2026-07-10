@@ -1965,35 +1965,13 @@ def upvote_status():
 @app.route("/api/upvote-trigger", methods=["POST"])
 @_sec.require_admin
 def upvote_trigger():
-    from flask import request as freq
-    ip = _sec.get_client_ip(freq)
-    if not _sec.rate_limit(ip, "trigger", limit=5, window=3600):
-        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
-    try:
-        apps = _upvote_store.get_apps()
-        if not apps:
-            return jsonify({"error": "Catalog empty — refresh catalog first"}), 400
-        from portal_upvote.config import AGW_ADDRESS
-        owner_addr  = (AGW_ADDRESS or "").lower()
-        last = _upvote_store.get_last_upvoted_per_app_for_user(owner_addr) if owner_addr else _upvote_store.get_last_upvoted_per_app()
-        sorted_apps = sorted(apps, key=lambda a: last.get(a["id"], 0.0))
-        for app_ in sorted_apps[:10]:
-            try:
-                result  = _upvote_node.call_upvote(app_["id"])
-                tx_hash = result.get("txHash", "")
-                _upvote_store.record_upvote(app_["id"], tx_hash, "success", owner_addr or None)
-                return jsonify({"ok": True, "app_name": app_["name"], "app_id": app_["id"],
-                                "tx_hash": tx_hash})
-            except Exception as inner:
-                err = str(inner)
-                if "revert" in err.lower() or "0xda1a7ce4" in err:
-                    _upvote_store.record_upvote(app_["id"], "", "reverted", owner_addr or None)
-                    continue
-                raise
-        return jsonify({"error": "All candidate apps reverted — may have already voted today"}), 500
-    except Exception as e:
-        print(f"[upvote] trigger error: {e}")
-        return jsonify({"error": "Trigger failed"}), 500
+    """Deprecated one-shot endpoint — delegates to the unified run-all flow."""
+    import threading
+    if _upvote_worker.get_status()["running"]:
+        return jsonify({"error": "A run is already in progress"}), 409
+    t = threading.Thread(target=_upvote_worker.run_daily_upvote, daemon=True, name="trigger-upvote")
+    t.start()
+    return jsonify({"ok": True, "message": "Upvote run started for all registered users"})
 
 @app.route("/api/upvote-run-all", methods=["POST"])
 def upvote_run_all():
