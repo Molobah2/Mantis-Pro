@@ -109,33 +109,10 @@
     100% { transform: translate(-30px, 40px) scale(1.03); }
   }
 
-  #bubble-canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0.38;
-  }
-
   .vignette {
     position: absolute;
     inset: 0;
     background: radial-gradient(ellipse at 50% 35%, transparent 20%, rgba(5,6,10,0.6) 100%);
-  }
-
-  .scan-line {
-    position: absolute;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 70%, transparent 100%);
-    animation: scanLine 28s linear infinite;
-    top: -1px;
-  }
-
-  @keyframes scanLine {
-    0%   { top: -1px; }
-    100% { top: 100vh; }
   }
 
   /* ── Layout ── */
@@ -1022,9 +999,7 @@
   <div class="orb orb-1"></div>
   <div class="orb orb-2"></div>
   <div class="orb orb-3"></div>
-  <canvas id="bubble-canvas"></canvas>
   <div class="vignette"></div>
-  <div class="scan-line"></div>
 </div>
 
 <!-- Page Root -->
@@ -1204,109 +1179,6 @@
 (function () {
   'use strict';
 
-  /* ── Bubble canvas ─────────────────────────────────────────────── */
-  (function () {
-    var canvas = document.getElementById('bubble-canvas');
-    var ctx = canvas.getContext('2d');
-    var W, H;
-    var mouseX = -2000, mouseY = -2000;
-    var bs = [];
-
-    function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
-    resize();
-    window.addEventListener('resize', resize);
-    document.addEventListener('mousemove', function(e) { mouseX = e.clientX; mouseY = e.clientY; });
-    document.addEventListener('mouseleave', function() { mouseX = -2000; mouseY = -2000; });
-
-    function mkB() {
-      var layer = Math.random() < 0.2 ? 0 : Math.random() < 0.45 ? 1 : 2;
-      var r = layer === 2 ? (22 + Math.random() * 46)
-            : layer === 1 ? (6 + Math.random() * 18)
-            : (1.5 + Math.random() * 5);
-      var alpha = layer === 2 ? (0.05 + Math.random() * 0.09)
-                : layer === 1 ? (0.1 + Math.random() * 0.16)
-                : (0.22 + Math.random() * 0.3);
-      return {
-        x: Math.random() * W,
-        y: H + r + Math.random() * 300,
-        r: r, layer: layer, alpha: alpha,
-        baseVX: (Math.random() - 0.5) * 0.1,
-        baseVY: -(0.04 + Math.random() * 0.14),
-        vx: 0, vy: 0,
-        wobble: Math.random() * Math.PI * 2,
-        wobbleAmp: 0.25 + Math.random() * 0.55,
-        wobbleFreq: 0.003 + Math.random() * 0.005,
-      };
-    }
-
-    for (var i = 0; i < 72; i++) { var b = mkB(); b.y = Math.random() * H; bs.push(b); }
-
-    function drawBubble(b) {
-      ctx.save();
-      if (b.layer === 0) ctx.filter = 'blur(3px)';
-      else if (b.layer === 2 && b.r > 32) ctx.filter = 'blur(1px)';
-
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-
-      var gx = b.x - b.r * 0.28, gy = b.y - b.r * 0.32;
-      var grad = ctx.createRadialGradient(gx, gy, b.r * 0.04, b.x, b.y, b.r);
-      var a = b.alpha;
-      grad.addColorStop(0,    'rgba(240,242,255,' + (a * 0.88) + ')');
-      grad.addColorStop(0.22, 'rgba(210,218,248,' + (a * 0.42) + ')');
-      grad.addColorStop(0.6,  'rgba(165,180,228,' + (a * 0.15) + ')');
-      grad.addColorStop(1,    'rgba(118,138,212,' + (a * 0.04) + ')');
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      ctx.strokeStyle = 'rgba(200,212,242,' + (a * 0.55) + ')';
-      ctx.lineWidth = b.r > 20 ? 1.5 : (b.r > 8 ? 0.9 : 0.5);
-      ctx.stroke();
-
-      if (b.r > 5) {
-        var sx = b.x - b.r * 0.32, sy = b.y - b.r * 0.38;
-        var spec = ctx.createRadialGradient(sx, sy, 0, sx, sy, b.r * 0.44);
-        spec.addColorStop(0, 'rgba(255,255,255,' + (a * 0.7) + ')');
-        spec.addColorStop(0.5, 'rgba(240,244,255,' + (a * 0.22) + ')');
-        spec.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-        ctx.fillStyle = spec;
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    function tick() {
-      ctx.clearRect(0, 0, W, H);
-      var sorted = bs.slice().sort(function(a, b) { return a.layer - b.layer; });
-      sorted.forEach(function(b) {
-        b.wobble += b.wobbleFreq;
-        var dx = b.x - mouseX, dy = b.y - mouseY;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        var repR = 110 + b.r * 2.2;
-        if (dist < repR && dist > 0) {
-          var force = Math.pow((repR - dist) / repR, 2) * 1.4;
-          b.vx += (dx / dist) * force;
-          b.vy += (dy / dist) * force;
-        }
-        b.vx += (b.baseVX - b.vx) * 0.038;
-        b.vy += (b.baseVY - b.vy) * 0.038;
-        b.x += b.vx + Math.sin(b.wobble) * b.wobbleAmp;
-        b.y += b.vy;
-        if (b.y < -b.r - 50) { Object.assign(b, mkB()); }
-        drawBubble(b);
-      });
-      requestAnimationFrame(tick);
-    }
-    tick();
-
-    /* mouse-reactive ambient light */
-    document.addEventListener('mousemove', function(e) {
-      document.documentElement.style.setProperty('--mx', (e.clientX / innerWidth * 100) + '%');
-      document.documentElement.style.setProperty('--my', (e.clientY / innerHeight * 100) + '%');
-    });
-  })();
 
   /* ── Helpers ───────────────────────────────────────────────────── */
   function pad2(n) { return String(n).padStart(2, '0'); }
