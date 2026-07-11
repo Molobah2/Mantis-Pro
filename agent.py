@@ -2824,7 +2824,7 @@ try:
 except ImportError:
     pass
 
-@app.route("/mesh-claimer/status")
+@app.route("/mesh/status")
 def mesh_claimer_status():
     pk = os.environ.get("AGW_OWNER_PRIVATE_KEY", "")
     address = os.environ.get("MESH_ADDRESS", "")
@@ -2841,7 +2841,7 @@ def mesh_claimer_status():
     state["dry_run"]   = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
     return jsonify(state)
 
-@app.route("/mesh-claimer/run", methods=["POST"])
+@app.route("/mesh/run", methods=["POST"])
 def mesh_claimer_run():
     if not os.environ.get("AGW_OWNER_PRIVATE_KEY", ""):
         return jsonify({"error": "AGW_OWNER_PRIVATE_KEY not set in Railway env vars"}), 400
@@ -2851,7 +2851,7 @@ def mesh_claimer_run():
     threading.Thread(target=_run_mesh_claimer, daemon=True).start()
     return jsonify({"ok": True, "message": "Mesh claim cycle started"})
 
-@app.route("/mesh-claimer")
+@app.route("/mesh")
 def mesh_claimer_dashboard():
     pk        = os.environ.get("AGW_OWNER_PRIVATE_KEY", "")
     address   = os.environ.get("MESH_ADDRESS", "")
@@ -2904,13 +2904,13 @@ def mesh_claimer_dashboard():
       const btn = document.getElementById('runBtn');
       btn.disabled = true;
       btn.textContent = 'Running...';
-      const r = await fetch('/mesh-claimer/run', {{method:'POST'}});
+      const r = await fetch('/mesh/run', {{method:'POST'}});
       const d = await r.json();
       if (!r.ok) {{ alert(d.error); btn.disabled=false; btn.textContent='Claim Now'; return; }}
       pollStatus();
     }}
     async function pollStatus() {{
-      const r = await fetch('/mesh-claimer/status');
+      const r = await fetch('/mesh/status');
       const d = await r.json();
       document.getElementById('status-json').textContent = JSON.stringify(d, null, 2);
       if (d.running) {{ setTimeout(pollStatus, 2000); }}
