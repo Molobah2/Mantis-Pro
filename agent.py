@@ -2773,9 +2773,9 @@ _mesh_state = {
 _mesh_lock = threading.Lock()
 
 def _run_mesh_claimer():
-    pk = os.environ.get("MESH_PRIVATE_KEY", "").strip()
+    pk = os.environ.get("OWNER_PRIVATE_KEY", "").strip()
     if not pk:
-        print("[mesh] MESH_PRIVATE_KEY not set — skipping")
+        print("[mesh] OWNER_PRIVATE_KEY not set — skipping")
         return
     with _mesh_lock:
         if _mesh_state["running"]:
@@ -2792,14 +2792,6 @@ def _run_mesh_claimer():
         address = os.environ.get("MESH_ADDRESS", account.address).strip()
         dry_run = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
 
-        # Patch run_claim_cycle to track claimed count
-        claimed_ref = [0]
-        _orig = _mc.run_claim_cycle
-
-        def _tracked(acc, addr, dr=False):
-            # run_claim_cycle prints its own logs; capture claimed count via monkey-patch
-            _orig(acc, addr, dr)
-
         _mc.run_claim_cycle(account, address, dry_run)
 
         # Re-read wallet info to get accurate today total
@@ -2809,8 +2801,9 @@ def _run_mesh_claimer():
         except Exception:
             today = 0
 
+        import datetime as _dt
         with _mesh_lock:
-            _mesh_state["last_run"]     = datetime.datetime.utcnow().isoformat() + "Z"
+            _mesh_state["last_run"]     = _dt.datetime.utcnow().isoformat() + "Z"
             _mesh_state["last_claimed"] = today
             _mesh_state["total_claimed"] += today
     except Exception as e:
@@ -2831,11 +2824,9 @@ try:
 except ImportError:
     pass
 
-import datetime as _dt_mod
-
 @app.route("/mesh-claimer/status")
 def mesh_claimer_status():
-    pk = os.environ.get("MESH_PRIVATE_KEY", "")
+    pk = os.environ.get("OWNER_PRIVATE_KEY", "")
     address = os.environ.get("MESH_ADDRESS", "")
     if not address and pk:
         try:
@@ -2852,8 +2843,8 @@ def mesh_claimer_status():
 
 @app.route("/mesh-claimer/run", methods=["POST"])
 def mesh_claimer_run():
-    if not os.environ.get("MESH_PRIVATE_KEY", ""):
-        return jsonify({"error": "MESH_PRIVATE_KEY not configured"}), 400
+    if not os.environ.get("OWNER_PRIVATE_KEY", ""):
+        return jsonify({"error": "OWNER_PRIVATE_KEY not set in Railway env vars"}), 400
     with _mesh_lock:
         if _mesh_state["running"]:
             return jsonify({"error": "Already running"}), 409
@@ -2862,7 +2853,7 @@ def mesh_claimer_run():
 
 @app.route("/mesh-claimer")
 def mesh_claimer_dashboard():
-    pk        = os.environ.get("MESH_PRIVATE_KEY", "")
+    pk        = os.environ.get("OWNER_PRIVATE_KEY", "")
     address   = os.environ.get("MESH_ADDRESS", "")
     if not address and pk:
         try:
@@ -2873,6 +2864,7 @@ def mesh_claimer_dashboard():
     with _mesh_lock:
         state = dict(_mesh_state)
 
+    state["dry_run"] = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
     key_status   = "✓ Set" if pk else "✗ Not set"
     key_cls      = "ok" if pk else "err"
     dry_cls      = "warn" if state["dry_run"] else "ok"
@@ -2949,7 +2941,7 @@ def mesh_claimer_dashboard():
   <button id="runBtn" onclick="runNow()" {btn_disabled}>{btn_label}</button>
 
   <p style="margin-top:32px; font-size:12px; color:#444">
-    Set <code>MESH_PRIVATE_KEY</code> in Railway env vars to enable.<br>
+    Set <code>OWNER_PRIVATE_KEY</code> in Railway env vars to enable.<br>
     Optionally set <code>MESH_TOKEN_IDS</code> (comma-sep) to skip on-chain lookup.<br>
     Set <code>MESH_DRY_RUN=true</code> to simulate without posting.
   </p>
