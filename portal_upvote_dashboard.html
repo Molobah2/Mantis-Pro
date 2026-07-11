@@ -1164,33 +1164,16 @@ function render(d, lb) {
   /* App Catalog */
   var catEl = document.getElementById('app-grid');
   catEl.innerHTML = '';
-  var appNames = [];
-  var seen = {};
-  function addApp(n) { if (n && !seen[n]) { seen[n] = 1; appNames.push(n); } }
-  if (nextApp) addApp(nextApp.name);
-  (Array.isArray(d.today)   ? d.today   : []).forEach(function (v) { addApp(v.app_name); });
-  (Array.isArray(d.history) ? d.history : []).forEach(function (v) { addApp(v.app_name); });
-
   var catSize = d.catalog_size || 0;
-  var showList = appNames.slice(0, Math.max(catSize, appNames.length));
+  var catList = Array.isArray(d.catalog) ? d.catalog : [];
 
-  if (showList.length === 0 && catSize > 0) {
-    for (var i = 1; i <= catSize; i++) {
-      var p = document.createElement('div');
-      p.className = 'app-pill';
-      p.textContent = 'App ' + i;
-      catEl.appendChild(p);
-    }
-    set('catalog-count', catSize + ' apps');
-  } else {
-    showList.forEach(function (name) {
-      var p = document.createElement('div');
-      p.className = 'app-pill';
-      p.textContent = name;
-      catEl.appendChild(p);
-    });
-    set('catalog-count', showList.length + ' apps');
-  }
+  catList.forEach(function (app) {
+    var p = document.createElement('div');
+    p.className = 'app-pill';
+    p.textContent = app.name || ('App #' + app.id);
+    catEl.appendChild(p);
+  });
+  set('catalog-count', catSize + ' apps');
 
   /* Leaderboard */
   var lbEl   = document.getElementById('lb-list');

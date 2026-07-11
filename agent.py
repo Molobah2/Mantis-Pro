@@ -1969,6 +1969,7 @@ def upvote_status():
         "last_run":     last_run,
         "next_app":     next_app,
         "catalog_size": len(catalog),
+        "catalog":      catalog,
         "history":      history,
     })
     resp.headers["Cache-Control"] = "no-cache"
