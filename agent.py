@@ -2796,10 +2796,10 @@ def _run_mesh_claimer():
 
         _mc.run_claim_cycle(account, address, dry_run)
 
-        # Re-read wallet info to get accurate today total
+        # Re-read wallet info for total_claims display
         try:
-            info = _mc.get_wallet_info(address)
-            today = int(info.get("claims_today", 0))
+            info  = _mc.get_wallet_info(address)
+            today = int(info.get("total_claims", 0))
         except Exception:
             today = 0
 

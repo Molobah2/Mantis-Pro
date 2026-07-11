@@ -125,7 +125,9 @@ def get_owned_tokens(address: str) -> list[int]:
 def api_get(path: str) -> dict:
     r = requests.get(f"{API_BASE}{path}", timeout=30)
     r.raise_for_status()
-    return r.json()
+    body = r.json()
+    # All Litany API responses are wrapped: { "ok": true, "data": {...} }
+    return body.get("data", body)
 
 def get_wallet_info(address: str) -> dict:
     return api_get(f"/wallet/{address.lower()}")
@@ -276,18 +278,16 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
         return
 
     my_faction   = info.get("faction")
-    claims_today = int(info.get("claims_today", 0))
-    log(f"Faction: {my_faction or 'none'} | Claims today: {claims_today}/{DAILY_MAX}", indent=1)
+    total_claims = info.get("total_claims", 0)
+    log(f"Faction: {my_faction or 'none'} | Total claims all-time: {total_claims}", indent=1)
 
     if not my_faction:
         log("[error] Wallet has no faction assigned.", indent=1)
         log("Complete faction classification at https://litany.gg/docs/agents/skills/mesh", indent=1)
         return
 
-    remaining = DAILY_MAX - claims_today
-    if remaining <= 0:
-        log("Daily budget exhausted. Nothing to do today.", indent=1)
-        return
+    # Daily budget enforced server-side; BUDGET_EXCEEDED error terminates the loop early
+    remaining = DAILY_MAX
 
     # ── Step 2: token IDs ──────────────────────────────────────────────────────
     env_token_str = os.environ.get("MESH_TOKEN_IDS", "").strip()
