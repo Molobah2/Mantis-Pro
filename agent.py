@@ -2762,6 +2762,207 @@ except ImportError:
     print("[upvote] APScheduler not installed — add APScheduler>=3.10.0 to requirements.txt")
 
 
+# ── MESH CLAIMER: APScheduler daily job + routes ──────────────────────────────
+_mesh_state = {
+    "running":      False,
+    "last_run":     None,   # ISO UTC string
+    "last_claimed": 0,
+    "last_error":   None,
+    "total_claimed": 0,
+}
+_mesh_lock = threading.Lock()
+
+def _run_mesh_claimer():
+    pk = os.environ.get("MESH_PRIVATE_KEY", "").strip()
+    if not pk:
+        print("[mesh] MESH_PRIVATE_KEY not set — skipping")
+        return
+    with _mesh_lock:
+        if _mesh_state["running"]:
+            print("[mesh] Already running — skipping")
+            return
+        _mesh_state["running"] = True
+        _mesh_state["last_error"] = None
+
+    import mesh_claimer as _mc
+    from eth_account import Account as _Account
+
+    try:
+        account = _Account.from_key(pk)
+        address = os.environ.get("MESH_ADDRESS", account.address).strip()
+        dry_run = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
+
+        # Patch run_claim_cycle to track claimed count
+        claimed_ref = [0]
+        _orig = _mc.run_claim_cycle
+
+        def _tracked(acc, addr, dr=False):
+            # run_claim_cycle prints its own logs; capture claimed count via monkey-patch
+            _orig(acc, addr, dr)
+
+        _mc.run_claim_cycle(account, address, dry_run)
+
+        # Re-read wallet info to get accurate today total
+        try:
+            info = _mc.get_wallet_info(address)
+            today = int(info.get("claims_today", 0))
+        except Exception:
+            today = 0
+
+        with _mesh_lock:
+            _mesh_state["last_run"]     = datetime.datetime.utcnow().isoformat() + "Z"
+            _mesh_state["last_claimed"] = today
+            _mesh_state["total_claimed"] += today
+    except Exception as e:
+        with _mesh_lock:
+            _mesh_state["last_error"] = str(e)
+        print(f"[mesh] Error: {e}")
+    finally:
+        with _mesh_lock:
+            _mesh_state["running"] = False
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler as _BS2
+    _mesh_scheduler = _BS2(timezone="UTC")
+    _mesh_scheduler.add_job(_run_mesh_claimer, "cron", hour=0, minute=2,
+                            id="daily_mesh_claim", replace_existing=True)
+    _mesh_scheduler.start()
+    print("[mesh] APScheduler started — daily mesh claim at 00:02 UTC")
+except ImportError:
+    pass
+
+import datetime as _dt_mod
+
+@app.route("/mesh-claimer/status")
+def mesh_claimer_status():
+    pk = os.environ.get("MESH_PRIVATE_KEY", "")
+    address = os.environ.get("MESH_ADDRESS", "")
+    if not address and pk:
+        try:
+            from eth_account import Account as _A
+            address = _A.from_key(pk).address
+        except Exception:
+            address = ""
+    with _mesh_lock:
+        state = dict(_mesh_state)
+    state["wallet"]    = address
+    state["key_set"]   = bool(pk)
+    state["dry_run"]   = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
+    return jsonify(state)
+
+@app.route("/mesh-claimer/run", methods=["POST"])
+def mesh_claimer_run():
+    if not os.environ.get("MESH_PRIVATE_KEY", ""):
+        return jsonify({"error": "MESH_PRIVATE_KEY not configured"}), 400
+    with _mesh_lock:
+        if _mesh_state["running"]:
+            return jsonify({"error": "Already running"}), 409
+    threading.Thread(target=_run_mesh_claimer, daemon=True).start()
+    return jsonify({"ok": True, "message": "Mesh claim cycle started"})
+
+@app.route("/mesh-claimer")
+def mesh_claimer_dashboard():
+    pk        = os.environ.get("MESH_PRIVATE_KEY", "")
+    address   = os.environ.get("MESH_ADDRESS", "")
+    if not address and pk:
+        try:
+            from eth_account import Account as _A
+            address = _A.from_key(pk).address
+        except Exception:
+            address = ""
+    with _mesh_lock:
+        state = dict(_mesh_state)
+
+    key_status   = "✓ Set" if pk else "✗ Not set"
+    key_cls      = "ok" if pk else "err"
+    dry_cls      = "warn" if state["dry_run"] else "ok"
+    last_run     = state["last_run"] or "Never"
+    error_html   = f'<p style="color:#ff6b6b">Last error: {state["last_error"]}</p>' if state["last_error"] else ""
+    running_msg  = '<p style="color:#ffd700">&#x21BB; Running now...</p>' if state["running"] else ""
+    btn_disabled = "disabled" if state["running"] else ""
+    btn_label    = "Running..." if state["running"] else "Claim Now"
+    state_json   = json.dumps(state, indent=2)
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Mesh Claimer — Mantis Pro</title>
+  <style>
+    body {{ background:#0a0a0a; color:#e0e0e0; font-family:monospace; padding:40px; max-width:600px; margin:0 auto }}
+    h1 {{ color:#7b68ee; margin-bottom:4px }}
+    h2 {{ color:#9d8fff; font-size:14px; font-weight:normal; margin-top:0; margin-bottom:32px }}
+    .card {{ background:#111; border:1px solid #222; border-radius:8px; padding:20px; margin-bottom:16px }}
+    .row {{ display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1a1a1a }}
+    .row:last-child {{ border-bottom:none }}
+    .label {{ color:#888 }}
+    .val {{ color:#e0e0e0 }}
+    .val.ok {{ color:#4ade80 }}
+    .val.warn {{ color:#fbbf24 }}
+    .val.err {{ color:#f87171 }}
+    button {{
+      background:#7b68ee; color:#fff; border:none; border-radius:6px;
+      padding:12px 28px; font-size:14px; cursor:pointer; font-family:monospace;
+    }}
+    button:disabled {{ background:#333; color:#666; cursor:not-allowed }}
+    button:hover:not(:disabled) {{ background:#6c5ce7 }}
+  </style>
+  <script>
+    async function runNow() {{
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      btn.textContent = 'Running...';
+      const r = await fetch('/mesh-claimer/run', {{method:'POST'}});
+      const d = await r.json();
+      if (!r.ok) {{ alert(d.error); btn.disabled=false; btn.textContent='Claim Now'; return; }}
+      pollStatus();
+    }}
+    async function pollStatus() {{
+      const r = await fetch('/mesh-claimer/status');
+      const d = await r.json();
+      document.getElementById('status-json').textContent = JSON.stringify(d, null, 2);
+      if (d.running) {{ setTimeout(pollStatus, 2000); }}
+      else {{
+        document.getElementById('runBtn').disabled = false;
+        document.getElementById('runBtn').textContent = 'Claim Now';
+        location.reload();
+      }}
+    }}
+  </script>
+</head>
+<body>
+  <h1>Litany Mesh Auto-Claimer</h1>
+  <h2>Mantis Pro // daily territory expansion</h2>
+
+  <div class="card">
+    <div class="row"><span class="label">Wallet</span><span class="val">{address or 'not configured'}</span></div>
+    <div class="row"><span class="label">Private key</span><span class="val {key_cls}">{key_status}</span></div>
+    <div class="row"><span class="label">Dry run</span><span class="val {dry_cls}">{state["dry_run"]}</span></div>
+    <div class="row"><span class="label">Last run</span><span class="val">{last_run}</span></div>
+    <div class="row"><span class="label">Claims today</span><span class="val ok">{state["last_claimed"]}</span></div>
+    <div class="row"><span class="label">Schedule</span><span class="val">Daily at 00:02 UTC</span></div>
+  </div>
+
+  {running_msg}
+  {error_html}
+
+  <button id="runBtn" onclick="runNow()" {btn_disabled}>{btn_label}</button>
+
+  <p style="margin-top:32px; font-size:12px; color:#444">
+    Set <code>MESH_PRIVATE_KEY</code> in Railway env vars to enable.<br>
+    Optionally set <code>MESH_TOKEN_IDS</code> (comma-sep) to skip on-chain lookup.<br>
+    Set <code>MESH_DRY_RUN=true</code> to simulate without posting.
+  </p>
+
+  <div class="card" style="margin-top:24px">
+    <pre id="status-json" style="margin:0; font-size:12px; color:#666">{state_json}</pre>
+  </div>
+</body>
+</html>"""
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
+
 def _startup_session_restore():
     """On startup: restore session file from UPVOTE_SESSION_B64 env var if the file is missing."""
     try:
