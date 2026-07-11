@@ -1625,8 +1625,9 @@
 
   function buildHistoryDOM() {
     var filtered = allVotes.filter(function (v) {
-      if (currentFilter === 'success') return v.status === 'success';
-      if (currentFilter === 'failed') return v.status !== 'success';
+      if (v.status === 'reverted') return false;
+      if (currentFilter === 'success') return v.status === 'success' || v.status === 'already_voted';
+      if (currentFilter === 'failed')  return v.status !== 'success' && v.status !== 'already_voted';
       return true;
     });
 
@@ -1892,7 +1893,9 @@
         if (d.status === 'success') {
           setCooldown(3600);
           var msg = 'Voted for ' + (d.app || 'an app') + ' successfully.';
-          var tx  = d.tx_hash ? '<div class="res-tx">tx: ' + d.tx_hash + '</div>' : '';
+          var tx  = d.tx_hash
+            ? '<div class="res-tx"><a href="https://abscan.org/tx/' + encodeURIComponent(d.tx_hash) + '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;text-underline-offset:3px;">View transaction on AbsScan ↗</a></div>'
+            : '';
           showResult('success', msg, tx);
           setTimeout(loadData, 1500);
         } else if (d.status === 'already_voted') {
