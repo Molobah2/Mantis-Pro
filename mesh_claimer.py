@@ -69,16 +69,16 @@ ERC721_ABI = [
         "type": "function",
     },
     {
-        "inputs": [
-            {"name": "owner", "type": "address"},
-            {"name": "index", "type": "uint256"},
-        ],
-        "name": "tokenOfOwnerByIndex",
-        "outputs": [{"name": "", "type": "uint256"}],
+        "inputs": [{"name": "tokenId", "type": "uint256"}],
+        "name": "ownerOf",
+        "outputs": [{"name": "", "type": "address"}],
         "stateMutability": "view",
         "type": "function",
     },
 ]
+
+# Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
+TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -95,30 +95,47 @@ def hex_neighbors(q: int, r: int) -> list[tuple[int, int]]:
 
 def get_owned_tokens(address: str) -> list[int]:
     """
-    Enumerate Litany Card token IDs owned by `address` via ERC-721 Enumerable.
-    Falls back gracefully if the method is unavailable.
+    Enumerate Litany Card token IDs owned by `address` using Transfer event logs.
+    LitanyCards does not implement ERC-721 Enumerable, so tokenOfOwnerByIndex
+    is unavailable. Instead we scan Transfer events where `to == address` then
+    verify current ownership with ownerOf().
     """
     w3 = Web3(Web3.HTTPProvider(ABSTRACT_RPC))
+    checksum = Web3.to_checksum_address(address)
+    # Pad address to 32-byte topic format
+    addr_topic = "0x" + "0" * 24 + address.lower().lstrip("0x").lstrip("0x")
+
     contract = w3.eth.contract(
         address=Web3.to_checksum_address(CARDS_CONTRACT),
         abi=ERC721_ABI,
     )
-    checksum = Web3.to_checksum_address(address)
 
+    # Find all tokens ever transferred TO this address
     try:
-        balance = contract.functions.balanceOf(checksum).call()
+        addr_padded = "0x" + "0" * 24 + address.lower()[2:]
+        logs = w3.eth.get_logs({
+            "address": Web3.to_checksum_address(CARDS_CONTRACT),
+            "topics": [TRANSFER_TOPIC, None, addr_padded],
+            "fromBlock": 0,
+            "toBlock": "latest",
+        })
     except Exception as e:
-        raise RuntimeError(f"balanceOf call failed: {e}")
+        raise RuntimeError(f"get_logs failed: {e}")
 
-    log(f"On-chain balance: {balance} Litany Cards", indent=1)
-    tokens = []
-    for i in range(balance):
+    # Decode tokenId from third indexed topic, then verify current owner
+    candidate_ids = {int(entry["topics"][2].hex(), 16) for entry in logs}
+    log(f"Transfer events received: {len(candidate_ids)} candidate token(s)", indent=1)
+
+    owned = []
+    for token_id in candidate_ids:
         try:
-            token_id = contract.functions.tokenOfOwnerByIndex(checksum, i).call()
-            tokens.append(int(token_id))
-        except Exception as e:
-            log(f"[warn] tokenOfOwnerByIndex({i}) failed: {e}", indent=1)
-    return tokens
+            owner = contract.functions.ownerOf(token_id).call()
+            if owner.lower() == address.lower():
+                owned.append(token_id)
+        except Exception:
+            pass
+
+    return sorted(owned)
 
 # ── Litany Mesh API ───────────────────────────────────────────────────────────
 
