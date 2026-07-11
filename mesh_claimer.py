@@ -49,7 +49,7 @@ load_dotenv()
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 API_BASE       = "https://litany.gg/api/mesh"
-ABSTRACT_RPC   = "https://api.abs.xyz"
+ABSTRACT_RPC   = "https://api.mainnet.abs.xyz"
 CARDS_CONTRACT = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"
 
 COOLDOWN_S  = 11      # API enforces 10 s; add 1 s buffer
@@ -96,35 +96,39 @@ def hex_neighbors(q: int, r: int) -> list[tuple[int, int]]:
 def get_owned_tokens(address: str) -> list[int]:
     """
     Enumerate Litany Card token IDs owned by `address` using Transfer event logs.
-    LitanyCards does not implement ERC-721 Enumerable, so tokenOfOwnerByIndex
-    is unavailable. Instead we scan Transfer events where `to == address` then
-    verify current ownership with ownerOf().
+    LitanyCards does not implement ERC-721 Enumerable. We scan Transfer events
+    where `to == address` in chunks (ZKsync RPCs cap block ranges), then verify
+    current ownership with ownerOf().
     """
     w3 = Web3(Web3.HTTPProvider(ABSTRACT_RPC))
-    checksum = Web3.to_checksum_address(address)
-    # Pad address to 32-byte topic format
-    addr_topic = "0x" + "0" * 24 + address.lower().lstrip("0x").lstrip("0x")
-
     contract = w3.eth.contract(
         address=Web3.to_checksum_address(CARDS_CONTRACT),
         abi=ERC721_ABI,
     )
 
-    # Find all tokens ever transferred TO this address
-    try:
-        addr_padded = "0x" + "0" * 24 + address.lower()[2:]
-        logs = w3.eth.get_logs({
-            "address": Web3.to_checksum_address(CARDS_CONTRACT),
-            "topics": [TRANSFER_TOPIC, None, addr_padded],
-            "fromBlock": 0,
-            "toBlock": "latest",
-        })
-    except Exception as e:
-        raise RuntimeError(f"get_logs failed: {e}")
+    addr_padded = "0x" + "0" * 24 + address.lower()[2:]
+    latest      = w3.eth.block_number
+    chunk       = 50_000          # ZKsync RPCs typically allow up to 100k; use 50k to be safe
+    candidate_ids: set[int] = set()
 
-    # Decode tokenId from third indexed topic, then verify current owner
-    candidate_ids = {int(entry["topics"][2].hex(), 16) for entry in logs}
-    log(f"Transfer events received: {len(candidate_ids)} candidate token(s)", indent=1)
+    log(f"Scanning Transfer events up to block {latest}...", indent=1)
+    block = 0
+    while block <= latest:
+        end = min(block + chunk - 1, latest)
+        try:
+            entries = w3.eth.get_logs({
+                "address": Web3.to_checksum_address(CARDS_CONTRACT),
+                "topics":  [TRANSFER_TOPIC, None, addr_padded],
+                "fromBlock": block,
+                "toBlock":   end,
+            })
+            for entry in entries:
+                candidate_ids.add(int(entry["topics"][2].hex(), 16))
+        except Exception as e:
+            log(f"[warn] get_logs({block}-{end}) failed: {e}", indent=1)
+        block = end + 1
+
+    log(f"Transfer events found: {len(candidate_ids)} candidate token(s)", indent=1)
 
     owned = []
     for token_id in candidate_ids:
