@@ -539,28 +539,43 @@
   }
 
   /* ── §5 APP CATALOG ── */
-  .app-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  .ticker-wrap {
+    overflow: hidden;
     margin-bottom: 16px;
+    mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
   }
 
-  .app-pill {
-    padding: 7px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 100px;
+  .ticker-track {
+    display: flex;
+    white-space: nowrap;
+    width: max-content;
+  }
+
+  @keyframes ticker-scroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .ticker-track.running {
+    animation: ticker-scroll linear infinite;
+  }
+
+  .ticker-item {
+    display: inline-flex;
+    align-items: center;
     font-size: 12.5px;
     color: var(--t1);
     font-weight: 500;
-    transition: border-color 0.18s, background 0.18s, color 0.18s;
-    cursor: default;
+    padding: 6px 0;
+    flex-shrink: 0;
   }
-  .app-pill:hover {
-    border-color: var(--border-hi);
-    background: var(--surface-hi);
-    color: var(--t0);
+
+  .ticker-sep {
+    display: inline-block;
+    margin: 0 18px;
+    color: var(--t3);
+    font-size: 10px;
   }
 
   .catalog-note {
@@ -933,7 +948,9 @@
           <div class="card-title">Registered Apps</div>
           <div class="card-meta" id="catalog-count">0 apps</div>
         </div>
-        <div class="app-grid" id="app-grid"></div>
+        <div class="ticker-wrap">
+          <div class="ticker-track" id="app-grid"></div>
+        </div>
         <div class="catalog-note">
           Apps rotate in round-robin. Every app gets one vote per registered wallet per cycle.
         </div>
@@ -1161,19 +1178,40 @@ function render(d, lb) {
   if (autoDot) autoDot.className = 'status-dot ' + (autoActive ? 'ok' : 'err');
   set('h-val-auto', autoActive ? 'Active' : 'Paused');
 
-  /* App Catalog */
-  var catEl = document.getElementById('app-grid');
-  catEl.innerHTML = '';
+  /* App Catalog ticker */
+  var catEl   = document.getElementById('app-grid');
   var catSize = d.catalog_size || 0;
   var catList = Array.isArray(d.catalog) ? d.catalog : [];
-
-  catList.forEach(function (app) {
-    var p = document.createElement('div');
-    p.className = 'app-pill';
-    p.textContent = app.name || ('App #' + app.id);
-    catEl.appendChild(p);
-  });
   set('catalog-count', catSize + ' apps');
+
+  if (catList.length && catEl.dataset.built !== String(catList.length)) {
+    catEl.dataset.built = String(catList.length);
+    catEl.classList.remove('running');
+    catEl.innerHTML = '';
+
+    function buildRun(items) {
+      var frag = document.createDocumentFragment();
+      items.forEach(function (app, i) {
+        var span = document.createElement('span');
+        span.className = 'ticker-item';
+        span.textContent = app.name || ('App #' + app.id);
+        frag.appendChild(span);
+        var sep = document.createElement('span');
+        sep.className = 'ticker-sep';
+        sep.textContent = '·';
+        frag.appendChild(sep);
+      });
+      return frag;
+    }
+
+    catEl.appendChild(buildRun(catList));
+    catEl.appendChild(buildRun(catList)); // duplicate for seamless loop
+
+    // ~2.5s per app so 64 apps ≈ 160s total
+    var dur = Math.max(30, catList.length * 2.5);
+    catEl.style.animationDuration = dur + 's';
+    catEl.classList.add('running');
+  }
 
   /* Leaderboard */
   var lbEl   = document.getElementById('lb-list');
