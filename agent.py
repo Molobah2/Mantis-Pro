@@ -2789,7 +2789,8 @@ def _run_mesh_claimer():
 
     try:
         account = _Account.from_key(pk)
-        address = os.environ.get("MESH_ADDRESS", account.address).strip()
+        # Use AGW smart contract address as the claimant wallet (EIP-1271 — EOA signs on behalf of AGW)
+        address = os.environ.get("AGW_ADDRESS", account.address).strip()
         dry_run = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
 
         _mc.run_claim_cycle(account, address, dry_run)
@@ -2827,7 +2828,7 @@ except ImportError:
 @app.route("/mesh/status")
 def mesh_claimer_status():
     pk = os.environ.get("AGW_OWNER_PRIVATE_KEY", "")
-    address = os.environ.get("MESH_ADDRESS", "")
+    address = os.environ.get("AGW_ADDRESS", "")
     if not address and pk:
         try:
             from eth_account import Account as _A
@@ -2854,7 +2855,7 @@ def mesh_claimer_run():
 @app.route("/mesh")
 def mesh_claimer_dashboard():
     pk        = os.environ.get("AGW_OWNER_PRIVATE_KEY", "")
-    address   = os.environ.get("MESH_ADDRESS", "")
+    address   = os.environ.get("AGW_ADDRESS", "")
     if not address and pk:
         try:
             from eth_account import Account as _A
