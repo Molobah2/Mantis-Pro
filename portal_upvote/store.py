@@ -241,7 +241,7 @@ def get_stats(user_address=None):
                 "week":     count_since(now - 7  * 86400),
                 "month":    count_since(now - 30 * 86400),
                 "all_time": c.execute("SELECT COUNT(*) FROM upvote_log WHERE status IN ('success','already_voted') AND LOWER(user_address)=?", (addr,)).fetchone()[0],
-                "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status NOT IN ('success','already_voted') AND LOWER(user_address)=?", (addr,)).fetchone()[0],
+                "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status='failed' AND LOWER(user_address)=?", (addr,)).fetchone()[0],
             }
         else:
             def count_since(ts):
@@ -253,7 +253,7 @@ def get_stats(user_address=None):
                 "week":     count_since(now - 7  * 86400),
                 "month":    count_since(now - 30 * 86400),
                 "all_time": c.execute("SELECT COUNT(*) FROM upvote_log WHERE status IN ('success','already_voted')").fetchone()[0],
-                "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status NOT IN ('success','already_voted')").fetchone()[0],
+                "failed":   c.execute("SELECT COUNT(*) FROM upvote_log WHERE status='failed'").fetchone()[0],
             }
         c.close()
     return stats
