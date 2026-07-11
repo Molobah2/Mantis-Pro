@@ -93,48 +93,50 @@ def hex_neighbors(q: int, r: int) -> list[tuple[int, int]]:
 
 # ── On-chain Token Lookup ─────────────────────────────────────────────────────
 
-def get_owned_tokens(address: str) -> list[int]:
+def get_owned_tokens(addresses: list[str]) -> list[int]:
     """
-    Enumerate Litany Card token IDs owned by `address` using Transfer event logs.
-    LitanyCards does not implement ERC-721 Enumerable. We scan Transfer events
-    where `to == address` in chunks (ZKsync RPCs cap block ranges), then verify
-    current ownership with ownerOf().
+    Enumerate Litany Card token IDs owned by any address in `addresses`.
+    Scans Transfer events (LitanyCards is not ERC-721 Enumerable) across both
+    the AGW smart-contract wallet and the EOA signer — cards may sit in either.
+    Fetches in 50k-block chunks to stay within ZKsync RPC limits.
     """
     w3 = Web3(Web3.HTTPProvider(ABSTRACT_RPC))
     contract = w3.eth.contract(
         address=Web3.to_checksum_address(CARDS_CONTRACT),
         abi=ERC721_ABI,
     )
-
-    addr_padded = "0x" + "0" * 24 + address.lower()[2:]
+    addr_set    = {a.lower() for a in addresses}
     latest      = w3.eth.block_number
-    chunk       = 50_000          # ZKsync RPCs typically allow up to 100k; use 50k to be safe
+    chunk       = 50_000
     candidate_ids: set[int] = set()
 
-    log(f"Scanning Transfer events up to block {latest}...", indent=1)
-    block = 0
-    while block <= latest:
-        end = min(block + chunk - 1, latest)
-        try:
-            entries = w3.eth.get_logs({
-                "address": Web3.to_checksum_address(CARDS_CONTRACT),
-                "topics":  [TRANSFER_TOPIC, None, addr_padded],
-                "fromBlock": block,
-                "toBlock":   end,
-            })
-            for entry in entries:
-                candidate_ids.add(int(entry["topics"][2].hex(), 16))
-        except Exception as e:
-            log(f"[warn] get_logs({block}-{end}) failed: {e}", indent=1)
-        block = end + 1
+    log(f"Scanning Transfer events for {list(addr_set)} up to block {latest}...", indent=1)
 
-    log(f"Transfer events found: {len(candidate_ids)} candidate token(s)", indent=1)
+    for addr in addr_set:
+        addr_padded = "0x" + "0" * 24 + addr[2:]
+        block = 0
+        while block <= latest:
+            end = min(block + chunk - 1, latest)
+            try:
+                entries = w3.eth.get_logs({
+                    "address":   Web3.to_checksum_address(CARDS_CONTRACT),
+                    "topics":    [TRANSFER_TOPIC, None, addr_padded],
+                    "fromBlock": block,
+                    "toBlock":   end,
+                })
+                for entry in entries:
+                    candidate_ids.add(int(entry["topics"][2].hex(), 16))
+            except Exception as e:
+                log(f"[warn] get_logs({block}-{end}): {e}", indent=1)
+            block = end + 1
+
+    log(f"Transfer candidates: {len(candidate_ids)} token(s)", indent=1)
 
     owned = []
     for token_id in candidate_ids:
         try:
             owner = contract.functions.ownerOf(token_id).call()
-            if owner.lower() == address.lower():
+            if owner.lower() in addr_set:
                 owned.append(token_id)
         except Exception:
             pass
@@ -317,8 +319,9 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
         log(f"Token IDs from MESH_TOKEN_IDS: {token_ids}", indent=1)
     else:
         log("Fetching owned token IDs on-chain...", indent=1)
+        eoa = account.address
         try:
-            token_ids = get_owned_tokens(address)
+            token_ids = get_owned_tokens([address, eoa])
         except Exception as e:
             log(f"[error] On-chain token lookup failed: {e}", indent=1)
             log("Set MESH_TOKEN_IDS=<id1>,<id2>,... to bypass on-chain lookup.", indent=1)
