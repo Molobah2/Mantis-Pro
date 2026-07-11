@@ -2773,9 +2773,9 @@ _mesh_state = {
 _mesh_lock = threading.Lock()
 
 def _run_mesh_claimer():
-    pk = os.environ.get("OWNER_PRIVATE_KEY", "").strip()
+    pk = os.environ.get("AGW_OWNER_PRIVATE_KEY", "").strip()
     if not pk:
-        print("[mesh] OWNER_PRIVATE_KEY not set — skipping")
+        print("[mesh] AGW_OWNER_PRIVATE_KEY not set — skipping")
         return
     with _mesh_lock:
         if _mesh_state["running"]:
@@ -2826,7 +2826,7 @@ except ImportError:
 
 @app.route("/mesh-claimer/status")
 def mesh_claimer_status():
-    pk = os.environ.get("OWNER_PRIVATE_KEY", "")
+    pk = os.environ.get("AGW_OWNER_PRIVATE_KEY", "")
     address = os.environ.get("MESH_ADDRESS", "")
     if not address and pk:
         try:
@@ -2843,8 +2843,8 @@ def mesh_claimer_status():
 
 @app.route("/mesh-claimer/run", methods=["POST"])
 def mesh_claimer_run():
-    if not os.environ.get("OWNER_PRIVATE_KEY", ""):
-        return jsonify({"error": "OWNER_PRIVATE_KEY not set in Railway env vars"}), 400
+    if not os.environ.get("AGW_OWNER_PRIVATE_KEY", ""):
+        return jsonify({"error": "AGW_OWNER_PRIVATE_KEY not set in Railway env vars"}), 400
     with _mesh_lock:
         if _mesh_state["running"]:
             return jsonify({"error": "Already running"}), 409
@@ -2853,7 +2853,7 @@ def mesh_claimer_run():
 
 @app.route("/mesh-claimer")
 def mesh_claimer_dashboard():
-    pk        = os.environ.get("OWNER_PRIVATE_KEY", "")
+    pk        = os.environ.get("AGW_OWNER_PRIVATE_KEY", "")
     address   = os.environ.get("MESH_ADDRESS", "")
     if not address and pk:
         try:
@@ -2941,7 +2941,7 @@ def mesh_claimer_dashboard():
   <button id="runBtn" onclick="runNow()" {btn_disabled}>{btn_label}</button>
 
   <p style="margin-top:32px; font-size:12px; color:#444">
-    Set <code>OWNER_PRIVATE_KEY</code> in Railway env vars to enable.<br>
+    Uses <code>AGW_OWNER_PRIVATE_KEY</code> (already set in Railway).<br>
     Optionally set <code>MESH_TOKEN_IDS</code> (comma-sep) to skip on-chain lookup.<br>
     Set <code>MESH_DRY_RUN=true</code> to simulate without posting.
   </p>
