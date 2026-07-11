@@ -45,7 +45,6 @@
     background: radial-gradient(circle 520px at var(--mx) var(--my), rgba(188,200,238,0.065) 0%, transparent 100%);
     pointer-events: none;
     z-index: 0;
-    will-change: background;
   }
 
   /* ── ENVIRONMENT ── */
@@ -107,7 +106,6 @@
     inset: 0;
     width: 100%; height: 100%;
     opacity: 0.38;
-    filter: blur(1.8px);
   }
 
   #vignette {
@@ -218,8 +216,8 @@
     padding: 28px;
     position: relative;
     overflow: hidden;
-    backdrop-filter: blur(24px) saturate(1.5);
-    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    backdrop-filter: blur(6px) saturate(1.2);
+    -webkit-backdrop-filter: blur(6px) saturate(1.2);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), inset 0 -1px 0 rgba(0,0,0,0.2), 0 8px 40px rgba(0,0,0,0.45);
     transition: border-color 0.25s, box-shadow 0.25s;
   }
@@ -358,8 +356,8 @@
     padding: 22px 22px 20px;
     position: relative;
     overflow: hidden;
-    backdrop-filter: blur(20px) saturate(1.4);
-    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(6px) saturate(1.2);
+    -webkit-backdrop-filter: blur(6px) saturate(1.2);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.11), 0 4px 20px rgba(0,0,0,0.35);
     transition: border-color 0.2s, box-shadow 0.2s;
   }
@@ -807,19 +805,19 @@
         <div class="status-line">
           <div class="status-item">
             <div class="status-dot" id="dot-node"></div>
-            <span id="lbl-node">Node —</span>
+            <span id="lbl-node">Node</span>
           </div>
           <div class="status-item">
             <div class="status-dot" id="dot-worker"></div>
-            <span id="lbl-worker">Worker —</span>
+            <span id="lbl-worker">Worker</span>
           </div>
           <div class="status-item">
             <div class="status-dot"></div>
-            <span id="lbl-lastrun">Last run —</span>
+            <span id="lbl-lastrun">Last run</span>
           </div>
           <div class="status-item">
             <div class="status-dot"></div>
-            <span id="lbl-network">Network —</span>
+            <span id="lbl-network">Network</span>
           </div>
         </div>
       </section>
@@ -873,7 +871,7 @@
         </div>
 
         <div id="timeline-no-votes" class="timeline-empty hidden">
-          <div style="color:var(--t2)">No executions today yet &mdash; next batch at 09:00 UTC</div>
+          <div style="color:var(--t2)">No executions today. Next batch at 09:00 UTC</div>
           <div class="timeline-countdown" id="tl-countdown">00:00:00</div>
           <div style="font-size:11px;color:var(--t3);margin-top:4px">countdown to next run</div>
         </div>
@@ -898,15 +896,15 @@
           <div class="next-info">
             <div class="next-row">
               <span class="next-row-label">Next App</span>
-              <span class="next-row-val" id="next-app">—</span>
+              <span class="next-row-val" id="next-app"></span>
             </div>
             <div class="next-row">
               <span class="next-row-label">Queue Size</span>
-              <span class="next-row-val" id="next-queue">—</span>
+              <span class="next-row-val" id="next-queue"></span>
             </div>
             <div class="next-row">
               <span class="next-row-label">Scheduled</span>
-              <span class="next-row-val mono" id="next-time" style="font-size:11px">—</span>
+              <span class="next-row-val mono" id="next-time" style="font-size:11px"></span>
             </div>
           </div>
         </div>
@@ -920,34 +918,34 @@
               <span class="health-row-label">Node</span>
               <span class="health-row-val">
                 <span class="status-dot" id="h-dot-node"></span>
-                <span id="h-val-node">—</span>
+                <span id="h-val-node"></span>
               </span>
             </div>
             <div class="health-row">
               <span class="health-row-label">Worker</span>
               <span class="health-row-val">
                 <span class="status-dot" id="h-dot-worker"></span>
-                <span id="h-val-worker">—</span>
+                <span id="h-val-worker"></span>
               </span>
             </div>
             <div class="health-row">
               <span class="health-row-label">Network</span>
               <span class="health-row-val">
                 <span class="status-dot ok"></span>
-                <span id="h-val-network">—</span>
+                <span id="h-val-network"></span>
               </span>
             </div>
             <div class="health-row">
               <span class="health-row-label">Last Execution</span>
               <span class="health-row-val">
-                <span id="h-val-lastrun">—</span>
+                <span id="h-val-lastrun"></span>
               </span>
             </div>
             <div class="health-row">
               <span class="health-row-label">Automation</span>
               <span class="health-row-val">
                 <span class="status-dot" id="h-dot-auto"></span>
-                <span id="h-val-auto">—</span>
+                <span id="h-val-auto"></span>
               </span>
             </div>
           </div>
@@ -963,7 +961,7 @@
         </div>
         <div class="app-grid" id="app-grid"></div>
         <div class="catalog-note">
-          Apps rotate in round-robin fashion &mdash; every app gets one vote per registered wallet per cycle.
+          Apps rotate in round-robin. Every app gets one vote per registered wallet per cycle.
         </div>
       </section>
 
@@ -1096,15 +1094,15 @@
 
 /* ── UTILITIES ── */
 function shortAddr(a) {
-  if (!a || a.length < 10) return a || '—';
+  if (!a || a.length < 10) return a || '';
   return a.slice(0, 6) + '…' + a.slice(-4);
 }
 function shortTx(tx) {
-  if (!tx) return '—';
+  if (!tx) return '';
   return tx.slice(0, 10) + '…' + tx.slice(-6);
 }
 function timeAgo(ts) {
-  if (!ts) return '—';
+  if (!ts) return '';
   const d = Math.floor(Date.now() / 1000) - ts;
   if (d < 60) return d + 's ago';
   if (d < 3600) return Math.floor(d / 60) + 'm ago';
@@ -1112,13 +1110,13 @@ function timeAgo(ts) {
   return Math.floor(d / 86400) + 'd ago';
 }
 function fmtHHMM(ts) {
-  if (!ts) return '—';
+  if (!ts) return '';
   const d = new Date(ts * 1000);
   return d.getUTCHours().toString().padStart(2, '0') + ':' +
          d.getUTCMinutes().toString().padStart(2, '0');
 }
 function capNet(s) {
-  if (!s) return '—';
+  if (!s) return '';
   if (s.toLowerCase() === 'mainnet') return 'Abstract Mainnet';
   if (s.toLowerCase() === 'testnet') return 'Abstract Testnet';
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -1211,7 +1209,7 @@ function render(d, lb) {
   setDot('dot-worker', worker.running);
   set('lbl-node',    'Node '   + (nodeOk          ? 'OK'      : 'Error'));
   set('lbl-worker',  'Worker ' + (worker.running   ? 'Running' : 'Idle'));
-  set('lbl-lastrun', 'Last run ' + (worker.last_run ? timeAgo(worker.last_run) : '—'));
+  set('lbl-lastrun', worker.last_run ? 'Last run ' + timeAgo(worker.last_run) : 'Last run');
   set('lbl-network', capNet(d.network));
 
   /* Stat cards */
@@ -1275,8 +1273,8 @@ function render(d, lb) {
 
   /* Next Execution */
   var nextApp = d.next_app;
-  set('next-app',   nextApp ? esc(nextApp.name) : '—');
-  set('next-queue', d.catalog_size ? (d.catalog_size + ' apps') : '—');
+  set('next-app',   nextApp ? esc(nextApp.name) : '');
+  set('next-queue', d.catalog_size ? (d.catalog_size + ' apps') : '');
   set('next-time',  worker.next_run ? fmtHHMM(worker.next_run) + ' UTC' : '09:00 UTC');
 
   /* Health */
@@ -1285,7 +1283,7 @@ function render(d, lb) {
   set('h-val-node',    nodeOk         ? 'OK'      : 'Error');
   set('h-val-worker',  worker.running ? 'Running'  : 'Idle');
   set('h-val-network', capNet(d.network));
-  set('h-val-lastrun', worker.last_run ? timeAgo(worker.last_run) : '—');
+  set('h-val-lastrun', worker.last_run ? timeAgo(worker.last_run) : '');
 
   var autoActive = d.authorized && nodeOk;
   var autoDot = document.getElementById('h-dot-auto');
