@@ -1992,6 +1992,43 @@ def upvote_run_all():
     return jsonify({"ok": True, "message": "Full upvote run started for all registered users"})
 
 
+_run_for_me_rate = {}   # address -> last run timestamp
+
+@app.route("/api/upvote-run-for-me", methods=["POST"])
+def upvote_run_for_me():
+    """Let a registered user trigger one upvote for themselves to verify the agent works."""
+    from flask import request as freq
+    data    = freq.get_json(force=True, silent=True) or {}
+    address = (data.get("address") or "").strip().lower()
+    if not (address.startswith("0x") and len(address) == 42):
+        return jsonify({"error": "Missing or invalid address"}), 400
+
+    ip = _sec.get_client_ip(freq)
+    if not _sec.rate_limit(ip, "run-for-me-ip", limit=3, window=3600):
+        return jsonify({"error": "rate_limited", "retry_in": 3600}), 429
+
+    COOLDOWN  = 3600
+    last_ts   = _run_for_me_rate.get(address, 0)
+    remaining = int(COOLDOWN - (time.time() - last_ts))
+    if remaining > 0:
+        return jsonify({"error": "rate_limited", "retry_in": remaining}), 429
+
+    user = _upvote_store.get_user(address)
+    if not user:
+        return jsonify({"error": "not_registered"}), 404
+    if user["expires_at"] < time.time():
+        return jsonify({"error": "session_expired"}), 403
+
+    _run_for_me_rate[address] = time.time()
+    try:
+        result = _upvote_worker.run_upvote_for_single_user(user)
+        return jsonify(result)
+    except Exception as e:
+        _run_for_me_rate.pop(address, None)
+        print(f"[run-for-me] {address[:10]}… error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/upvote-refresh-catalog", methods=["POST"])
 @_sec.require_admin
 def upvote_refresh_catalog():

@@ -449,6 +449,97 @@
 
   @media (max-width: 600px) { .countdown-card { padding: 28px 24px; } }
 
+  /* ── Test Run Card ── */
+  .test-run-card { padding: 32px 40px; }
+
+  .test-run-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .test-run-copy { flex: 1; min-width: 0; }
+
+  .test-run-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--t1);
+    margin-bottom: 4px;
+  }
+
+  .test-run-sub {
+    font-size: 12px;
+    color: var(--t2);
+    line-height: 1.5;
+  }
+
+  #run-agent-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 22px;
+    border-radius: 100px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.045) 100%);
+    border: 1px solid rgba(200,208,235,0.22);
+    color: var(--t0);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 4px 16px rgba(0,0,0,0.3);
+    transition: background 0.2s, border-color 0.2s, opacity 0.2s;
+  }
+  #run-agent-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.07) 100%);
+    border-color: rgba(200,208,235,0.36);
+  }
+  #run-agent-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .run-spinner {
+    width: 13px; height: 13px;
+    border: 1.5px solid rgba(232,234,242,0.3);
+    border-top-color: rgba(232,234,242,0.85);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #run-result {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    display: none;
+  }
+  #run-result.success {
+    background: rgba(80,200,140,0.08);
+    border: 1px solid rgba(80,200,140,0.2);
+    color: rgba(140,230,180,0.9);
+  }
+  #run-result.already {
+    background: rgba(200,208,235,0.06);
+    border: 1px solid rgba(200,208,235,0.14);
+    color: var(--t2);
+  }
+  #run-result.error {
+    background: rgba(240,80,80,0.07);
+    border: 1px solid rgba(240,80,80,0.2);
+    color: rgba(240,140,140,0.9);
+  }
+  #run-result .res-tx {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    opacity: 0.75;
+    margin-top: 4px;
+    word-break: break-all;
+  }
+
   .section-label {
     font-size: 11px;
     font-weight: 500;
@@ -1109,6 +1200,22 @@
         </div>
       </section>
 
+      <!-- 2b. Test Run -->
+      <section class="section card test-run-card" id="test-run-section">
+        <div class="test-run-inner">
+          <div class="test-run-copy">
+            <div class="test-run-title">Agent Test Run</div>
+            <div class="test-run-sub">Trigger one vote now to confirm the agent can vote on your behalf. Once per hour.</div>
+          </div>
+          <button id="run-agent-btn">
+            <div class="run-spinner" id="run-spinner"></div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="run-icon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="run-btn-label">Run Agent</span>
+          </button>
+        </div>
+        <div id="run-result"></div>
+      </section>
+
       <!-- 3. Countdown -->
       <section class="section card countdown-card">
         <div class="section-label">Next Automated Vote</div>
@@ -1691,6 +1798,127 @@
     });
     document.getElementById('badges-row').innerHTML = html;
   }
+
+  /* ── Agent Test Run ─────────────────────────────────────────────── */
+  (function () {
+    var btn       = document.getElementById('run-agent-btn');
+    var spinner   = document.getElementById('run-spinner');
+    var icon      = document.getElementById('run-icon');
+    var label     = document.getElementById('run-btn-label');
+    var resultEl  = document.getElementById('run-result');
+    var cooldownKey = 'run_for_me_until_' + (address || '');
+
+    function fmtCountdown(secs) {
+      var m = Math.floor(secs / 60), s = secs % 60;
+      return m + ':' + String(s).padStart(2, '0');
+    }
+
+    function setCooldown(secs) {
+      var until = Date.now() + secs * 1000;
+      try { localStorage.setItem(cooldownKey, String(until)); } catch (_) {}
+      startCooldownTick(until);
+    }
+
+    var _cdTimer = null;
+    function startCooldownTick(until) {
+      clearInterval(_cdTimer);
+      btn.disabled = true;
+      _cdTimer = setInterval(function () {
+        var rem = Math.ceil((until - Date.now()) / 1000);
+        if (rem <= 0) {
+          clearInterval(_cdTimer);
+          btn.disabled = false;
+          label.textContent = 'Run Agent';
+          spinner.style.display = 'none';
+          icon.style.display    = '';
+        } else {
+          label.textContent = fmtCountdown(rem);
+        }
+      }, 1000);
+    }
+
+    // Restore cooldown from localStorage on page load
+    (function () {
+      if (!address) { btn.disabled = true; return; }
+      try {
+        var until = parseFloat(localStorage.getItem(cooldownKey) || '0');
+        if (until > Date.now()) startCooldownTick(until);
+      } catch (_) {}
+    })();
+
+    if (!address) btn.disabled = true;
+
+    btn.addEventListener('click', function () {
+      if (!address || btn.disabled) return;
+      btn.disabled          = true;
+      spinner.style.display = 'block';
+      icon.style.display    = 'none';
+      label.textContent     = 'Running…';
+      resultEl.style.display = 'none';
+      resultEl.className    = '';
+
+      fetch('/api/upvote-run-for-me', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ address: address }),
+      })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, d: d }; }); })
+      .then(function (res) {
+        spinner.style.display = 'none';
+        icon.style.display    = '';
+        var d = res.d;
+
+        if (!res.ok) {
+          if (res.status === 429) {
+            var retry = d.retry_in || 3600;
+            setCooldown(retry);
+            showResult('already', 'Already ran recently. Next run available in ' + fmtCountdown(retry) + '.');
+          } else if (res.status === 404) {
+            showResult('error', 'Wallet not registered. Register first to use the agent.');
+            btn.disabled = false;
+            label.textContent = 'Run Agent';
+          } else if (res.status === 403) {
+            showResult('error', 'Session expired. Please re-register to renew your session.');
+            btn.disabled = false;
+            label.textContent = 'Run Agent';
+          } else {
+            showResult('error', d.error || 'Something went wrong.');
+            btn.disabled = false;
+            label.textContent = 'Run Agent';
+          }
+          return;
+        }
+
+        if (d.status === 'success') {
+          setCooldown(3600);
+          var msg = 'Voted for ' + (d.app || 'an app') + ' successfully.';
+          var tx  = d.tx_hash ? '<div class="res-tx">tx: ' + d.tx_hash + '</div>' : '';
+          showResult('success', msg, tx);
+          setTimeout(loadData, 1500);
+        } else if (d.status === 'already_voted') {
+          setCooldown(3600);
+          showResult('already', 'Already voted today for ' + (d.app || 'all apps') + '. Your streak is safe.');
+        } else {
+          showResult('error', d.error || 'Unexpected result.');
+          btn.disabled = false;
+          label.textContent = 'Run Agent';
+        }
+      })
+      .catch(function (e) {
+        spinner.style.display = 'none';
+        icon.style.display    = '';
+        btn.disabled          = false;
+        label.textContent     = 'Run Agent';
+        showResult('error', 'Network error: ' + e.message);
+      });
+    });
+
+    function showResult(cls, msg, extra) {
+      resultEl.className     = cls;
+      resultEl.innerHTML     = msg + (extra || '');
+      resultEl.style.display = 'block';
+    }
+  })();
 
   /* ── Boot ──────────────────────────────────────────────────────── */
   if (address) loadData();

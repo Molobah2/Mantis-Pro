@@ -23,6 +23,35 @@ def get_status():
         return dict(_status)
 
 
+def run_upvote_for_single_user(user):
+    """Vote once for a specific user and return the result. Does not touch global status."""
+    apps = store.get_apps()
+    if not apps:
+        return {"ok": False, "error": "App catalog is empty"}
+
+    addr        = user["address"]
+    last        = store.get_last_upvoted_per_app_for_user(addr)
+    sorted_apps = sorted(apps, key=lambda a: last.get(a["id"], 0.0))
+
+    for app in sorted_apps[:10]:
+        try:
+            result  = node_client.call_upvote_for_user(user, app["id"])
+            tx_hash = result.get("txHash", "")
+            store.record_upvote(app["id"], tx_hash, "success", addr)
+            return {"ok": True, "status": "success", "app": app["name"], "tx_hash": tx_hash}
+        except Exception as inner:
+            err = str(inner)
+            if "revert" in err.lower() or "0xda1a7ce4" in err:
+                store.record_upvote(app["id"], "", "reverted", addr)
+                continue
+            return {"ok": False, "error": err}
+
+    # All apps reverted — treated as already voted today
+    first_app = sorted_apps[0] if sorted_apps else apps[0]
+    store.record_upvote(first_app["id"], "", "already_voted", addr)
+    return {"ok": True, "status": "already_voted", "app": first_app["name"]}
+
+
 def run_daily_upvote():
     """Vote once for every registered user, including the owner."""
     with _status_lock:
