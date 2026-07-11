@@ -39,6 +39,12 @@ def serve_bg():
     from flask import send_from_directory
     return send_from_directory(os.path.dirname(__file__), "abstract-bg.png")
 
+@app.route("/static/mantis.png")
+def serve_mantis():
+    import os
+    from flask import send_from_directory
+    return send_from_directory(os.path.dirname(__file__), "mantis.png")
+
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy", "agent": "Mantis Pro"})
