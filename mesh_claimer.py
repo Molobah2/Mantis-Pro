@@ -67,24 +67,20 @@ def hex_neighbors(q: int, r: int) -> list[tuple[int, int]]:
 
 # ── Litany Session + Token Lookup ─────────────────────────────────────────────
 
-def issue_session(account, address: str):
+def _try_issue_session(account, wallet_addr: str) -> Optional[object]:
     """
-    Trade an EIP-191 personal_sign for a 15-minute Litany session JWT.
-    Returns the response cookies on success, None on failure.
-
-    Canonical message format (from Litany docs):
-      Litany Protocol — The Mesh
-      Action: session_issue
-      Wallet: <lowercase>
-      Nonce: <32 hex chars>
-      Date: <YYYY-MM-DDTHH:MM:SSZ>
+    Attempt one session issue POST for the given wallet address.
+    The wallet address is used as the `wallet` field AND in the signed message.
+    For EOA: ecrecover(sig) == wallet_addr — always works.
+    For AGW: requires EIP-1271 support on the server.
+    Returns response cookies on success, None on failure.
     """
     nonce   = secrets.token_hex(16)
     date    = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     message = (
         "Litany Protocol — The Mesh\n"
         "Action: session_issue\n"
-        f"Wallet: {address.lower()}\n"
+        f"Wallet: {wallet_addr.lower()}\n"
         f"Nonce: {nonce}\n"
         f"Date: {date}"
     )
@@ -97,7 +93,7 @@ def issue_session(account, address: str):
         r = requests.post(
             f"{API_BASE}/session/issue",
             json={
-                "wallet":    address.lower(),
+                "wallet":    wallet_addr.lower(),
                 "nonce":     nonce,
                 "date":      date,
                 "signature": sig_hex,
@@ -106,16 +102,15 @@ def issue_session(account, address: str):
             timeout=15,
         )
         if r.ok:
-            log("Session issued OK.", indent=1)
             return r.cookies
-        log(f"[warn] Session issue returned {r.status_code}: {r.text[:300]}", indent=1)
+        log(f"[warn] Session({wallet_addr[:10]}…) → {r.status_code}: {r.text[:200]}", indent=1)
         return None
     except Exception as e:
-        log(f"[warn] Session issue error: {e}", indent=1)
+        log(f"[warn] Session({wallet_addr[:10]}…) error: {e}", indent=1)
         return None
 
 
-def get_available_claims(cookies) -> list[int]:
+def _get_available_claims(cookies) -> list[int]:
     """
     Fetch token IDs available for claiming today (requires active session).
     Handles various possible response shapes from the API.
@@ -136,7 +131,60 @@ def get_available_claims(cookies) -> list[int]:
             val = data.get(key)
             if isinstance(val, list):
                 return [int(x) for x in val]
+    log(f"[warn] available-claims response shape unrecognised: {data}", indent=2)
     return []
+
+
+def resolve_claim_wallet(account, agw_address: str) -> tuple[str, list[int], str]:
+    """
+    Determine which wallet to use for claims and return (address, token_ids, faction).
+
+    Strategy:
+    1. MESH_TOKEN_IDS env var → use whichever wallet (AGW or EOA) has a faction.
+    2. Session via AGW (EIP-1271 if server supports it) → available-claims.
+    3. Session via EOA (ecrecover) → available-claims.
+    Cards may sit in either the AGW smart-contract wallet or the EOA signer.
+    """
+    agw = agw_address.lower()
+    eoa = account.address.lower()
+
+    # Manual override: MESH_TOKEN_IDS skips session lookup entirely
+    env_token_str = os.environ.get("MESH_TOKEN_IDS", "").strip()
+    if env_token_str:
+        token_ids = [int(t.strip()) for t in env_token_str.split(",") if t.strip()]
+        log(f"Token IDs from MESH_TOKEN_IDS: {token_ids}", indent=1)
+        for addr in [agw, eoa]:
+            try:
+                info = get_wallet_info(addr)
+                if info.get("faction"):
+                    return addr, token_ids, info["faction"]
+            except Exception:
+                pass
+        return agw, token_ids, ""
+
+    # Session-based lookup: try AGW first (EIP-1271), then EOA (ecrecover)
+    for addr in [agw, eoa]:
+        label = "AGW" if addr == agw else "EOA"
+        log(f"Trying session as {label} ({addr[:10]}…)…", indent=1)
+        cookies = _try_issue_session(account, addr)
+        if cookies is None:
+            continue
+        log(f"Session OK as {label}.", indent=2)
+        try:
+            token_ids = _get_available_claims(cookies)
+        except Exception as e:
+            log(f"[warn] available-claims failed: {e}", indent=2)
+            token_ids = []
+        log(f"available-claims → {token_ids}", indent=2)
+        if token_ids:
+            try:
+                info    = get_wallet_info(addr)
+                faction = info.get("faction", "")
+            except Exception:
+                faction = ""
+            return addr, token_ids, faction
+
+    return agw, [], ""
 
 # ── Litany Mesh API ───────────────────────────────────────────────────────────
 
@@ -264,18 +312,31 @@ def find_best_cells(
 # ── Claim Cycle ───────────────────────────────────────────────────────────────
 
 def run_claim_cycle(account, address: str, dry_run: bool = False):
-    log(f"=== Claim cycle start | wallet: {address} ===")
+    log(f"=== Claim cycle start | AGW: {address} | EOA: {account.address} ===")
 
-    # ── Step 1: wallet info ────────────────────────────────────────────────────
-    try:
-        info = get_wallet_info(address)
-    except Exception as e:
-        log(f"[error] Could not reach wallet info endpoint: {e}")
+    # ── Step 1: resolve claim wallet + token IDs ───────────────────────────────
+    claim_addr, token_ids, my_faction = resolve_claim_wallet(account, address)
+
+    if not token_ids:
+        log("[error] No token IDs available — cannot claim.", indent=1)
+        log("Set MESH_TOKEN_IDS=<id1>,<id2>,... in Railway env vars to fix this.", indent=1)
+        log("Find your token IDs at litany.gg (open your card inventory).", indent=1)
         return
 
-    my_faction   = info.get("faction")
+    # Fetch wallet info for the resolved address (may differ from input address)
+    try:
+        info = get_wallet_info(claim_addr)
+    except Exception as e:
+        log(f"[error] Wallet info fetch failed: {e}")
+        return
+
+    if not my_faction:
+        my_faction = info.get("faction", "")
     total_claims = info.get("total_claims", 0)
+
+    log(f"Claim wallet: {claim_addr}", indent=1)
     log(f"Faction: {my_faction or 'none'} | Total claims all-time: {total_claims}", indent=1)
+    log(f"Available tokens: {token_ids}", indent=1)
 
     if not my_faction:
         log("[error] Wallet has no faction assigned.", indent=1)
@@ -284,35 +345,7 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
 
     remaining = DAILY_MAX
 
-    # ── Step 2: resolve token IDs ──────────────────────────────────────────────
-    env_token_str = os.environ.get("MESH_TOKEN_IDS", "").strip()
-    if env_token_str:
-        token_ids = [int(t.strip()) for t in env_token_str.split(",") if t.strip()]
-        log(f"Token IDs from MESH_TOKEN_IDS env var: {token_ids}", indent=1)
-    else:
-        log("Requesting available-claims via Litany session...", indent=1)
-        cookies   = issue_session(account, address)
-        token_ids = []
-        if cookies is not None:
-            try:
-                token_ids = get_available_claims(cookies)
-                log(f"Available token IDs from API: {token_ids}", indent=1)
-            except Exception as e:
-                log(f"[warn] available-claims fetch failed: {e}", indent=1)
-
-        if not token_ids:
-            log("[error] Could not determine token IDs.", indent=1)
-            log("Set MESH_TOKEN_IDS=<id1>,<id2>,... in Railway env vars to fix this.", indent=1)
-            log("Find your token IDs at litany.gg (open your card inventory).", indent=1)
-            return
-
-    if not token_ids:
-        log("[error] No token IDs available for claiming today.", indent=1)
-        return
-
-    log(f"Available tokens: {token_ids}", indent=1)
-
-    # ── Step 3: map + territory ────────────────────────────────────────────────
+    # ── Step 2: map + territory ────────────────────────────────────────────────
     log("Fetching mesh map...", indent=1)
     try:
         map_data  = get_map()
@@ -325,7 +358,7 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
 
     log("Fetching my territory...", indent=1)
     try:
-        territory   = get_territory(address)
+        territory   = get_territory(claim_addr)
         my_cell_ids = {c["id"] for c in territory.get("cells", [])}
     except Exception as e:
         log(f"[warn] Territory fetch failed ({e}), assuming zero cells.", indent=1)
@@ -369,7 +402,7 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
             is_first       = False
             continue
 
-        payload = build_and_sign(account, address, pairs, is_first)
+        payload = build_and_sign(account, claim_addr, pairs, is_first)
 
         backoff = 1
         while True:
@@ -408,7 +441,7 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
                 log(f"Rate-limited ({error_code}). Waiting {wait}s...", indent=2)
                 time.sleep(wait)
                 backoff = min(backoff * 2, BACKOFF_MAX)
-                payload = build_and_sign(account, address, pairs, is_first)
+                payload = build_and_sign(account, claim_addr, pairs, is_first)
                 continue
 
             if resp.status_code == 409:
