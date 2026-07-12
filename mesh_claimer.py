@@ -429,10 +429,11 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
 
     if not my_faction:
         my_faction = info.get("faction", "")
-    total_claims = info.get("total_claims", 0)
+    total_claims  = info.get("total_claims", 0)
+    claims_today  = int(info.get("claims_today", 0))
 
     log(f"Claim wallet: {claim_addr}", indent=1)
-    log(f"Faction: {my_faction or 'none'} | Total claims all-time: {total_claims}", indent=1)
+    log(f"Faction: {my_faction or 'none'} | Total claims all-time: {total_claims} | Claims today: {claims_today}/10", indent=1)
     log(f"Available tokens: {token_ids}", indent=1)
 
     if not my_faction:
@@ -440,7 +441,11 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
         log("Complete faction classification at https://litany.gg", indent=1)
         return
 
-    remaining = DAILY_MAX
+    if claims_today >= DAILY_MAX:
+        log(f"Daily limit reached ({claims_today}/10). Nothing to do until midnight UTC.", indent=1)
+        return 0
+
+    remaining = DAILY_MAX - claims_today
 
     # ── Step 2: map + territory ────────────────────────────────────────────────
     log("Fetching mesh map...", indent=1)
@@ -531,7 +536,11 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
             error_code = ""
             try:
                 body = resp.json()
-                error_code = body.get("error", body.get("code", ""))
+                err_field  = body.get("error", body.get("code", ""))
+                if isinstance(err_field, dict):
+                    error_code = err_field.get("code", "")
+                else:
+                    error_code = str(err_field) if err_field else ""
             except Exception:
                 body = resp.text
 
