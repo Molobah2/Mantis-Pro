@@ -349,31 +349,37 @@ def find_best_cells(
     exclude_cell_ids: set[int],
 ) -> list[dict]:
     """
-    Return open cells adjacent to our territory, ranked by faction contiguity.
+    Return claimable cells adjacent to ANY Lens faction territory on the map,
+    ranked by how many faction neighbors they touch (higher = more contiguous).
 
-    Uses my_territory_ids (from /territory) to locate our cells on the map
-    and find their open neighbors.  Falls back to the map's faction label if
-    we have no territory data.
+    Anchors come from two sources (combined):
+      1. All map cells whose 'faction' field matches my_faction (whole faction front)
+      2. Our own territory IDs from /territory (wallet-confirmed, reliable fallback)
     """
     cells_by_id = {c["id"]: c for c in map_cells}
     cells_by_qr = {(c["q"], c["r"]): c for c in map_cells}
 
-    # Primary: build QR set from our actual owned cell IDs
+    # Source 1: every cell on the map held by our faction
+    faction_qr: set[tuple[int, int]] = set()
+    for cell in map_cells:
+        if (cell.get("faction") or "").lower() == my_faction.lower():
+            faction_qr.add((cell["q"], cell["r"]))
+
+    # Source 2: our own wallet-confirmed territory (reliable even if map lacks faction field)
     my_qr: set[tuple[int, int]] = set()
     for cid in my_territory_ids:
         cell = cells_by_id.get(cid)
         if cell and "q" in cell and "r" in cell:
             my_qr.add((cell["q"], cell["r"]))
 
-    # Fallback: scan territory endpoint for any cells we recognise in the map
-    # (map has no faction/state field — my_territory_ids is the only reliable source)
-    if not my_qr:
-        log("[warn] No territory IDs resolved to map cells — nothing to expand from.", indent=1)
+    anchor_qr = faction_qr | my_qr
 
-    log(f"Territory QR anchors: {len(my_qr)} (from IDs: {len(my_territory_ids)})", indent=1)
+    log(f"Faction '{my_faction}' map cells: {len(faction_qr)} | My wallet: {len(my_qr)} | Combined anchors: {len(anchor_qr)}", indent=1)
+
+    if not anchor_qr:
+        log("[warn] No faction territory found on map — nothing to expand from.", indent=1)
 
     def is_capturable(cell: dict) -> bool:
-        # Map API uses 'claimable' bool — there is no 'state' field
         if not cell.get("claimable", False):
             return False
         if cell.get("biome") == "null_waste":
@@ -384,7 +390,7 @@ def find_best_cells(
             return False
         return True
 
-    if is_first or not my_qr:
+    if is_first or not anchor_qr:
         starters = [
             c for c in map_cells
             if is_capturable(c)
@@ -395,7 +401,7 @@ def find_best_cells(
         return [c for c in map_cells if is_capturable(c)]
 
     scores: dict[int, dict] = {}
-    for (q, r) in my_qr:
+    for (q, r) in anchor_qr:
         for nq, nr in hex_neighbors(q, r):
             cell = cells_by_qr.get((nq, nr))
             if cell and is_capturable(cell):
