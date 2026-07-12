@@ -468,6 +468,7 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
     used_tokens:    set[int] = set()
     claimed_total:  int      = 0
     excluded_cells: set[int] = set()
+    consecutive_errors: int  = 0
 
     while remaining > 0:
         avail_tokens = [t for t in token_ids if t not in used_tokens]
@@ -518,9 +519,10 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
                     result = resp.text
                 log(f"[ok] Accepted: {json.dumps(result)}", indent=2)
                 used_tokens.update(batch_tokens)
-                claimed_total += len(pairs)
-                remaining     -= len(pairs)
-                is_first       = False
+                claimed_total     += len(pairs)
+                remaining         -= len(pairs)
+                is_first           = False
+                consecutive_errors = 0
                 if remaining > 0:
                     log(f"Cooldown {COOLDOWN_S}s...", indent=2)
                     time.sleep(COOLDOWN_S)
@@ -560,6 +562,11 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
                 return
 
             log(f"[error] {resp.status_code} {error_code}: {body}", indent=2)
+            excluded_cells.update(batch_cells)
+            consecutive_errors += 1
+            if consecutive_errors >= 3:
+                log("[abort] 3 consecutive server errors — aborting cycle.", indent=1)
+                remaining = 0
             break
 
     log(f"Cycle done. Claimed {claimed_total} cell(s) this cycle.")
