@@ -69,45 +69,64 @@ def hex_neighbors(q: int, r: int) -> list[tuple[int, int]]:
 
 def _try_issue_session(account, wallet_addr: str) -> Optional[object]:
     """
-    Attempt one session issue POST for the given wallet address.
-    The wallet address is used as the `wallet` field AND in the signed message.
-    For EOA: ecrecover(sig) == wallet_addr — always works.
-    For AGW: requires EIP-1271 support on the server.
-    Returns response cookies on success, None on failure.
+    Try multiple message formats for the session/issue endpoint.
+    The server checks ecrecover(sig) == wallet OR EIP-1271 isValidSignature.
+    Returns response cookies on first success, None if all formats fail.
     """
-    nonce   = secrets.token_hex(16)
-    date    = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    message = (
-        "Litany Protocol — The Mesh\n"
-        "Action: session_issue\n"
-        f"Wallet: {wallet_addr.lower()}\n"
-        f"Nonce: {nonce}\n"
-        f"Date: {date}"
-    )
-    signed  = account.sign_message(encode_defunct(text=message))
-    sig_hex = signed.signature.hex()
-    if not sig_hex.startswith("0x"):
-        sig_hex = "0x" + sig_hex
+    nonce = secrets.token_hex(16)
+    date  = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    wa    = wallet_addr.lower()
 
-    try:
-        r = requests.post(
-            f"{API_BASE}/session/issue",
-            json={
-                "wallet":    wallet_addr.lower(),
-                "nonce":     nonce,
-                "date":      date,
-                "signature": sig_hex,
-                "message":   message,
-            },
-            timeout=15,
-        )
-        if r.ok:
-            return r.cookies
-        log(f"[warn] Session({wallet_addr[:10]}…) → {r.status_code}: {r.text[:200]}", indent=1)
-        return None
-    except Exception as e:
-        log(f"[warn] Session({wallet_addr[:10]}…) error: {e}", indent=1)
-        return None
+    # Try candidate message formats in order (exact format is undocumented)
+    message_candidates = [
+        (
+            "Litany Protocol — The Mesh\n"
+            "Action: session_issue\n"
+            f"Wallet: {wa}\n"
+            f"Nonce: {nonce}\n"
+            f"Date: {date}"
+        ),
+        (
+            "Litany Protocol — The Mesh\n"
+            "Action: session\n"
+            f"Wallet: {wa}\n"
+            f"Nonce: {nonce}\n"
+            f"Date: {date}"
+        ),
+        (
+            "Litany Protocol — The Mesh\n"
+            f"Wallet: {wa}\n"
+            f"Nonce: {nonce}\n"
+            f"Date: {date}"
+        ),
+    ]
+
+    for message in message_candidates:
+        signed  = account.sign_message(encode_defunct(text=message))
+        sig_hex = signed.signature.hex()
+        if not sig_hex.startswith("0x"):
+            sig_hex = "0x" + sig_hex
+        try:
+            r = requests.post(
+                f"{API_BASE}/session/issue",
+                json={
+                    "wallet":    wa,
+                    "nonce":     nonce,
+                    "date":      date,
+                    "signature": sig_hex,
+                    "message":   message,
+                },
+                timeout=15,
+            )
+            if r.ok:
+                action = message.split("\n")[1] if "\n" in message else "no-action"
+                log(f"Session OK ({action}).", indent=2)
+                return r.cookies
+            log(f"[warn] Session({wa[:10]}…) → {r.status_code}: {r.text[:150]}", indent=2)
+        except Exception as e:
+            log(f"[warn] Session({wa[:10]}…) error: {e}", indent=2)
+
+    return None
 
 
 def _get_available_claims(cookies) -> list[int]:
@@ -135,34 +154,85 @@ def _get_available_claims(cookies) -> list[int]:
     return []
 
 
+def get_anchor_token_ids(agw_address: str) -> list[int]:
+    """
+    Look up token IDs by traversing: territory → anchor_cell_ids → cell → anchor_id.
+    Tries GET /anchor/{anchor_id} for the ERC-721 token ID; falls back to using
+    the anchor_id directly (which may be the token ID on some contract layouts).
+    """
+    territory = api_get(f"/wallet/{agw_address.lower()}/territory")
+    anchor_cell_ids = territory.get("anchor_cell_ids", [])
+    if not anchor_cell_ids:
+        log("[warn] No anchor_cell_ids in territory.", indent=2)
+        return []
+
+    token_ids = []
+    for cell_id in anchor_cell_ids:
+        try:
+            cell_data = api_get(f"/cell/{cell_id}")
+            cell      = cell_data.get("cell", cell_data)
+            special   = cell.get("special", {})
+            if not isinstance(special, dict) or special.get("type") != "anchor":
+                log(f"[warn] Cell {cell_id} is not an anchor cell: {special}", indent=2)
+                continue
+            anchor_id = special.get("anchor_id")
+            if anchor_id is None:
+                continue
+            log(f"Cell {cell_id} → anchor_id={anchor_id}", indent=2)
+            # Try the /anchor/{id} endpoint for the ERC-721 token ID
+            try:
+                anchor_data = api_get(f"/anchor/{anchor_id}")
+                token_id = (
+                    anchor_data.get("token_id")
+                    or anchor_data.get("card_id")
+                    or anchor_data.get("id")
+                )
+                if token_id is not None:
+                    log(f"  /anchor/{anchor_id} → token_id={token_id}", indent=2)
+                    token_ids.append(int(token_id))
+                    continue
+            except Exception as e:
+                log(f"  /anchor/{anchor_id} failed ({e}); using anchor_id as token_id", indent=2)
+            # Fallback: use anchor_id directly as the token ID
+            token_ids.append(int(anchor_id))
+        except Exception as e:
+            log(f"[warn] Anchor lookup for cell {cell_id}: {e}", indent=2)
+
+    return sorted(token_ids)
+
+
 def resolve_claim_wallet(account, agw_address: str) -> tuple[str, list[int], str]:
     """
     Determine which wallet to use for claims and return (address, token_ids, faction).
 
-    Strategy:
-    1. MESH_TOKEN_IDS env var → use whichever wallet (AGW or EOA) has a faction.
-    2. Session via AGW (EIP-1271 if server supports it) → available-claims.
-    3. Session via EOA (ecrecover) → available-claims.
-    Cards may sit in either the AGW smart-contract wallet or the EOA signer.
+    Strategy (in order):
+    1. MESH_TOKEN_IDS env var — manual override, most reliable.
+    2. Anchor cell lookup — public endpoint, no session required.
+       Traverses territory → anchor cells → /anchor/{id} to get token IDs.
+    3. Session via AGW (EIP-1271) → available-claims.
+    4. Session via EOA (ecrecover) → available-claims (fallback if cards are in EOA).
     """
     agw = agw_address.lower()
     eoa = account.address.lower()
 
-    # Manual override: MESH_TOKEN_IDS skips session lookup entirely
+    # 1. Manual override
     env_token_str = os.environ.get("MESH_TOKEN_IDS", "").strip()
     if env_token_str:
         token_ids = [int(t.strip()) for t in env_token_str.split(",") if t.strip()]
         log(f"Token IDs from MESH_TOKEN_IDS: {token_ids}", indent=1)
-        for addr in [agw, eoa]:
-            try:
-                info = get_wallet_info(addr)
-                if info.get("faction"):
-                    return addr, token_ids, info["faction"]
-            except Exception:
-                pass
         return agw, token_ids, ""
 
-    # Session-based lookup: try AGW first (EIP-1271), then EOA (ecrecover)
+    # 2. Anchor-based lookup (no session required)
+    log("Trying anchor cell lookup for token IDs…", indent=1)
+    try:
+        token_ids = get_anchor_token_ids(agw)
+        if token_ids:
+            log(f"Token IDs from anchor cells: {token_ids}", indent=1)
+            return agw, token_ids, ""
+    except Exception as e:
+        log(f"[warn] Anchor lookup failed: {e}", indent=1)
+
+    # 3-4. Session-based lookup: try AGW (EIP-1271), then EOA (ecrecover)
     for addr in [agw, eoa]:
         label = "AGW" if addr == agw else "EOA"
         log(f"Trying session as {label} ({addr[:10]}…)…", indent=1)
@@ -178,8 +248,7 @@ def resolve_claim_wallet(account, agw_address: str) -> tuple[str, list[int], str
         log(f"available-claims → {token_ids}", indent=2)
         if token_ids:
             try:
-                info    = get_wallet_info(addr)
-                faction = info.get("faction", "")
+                faction = get_wallet_info(addr).get("faction", "")
             except Exception:
                 faction = ""
             return addr, token_ids, faction
