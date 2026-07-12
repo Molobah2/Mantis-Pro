@@ -332,19 +332,32 @@ def find_best_cells(
     exclude_cell_ids: set[int],
 ) -> list[dict]:
     """
-    Return open cells ranked best-first.
+    Return open cells adjacent to our territory, ranked by faction contiguity.
 
-    First claim: targets home_region cells for the faction (starter zone).
-    Subsequent: ranks open cells adjacent to faction territory by the number
-    of neighboring faction cells (higher = more contiguous).
+    Uses my_territory_ids (from /territory) to locate our cells on the map
+    and find their open neighbors.  Falls back to the map's faction label if
+    we have no territory data.
     """
+    cells_by_id = {c["id"]: c for c in map_cells}
     cells_by_qr = {(c["q"], c["r"]): c for c in map_cells}
 
-    faction_qr = {
-        (c["q"], c["r"])
-        for c in map_cells
-        if c.get("faction") == my_faction and c.get("state") in ("held", "fortress")
-    }
+    # Primary: build QR set from our actual owned cell IDs
+    my_qr: set[tuple[int, int]] = set()
+    for cid in my_territory_ids:
+        cell = cells_by_id.get(cid)
+        if cell and "q" in cell and "r" in cell:
+            my_qr.add((cell["q"], cell["r"]))
+
+    # Fallback: scan map for any cell labelled with our faction (case-insensitive)
+    if not my_qr:
+        my_qr = {
+            (c["q"], c["r"])
+            for c in map_cells
+            if c.get("faction", "").lower() == my_faction.lower()
+               and c.get("state") in ("held", "fortress")
+        }
+
+    log(f"Territory QR anchors: {len(my_qr)} (from IDs: {len(my_territory_ids)})", indent=1)
 
     def is_capturable(cell: dict) -> bool:
         if cell.get("state") != "open":
@@ -353,21 +366,22 @@ def find_best_cells(
             return False
         if cell["id"] in exclude_cell_ids:
             return False
-        if cell.get("special_type") == "fortress" or cell.get("state") == "fortress":
+        if cell.get("special_type") == "fortress":
             return False
         return True
 
-    if is_first or not faction_qr:
+    if is_first or not my_qr:
         starters = [
             c for c in map_cells
-            if is_capturable(c) and c.get("home_region") == my_faction
+            if is_capturable(c)
+            and c.get("home_region", "").lower() == my_faction.lower()
         ]
         if starters:
             return starters
         return [c for c in map_cells if is_capturable(c)]
 
     scores: dict[int, dict] = {}
-    for (q, r) in faction_qr:
+    for (q, r) in my_qr:
         for nq, nr in hex_neighbors(q, r):
             cell = cells_by_qr.get((nq, nr))
             if cell and is_capturable(cell):
@@ -535,6 +549,7 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
             break
 
     log(f"Cycle done. Claimed {claimed_total} cell(s) this cycle.")
+    return claimed_total
 
 # ── Daily Loop ────────────────────────────────────────────────────────────────
 

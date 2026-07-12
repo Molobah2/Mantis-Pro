@@ -3194,20 +3194,20 @@ def _run_mesh_claimer():
         address = _AGW_ADDRESS.strip()
         dry_run = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
 
-        _mc.run_claim_cycle(account, address, dry_run)
+        cycle_count = _mc.run_claim_cycle(account, address, dry_run) or 0
 
-        # Re-read wallet info for total_claims display
+        # Re-read wallet info for lifetime total display
         try:
-            info  = _mc.get_wallet_info(address)
-            today = int(info.get("total_claims", 0))
+            info         = _mc.get_wallet_info(address)
+            lifetime     = int(info.get("total_claims", 0))
         except Exception:
-            today = 0
+            lifetime = 0
 
         import datetime as _dt
         with _mesh_lock:
             _mesh_state["last_run"]     = _dt.datetime.utcnow().isoformat() + "Z"
-            _mesh_state["last_claimed"] = today
-            _mesh_state["total_claimed"] += today
+            _mesh_state["last_claimed"] = cycle_count
+            _mesh_state["total_claimed"] = lifetime
     except Exception as e:
         with _mesh_lock:
             _mesh_state["last_error"] = str(e)
