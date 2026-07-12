@@ -359,13 +359,16 @@ def find_best_cells(
     cells_by_id = {c["id"]: c for c in map_cells}
     cells_by_qr = {(c["q"], c["r"]): c for c in map_cells}
 
-    # Source 1: every cell on the map held by our faction
+    # Source 1: every cell on the map held by our faction.
+    # Map API uses 'control' field, value like "LENS" or "@ LENS"; also check 'faction'.
     faction_qr: set[tuple[int, int]] = set()
     for cell in map_cells:
-        if (cell.get("faction") or "").lower() == my_faction.lower():
+        raw = (cell.get("control") or cell.get("faction") or "")
+        cell_faction = raw.lower().strip().lstrip("@ ")
+        if cell_faction == my_faction.lower():
             faction_qr.add((cell["q"], cell["r"]))
 
-    # Source 2: our own wallet-confirmed territory (reliable even if map lacks faction field)
+    # Source 2: our own wallet-confirmed territory (reliable fallback)
     my_qr: set[tuple[int, int]] = set()
     for cid in my_territory_ids:
         cell = cells_by_id.get(cid)
