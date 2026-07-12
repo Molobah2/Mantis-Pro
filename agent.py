@@ -2763,6 +2763,406 @@ except ImportError:
 
 
 # ── MESH CLAIMER: APScheduler daily job + routes ──────────────────────────────
+
+MESH_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mesh Claimer · Mantis Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080B;
+  --s0: rgba(255,255,255,0.03);
+  --s1: rgba(255,255,255,0.05);
+  --s2: rgba(255,255,255,0.08);
+  --b0: rgba(255,255,255,0.06);
+  --b1: rgba(255,255,255,0.12);
+  --ink: #EAEAEF;
+  --ink2: rgba(234,234,239,0.55);
+  --ink3: rgba(234,234,239,0.3);
+  --ink4: rgba(234,234,239,0.12);
+  --em: #28A066;
+  --em-s: rgba(40,160,102,0.1);
+  --em-b: rgba(40,160,102,0.22);
+  --am: #C98A3A;
+  --cr: #B04040;
+  --mono: 'JetBrains Mono', monospace;
+  --r: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; }
+
+.orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.orb { position: absolute; border-radius: 50%; filter: blur(90px); }
+.orb-a {
+  width: 700px; height: 700px; top: -250px; right: -180px;
+  background: radial-gradient(circle, rgba(40,160,102,0.055) 0%, transparent 65%);
+  animation: drift1 22s ease-in-out infinite;
+}
+.orb-b {
+  width: 550px; height: 550px; bottom: -150px; left: -120px;
+  background: radial-gradient(circle, rgba(110,100,180,0.045) 0%, transparent 65%);
+  animation: drift2 28s ease-in-out infinite;
+}
+@keyframes drift1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,30px)} }
+@keyframes drift2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,-35px)} }
+
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 52px; display: flex; align-items: center; padding: 0 24px;
+  background: rgba(8,8,11,0.82);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--b0);
+}
+.n-back {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--ink3); transition: color .15s;
+  padding: 5px 10px; border-radius: 7px;
+}
+.n-back:hover { color: var(--ink2); background: var(--s1); }
+.n-sep { width: 1px; height: 16px; background: var(--b1); margin: 0 10px; flex-shrink: 0; }
+.n-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.n-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.n-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--em); box-shadow: 0 0 9px rgba(40,160,102,.6); animation: pulse 2.5s ease-in-out infinite; }
+.n-dot.idle { background: var(--ink4); box-shadow: none; animation: none; }
+.n-dot.run { background: var(--am); box-shadow: 0 0 9px rgba(201,138,58,.55); }
+.n-dot.err { background: var(--cr); box-shadow: 0 0 9px rgba(176,64,64,.55); animation: none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.28} }
+.n-lbl { font-family: var(--mono); font-size: 11px; color: var(--ink3); }
+
+.page { position: relative; z-index: 1; max-width: 840px; margin: 0 auto; padding: 72px 20px 80px; }
+
+.hdr { margin-bottom: 28px; }
+.hdr-pre { font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--ink3); margin-bottom: 10px; }
+.hdr-h1 { font-size: 30px; font-weight: 700; letter-spacing: -1.2px; margin-bottom: 7px; }
+.hdr-sub { font-family: var(--mono); font-size: 11.5px; color: var(--ink3); }
+.hdr-wallet { color: var(--ink2); }
+
+.hero {
+  display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%);
+  border: 1px solid var(--b0); border-radius: 16px; padding: 28px; margin-bottom: 14px;
+}
+.hero-num { font-size: 64px; font-weight: 800; letter-spacing: -4px; line-height: 1; }
+.hero-lbl { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink3); margin-top: 7px; }
+.hero-rhs { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
+
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 13px; border-radius: 20px; font-family: var(--mono); font-size: 11px; font-weight: 500; }
+.pill-active { background: var(--em-s); color: var(--em); border: 1px solid var(--em-b); }
+.pill-idle { background: var(--s1); color: var(--ink3); border: 1px solid var(--b0); }
+.pill-run { background: rgba(201,138,58,0.1); color: var(--am); border: 1px solid rgba(201,138,58,0.22); }
+.pill-err { background: rgba(176,64,64,0.1); color: var(--cr); border: 1px solid rgba(176,64,64,0.22); }
+.pill-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+
+.btn-claim {
+  padding: 13px 30px; border-radius: 10px;
+  background: var(--em); color: #fff;
+  font-size: 14px; font-weight: 600; letter-spacing: -.1px;
+  box-shadow: 0 2px 14px rgba(40,160,102,0.3), 0 1px 3px rgba(0,0,0,.5);
+  transition: all .18s;
+}
+.btn-claim:hover:not(:disabled) { background: #30BA78; transform: translateY(-1px); box-shadow: 0 5px 22px rgba(40,160,102,0.42); }
+.btn-claim:active:not(:disabled) { transform: none; }
+.btn-claim:disabled { background: var(--s2); color: var(--ink3); cursor: not-allowed; box-shadow: none; border: 1px solid var(--b0); }
+
+.stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 14px; }
+@media(max-width:620px){ .stats { grid-template-columns: 1fr 1fr; } }
+.stat { background: var(--s0); border: 1px solid var(--b0); border-radius: var(--r); padding: 16px; }
+.stat-k { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--ink3); margin-bottom: 7px; }
+.stat-v { font-size: 15px; font-weight: 600; letter-spacing: -.3px; }
+.stat-v.em { color: var(--em); }
+.stat-v.er { color: var(--cr); }
+.stat-v.mono { font-family: var(--mono); font-size: 13px; }
+.stat-sub { font-size: 11px; color: var(--ink3); margin-top: 3px; }
+
+.card { background: var(--s0); border: 1px solid var(--b0); border-radius: var(--r); overflow: hidden; margin-bottom: 14px; }
+.card-head { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px; border-bottom: 1px solid var(--b0); }
+.card-title { font-size: 12.5px; font-weight: 600; }
+.card-badge { font-family: var(--mono); font-size: 10px; color: var(--ink3); }
+.card-body { padding: 20px; }
+.terr-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+.terr-big { font-size: 28px; font-weight: 700; letter-spacing: -1.2px; line-height: 1; margin-bottom: 5px; }
+.terr-k { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--ink3); }
+.dim { font-family: var(--mono); font-size: 12px; color: var(--ink3); }
+
+.err-card { background: rgba(176,64,64,0.07); border: 1px solid rgba(176,64,64,0.18); border-radius: var(--r); padding: 15px 18px; margin-bottom: 14px; }
+.err-k { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--cr); margin-bottom: 6px; }
+.err-v { font-family: var(--mono); font-size: 12px; color: rgba(234,234,239,0.45); word-break: break-all; }
+
+.dry-card { background: rgba(201,138,58,0.07); border: 1px solid rgba(201,138,58,0.18); border-radius: var(--r); padding: 12px 16px; margin-bottom: 14px; font-family: var(--mono); font-size: 11.5px; color: var(--am); }
+
+.log-card { background: var(--s0); border: 1px solid var(--b0); border-radius: var(--r); overflow: hidden; margin-bottom: 14px; }
+.log-head { padding: 12px 16px; border-bottom: 1px solid var(--b0); font-size: 12.5px; font-weight: 600; }
+.log-body { padding: 12px 16px; font-family: var(--mono); font-size: 11.5px; color: var(--ink3); min-height: 44px; max-height: 180px; overflow-y: auto; }
+.log-l { margin-bottom: 3px; }
+.log-l.ok { color: var(--em); }
+.log-l.er { color: var(--cr); }
+.log-l.wn { color: var(--am); }
+
+details.dbg { background: var(--s0); border: 1px solid var(--b0); border-radius: var(--r); overflow: hidden; }
+details.dbg summary { padding: 11px 16px; font-family: var(--mono); font-size: 11px; color: var(--ink3); cursor: pointer; user-select: none; list-style: none; }
+details.dbg pre { padding: 14px 16px; font-family: var(--mono); font-size: 11px; color: var(--ink3); overflow-x: auto; border-top: 1px solid var(--b0); line-height: 1.65; }
+
+.hint { font-family: var(--mono); font-size: 10.5px; color: var(--ink3); line-height: 1.8; margin: 14px 0; }
+.hint code { background: var(--s2); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--b0); }
+</style>
+</head>
+<body>
+
+<div class="orbs" aria-hidden="true">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+</div>
+
+<nav class="nav">
+  <a class="n-back" href="/">&#8592; Home</a>
+  <div class="n-sep"></div>
+  <span class="n-title">Litany Mesh</span>
+  <div class="n-right">
+    <div class="n-dot idle" id="navDot"></div>
+    <span class="n-lbl" id="navLbl">&#8212;</span>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="hdr">
+    <div class="hdr-pre">Mantis Pro &#183; Auto-Claimer</div>
+    <h1 class="hdr-h1">Litany Mesh</h1>
+    <div class="hdr-sub">
+      Wallet&nbsp;<span class="hdr-wallet">{{ wallet_short }}</span>&nbsp;&#183;&nbsp;Lens&nbsp;&#183;&nbsp;Daily 00:02 UTC
+    </div>
+  </div>
+
+  <div class="hero">
+    <div>
+      <div class="hero-num" id="heroNum">{{ total_claimed }}</div>
+      <div class="hero-lbl">Total cells claimed</div>
+    </div>
+    <div class="hero-rhs">
+      <div class="pill pill-idle" id="statusPill">
+        <div class="pill-dot"></div>
+        <span id="statusTxt">Loading&#8230;</span>
+      </div>
+      <button class="btn-claim" id="claimBtn" onclick="triggerClaim()">Claim Now</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-k">Last Run</div>
+      <div class="stat-v mono" id="sLastRun">{{ last_run or 'Never' }}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-k">Last Cycle</div>
+      <div class="stat-v em" id="sLastClaimed">{{ last_claimed }}</div>
+      <div class="stat-sub">cells claimed</div>
+    </div>
+    <div class="stat">
+      <div class="stat-k">Schedule</div>
+      <div class="stat-v mono">00:02 UTC</div>
+      <div class="stat-sub" id="sNext">daily</div>
+    </div>
+    <div class="stat">
+      <div class="stat-k">Key</div>
+      <div class="stat-v {{ 'em' if key_set else 'er' }}">{{ '&#10003; Set' if key_set else '&#10007; Missing' }}</div>
+    </div>
+  </div>
+
+  {% if dry_run %}
+  <div class="dry-card">&#9888; Dry run mode &#8212; claims are simulated and not posted.</div>
+  {% endif %}
+
+  {% if last_error %}
+  <div class="err-card">
+    <div class="err-k">Last Error</div>
+    <div class="err-v">{{ last_error }}</div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Territory</div>
+      <div class="card-badge" id="terrBadge">litany.gg &#183; loading&#8230;</div>
+    </div>
+    <div class="card-body">
+      <div id="terrBody" class="dim">Fetching&#8230;</div>
+    </div>
+  </div>
+
+  <div class="log-card" id="logCard" style="display:none">
+    <div class="log-head">Run Log</div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+
+  <div class="hint">
+    Uses <code>AGW_OWNER_PRIVATE_KEY</code> from Railway.
+    Token IDs via session &#8594; anchor fallback &#8594; <code>MESH_TOKEN_IDS</code> override.<br>
+    Set <code>MESH_DRY_RUN=true</code> to simulate without posting.
+  </div>
+
+  <details class="dbg">
+    <summary>&#9658; Debug &#183; raw state</summary>
+    <pre id="dbgPre">{{ state_json }}</pre>
+  </details>
+
+</div>
+
+<script>
+var WALLET = '{{ address }}';
+var INIT_RUNNING = {{ 'true' if running else 'false' }};
+
+/* orb parallax */
+(function() {
+  var orbs = document.querySelectorAll('.orb');
+  var tx=0, ty=0, cx=0, cy=0;
+  document.addEventListener('mousemove', function(e) {
+    tx = (e.clientX/innerWidth - 0.5) * 32;
+    ty = (e.clientY/innerHeight - 0.5) * 32;
+  });
+  (function loop() {
+    cx += (tx-cx)*0.05; cy += (ty-cy)*0.05;
+    orbs.forEach(function(o,i) {
+      o.style.transform = 'translate(' + cx*(0.5+i*0.4) + 'px,' + cy*(0.5+i*0.4) + 'px)';
+    });
+    requestAnimationFrame(loop);
+  })();
+})();
+
+/* next-run countdown */
+function nextCD(h, m) {
+  var now = new Date(), next = new Date(now);
+  next.setUTCHours(h, m, 0, 0);
+  if (next <= now) next.setUTCDate(next.getUTCDate()+1);
+  var diff = next - now;
+  var hh = Math.floor(diff/3600000), mm = Math.floor((diff%3600000)/60000);
+  return hh > 0 ? 'in ' + hh + 'h ' + mm + 'm' : 'in ' + mm + 'm';
+}
+document.getElementById('sNext').textContent = nextCD(0,2);
+setInterval(function(){ document.getElementById('sNext').textContent = nextCD(0,2); }, 60000);
+
+/* relative time */
+function rel(iso) {
+  if (!iso || iso === 'None' || iso === 'null') return '—';
+  var s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 60) return Math.round(s) + 's ago';
+  if (s < 3600) return Math.round(s/60) + 'm ago';
+  if (s < 86400) return Math.round(s/3600) + 'h ago';
+  return Math.round(s/86400) + 'd ago';
+}
+
+/* apply /mesh/status to UI */
+function applyState(d) {
+  var dot = document.getElementById('navDot');
+  var lbl = document.getElementById('navLbl');
+  var pill = document.getElementById('statusPill');
+  var ptxt = document.getElementById('statusTxt');
+  var btn = document.getElementById('claimBtn');
+  if (d.running) {
+    dot.className = 'n-dot run'; lbl.textContent = 'RUNNING';
+    pill.className = 'pill pill-run'; ptxt.textContent = 'Running…';
+    btn.disabled = true; btn.textContent = 'Running…';
+  } else if (d.last_error) {
+    dot.className = 'n-dot err'; lbl.textContent = 'ERROR';
+    pill.className = 'pill pill-err'; ptxt.textContent = 'Error';
+    btn.disabled = false; btn.textContent = 'Claim Now';
+  } else {
+    dot.className = 'n-dot'; lbl.textContent = 'ACTIVE';
+    pill.className = 'pill pill-active'; ptxt.textContent = 'Active';
+    btn.disabled = false; btn.textContent = 'Claim Now';
+  }
+  var lr = document.getElementById('sLastRun');
+  var lc = document.getElementById('sLastClaimed');
+  var hn = document.getElementById('heroNum');
+  var dp = document.getElementById('dbgPre');
+  if (lr) lr.textContent = d.last_run ? rel(d.last_run) : 'Never';
+  if (lc && d.last_claimed !== undefined) lc.textContent = d.last_claimed;
+  if (hn && d.total_claimed !== undefined) hn.textContent = d.total_claimed;
+  if (dp) dp.textContent = JSON.stringify(d, null, 2);
+}
+
+/* poll status */
+var _polling = false;
+function pollStatus() {
+  fetch('/mesh/status').then(function(r){ return r.json(); }).then(function(d) {
+    applyState(d);
+    if (d.running) { _polling = true; setTimeout(pollStatus, 2000); }
+    else { _polling = false; }
+  }).catch(function(){});
+}
+pollStatus();
+if (INIT_RUNNING) setTimeout(pollStatus, 600);
+
+/* territory from Litany API */
+function loadTerritory() {
+  var badge = document.getElementById('terrBadge');
+  var body = document.getElementById('terrBody');
+  var faction = 'lens';
+  fetch('https://litany.gg/api/mesh/wallet/' + WALLET)
+    .then(function(r){ return r.json(); })
+    .then(function(j) {
+      var d = j.data || j;
+      faction = d.faction || 'lens';
+      badge.textContent = faction + ' · ' + (d.total_claims || 0) + ' total';
+      return fetch('https://litany.gg/api/mesh/wallet/' + WALLET + '/territory');
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(j) {
+      var t = j.data || j;
+      body.innerHTML =
+        '<div class="terr-row">' +
+          '<div><div class="terr-big">' + (t.cluster_count || '—') + '</div><div class="terr-k">Clusters</div></div>' +
+          '<div><div class="terr-big">' + (t.largest_cluster_size || '—') + '</div><div class="terr-k">Largest</div></div>' +
+          '<div><div class="terr-big">' + ((t.anchor_cell_ids || []).length) + '</div><div class="terr-k">Anchors</div></div>' +
+        '</div>';
+    })
+    .catch(function() {
+      badge.textContent = 'litany.gg · offline';
+      body.innerHTML = '<span class="dim" style="opacity:.5">Could not reach litany.gg API.</span>';
+    });
+}
+loadTerritory();
+
+/* trigger claim */
+function triggerClaim() {
+  var btn = document.getElementById('claimBtn');
+  var logCard = document.getElementById('logCard');
+  var logBody = document.getElementById('logBody');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  logCard.style.display = 'block';
+  logBody.innerHTML = '<div class="log-l">Sending claim request…</div>';
+  fetch('/mesh/run', {method:'POST'})
+    .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+    .then(function(res) {
+      if (!res.ok) {
+        logBody.innerHTML += '<div class="log-l er">Error: ' + (res.d.error || 'unknown') + '</div>';
+        btn.disabled = false; btn.textContent = 'Claim Now';
+        return;
+      }
+      logBody.innerHTML += '<div class="log-l ok">Claim cycle started.</div>';
+      setTimeout(function(){ _polling = true; pollStatus(); }, 800);
+    })
+    .catch(function(e) {
+      logBody.innerHTML += '<div class="log-l er">Network error: ' + e.message + '</div>';
+      btn.disabled = false; btn.textContent = 'Claim Now';
+    });
+}
+</script>
+</body>
+</html>"""
+
 _mesh_state = {
     "running":      False,
     "last_run":     None,   # ISO UTC string
@@ -2850,9 +3250,10 @@ def mesh_claimer_run():
 
 @app.route("/mesh")
 def mesh_claimer_dashboard():
+    from flask import render_template_string
     from portal_upvote.config import AGW_ADDRESS as _AGW_ADDRESS
-    pk        = os.environ.get("AGW_OWNER_PRIVATE_KEY", "")
-    address   = _AGW_ADDRESS
+    pk      = os.environ.get("AGW_OWNER_PRIVATE_KEY", "")
+    address = _AGW_ADDRESS
     if not address and pk:
         try:
             from eth_account import Account as _A
@@ -2861,97 +3262,23 @@ def mesh_claimer_dashboard():
             address = ""
     with _mesh_lock:
         state = dict(_mesh_state)
-
     state["dry_run"] = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
-    key_status   = "✓ Set" if pk else "✗ Not set"
-    key_cls      = "ok" if pk else "err"
-    dry_cls      = "warn" if state["dry_run"] else "ok"
-    last_run     = state["last_run"] or "Never"
-    error_html   = f'<p style="color:#ff6b6b">Last error: {state["last_error"]}</p>' if state["last_error"] else ""
-    running_msg  = '<p style="color:#ffd700">&#x21BB; Running now...</p>' if state["running"] else ""
-    btn_disabled = "disabled" if state["running"] else ""
-    btn_label    = "Running..." if state["running"] else "Claim Now"
-    state_json   = json.dumps(state, indent=2)
 
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Mesh Claimer — Mantis Pro</title>
-  <style>
-    body {{ background:#0a0a0a; color:#e0e0e0; font-family:monospace; padding:40px; max-width:600px; margin:0 auto }}
-    h1 {{ color:#7b68ee; margin-bottom:4px }}
-    h2 {{ color:#9d8fff; font-size:14px; font-weight:normal; margin-top:0; margin-bottom:32px }}
-    .card {{ background:#111; border:1px solid #222; border-radius:8px; padding:20px; margin-bottom:16px }}
-    .row {{ display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1a1a1a }}
-    .row:last-child {{ border-bottom:none }}
-    .label {{ color:#888 }}
-    .val {{ color:#e0e0e0 }}
-    .val.ok {{ color:#4ade80 }}
-    .val.warn {{ color:#fbbf24 }}
-    .val.err {{ color:#f87171 }}
-    button {{
-      background:#7b68ee; color:#fff; border:none; border-radius:6px;
-      padding:12px 28px; font-size:14px; cursor:pointer; font-family:monospace;
-    }}
-    button:disabled {{ background:#333; color:#666; cursor:not-allowed }}
-    button:hover:not(:disabled) {{ background:#6c5ce7 }}
-  </style>
-  <script>
-    async function runNow() {{
-      const btn = document.getElementById('runBtn');
-      btn.disabled = true;
-      btn.textContent = 'Running...';
-      const r = await fetch('/mesh/run', {{method:'POST'}});
-      const d = await r.json();
-      if (!r.ok) {{ alert(d.error); btn.disabled=false; btn.textContent='Claim Now'; return; }}
-      pollStatus();
-    }}
-    async function pollStatus() {{
-      const r = await fetch('/mesh/status');
-      const d = await r.json();
-      document.getElementById('status-json').textContent = JSON.stringify(d, null, 2);
-      if (d.running) {{ setTimeout(pollStatus, 2000); }}
-      else {{
-        document.getElementById('runBtn').disabled = false;
-        document.getElementById('runBtn').textContent = 'Claim Now';
-        location.reload();
-      }}
-    }}
-  </script>
-</head>
-<body>
-  <h1>Litany Mesh Auto-Claimer</h1>
-  <h2>Mantis Pro // daily territory expansion</h2>
+    wallet_short = (address[:6] + "…" + address[-4:]) if len(address) > 10 else (address or "not set")
 
-  <div class="card">
-    <div class="row"><span class="label">Wallet</span><span class="val">{address or 'not configured'}</span></div>
-    <div class="row"><span class="label">Private key</span><span class="val {key_cls}">{key_status}</span></div>
-    <div class="row"><span class="label">Dry run</span><span class="val {dry_cls}">{state["dry_run"]}</span></div>
-    <div class="row"><span class="label">Last run</span><span class="val">{last_run}</span></div>
-    <div class="row"><span class="label">Claims today</span><span class="val ok">{state["last_claimed"]}</span></div>
-    <div class="row"><span class="label">Schedule</span><span class="val">Daily at 00:02 UTC</span></div>
-  </div>
-
-  {running_msg}
-  {error_html}
-
-  <button id="runBtn" onclick="runNow()" {btn_disabled}>{btn_label}</button>
-
-  <p style="margin-top:32px; font-size:12px; color:#444">
-    Uses <code>AGW_OWNER_PRIVATE_KEY</code> (set in Railway).<br>
-    Token IDs are fetched automatically via signed Litany session.<br>
-    Override: set <code>MESH_TOKEN_IDS=id1,id2</code> in Railway if session fails.<br>
-    Set <code>MESH_DRY_RUN=true</code> to simulate without posting.
-  </p>
-
-  <div class="card" style="margin-top:24px">
-    <pre id="status-json" style="margin:0; font-size:12px; color:#666">{state_json}</pre>
-  </div>
-</body>
-</html>"""
-    from flask import Response
-    return Response(html, mimetype="text/html")
+    return render_template_string(
+        MESH_TEMPLATE,
+        address=address or "",
+        wallet_short=wallet_short,
+        total_claimed=state.get("total_claimed", 0),
+        last_run=state.get("last_run"),
+        last_claimed=state.get("last_claimed", 0),
+        last_error=state.get("last_error"),
+        running=state.get("running", False),
+        dry_run=state.get("dry_run", False),
+        key_set=bool(pk),
+        state_json=json.dumps(state, indent=2),
+    )
 
 
 def _startup_session_restore():
