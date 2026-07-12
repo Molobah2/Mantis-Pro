@@ -6,28 +6,25 @@ Automatically claims territory cells in the Litany Mesh using EIP-191 signed
 messages posted to the Litany API. No gas required — pure off-chain signing.
 
 Quick start:
-  export MESH_PRIVATE_KEY=0x...
+  export AGW_OWNER_PRIVATE_KEY=0x...
   python mesh_claimer.py
 
 Full options (env vars):
-  MESH_PRIVATE_KEY   required  Hex private key for the signing wallet
-  MESH_ADDRESS       optional  Wallet address (derived from key if omitted)
-  MESH_TOKEN_IDS     optional  Comma-separated Litany Card token IDs to use
-                               (skips on-chain lookup — useful if RPC is slow)
-  MESH_DRY_RUN       optional  Set to "true" to simulate without posting
-  MESH_LOOP          optional  Set to "true" to loop daily (default: run once)
+  AGW_OWNER_PRIVATE_KEY  required  Hex private key for the EOA signer
+  MESH_TOKEN_IDS         optional  Comma-separated Litany Card token IDs
+                                   (overrides session-based lookup)
+  MESH_DRY_RUN           optional  Set to "true" to simulate without posting
 
 How it works:
-  1. Looks up your faction and today's remaining claim budget
-  2. Enumerates your Litany Card token IDs on-chain (or from MESH_TOKEN_IDS)
-  3. Fetches the full mesh map and your current territory
-  4. Picks the best adjacent open cells (ranked by faction contiguity score)
-  5. Signs a canonical EIP-191 message and POSTs to /api/mesh/claim
-  6. Handles cooldowns, rate limits, and token-already-used errors automatically
-  7. If MESH_LOOP=true, sleeps until next UTC midnight and repeats
+  1. Issues a 15-minute Litany session (EIP-191 signed message)
+  2. Calls /wallet/available-claims to get today's usable token IDs
+  3. Fetches the full mesh map and current territory
+  4. Picks the best adjacent open cells (ranked by faction contiguity)
+  5. Signs a canonical EIP-191 claim message and POSTs to /api/mesh/claim
+  6. Handles cooldowns, rate limits, and token-already-used errors
 
 Prerequisites:
-  pip install eth-account web3 requests python-dotenv
+  pip install eth-account requests python-dotenv
 """
 
 import os
@@ -42,15 +39,12 @@ from typing import Optional
 from dotenv import load_dotenv
 from eth_account import Account
 from eth_account.messages import encode_defunct
-from web3 import Web3
 
 load_dotenv()
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-API_BASE       = "https://litany.gg/api/mesh"
-ABSTRACT_RPC   = "https://api.mainnet.abs.xyz"
-CARDS_CONTRACT = "0xd44abe71c312FCAf73cC20f7DF61C39A89C203eB"
+API_BASE    = "https://litany.gg/api/mesh"
 
 COOLDOWN_S  = 11      # API enforces 10 s; add 1 s buffer
 BATCH_MAX   = 10      # API hard cap per signed write
@@ -59,26 +53,6 @@ BACKOFF_MAX = 30      # Max exponential-backoff sleep in seconds
 
 # Pointy-top axial hex neighbor offsets
 HEX_DIRS = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)]
-
-ERC721_ABI = [
-    {
-        "inputs": [{"name": "owner", "type": "address"}],
-        "name": "balanceOf",
-        "outputs": [{"name": "", "type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [{"name": "tokenId", "type": "uint256"}],
-        "name": "ownerOf",
-        "outputs": [{"name": "", "type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-]
-
-# Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
-TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -91,57 +65,78 @@ def log(msg: str, indent: int = 0):
 def hex_neighbors(q: int, r: int) -> list[tuple[int, int]]:
     return [(q + dq, r + dr) for dq, dr in HEX_DIRS]
 
-# ── On-chain Token Lookup ─────────────────────────────────────────────────────
+# ── Litany Session + Token Lookup ─────────────────────────────────────────────
 
-def get_owned_tokens(addresses: list[str]) -> list[int]:
+def issue_session(account, address: str):
     """
-    Enumerate Litany Card token IDs owned by any address in `addresses`.
-    Scans Transfer events (LitanyCards is not ERC-721 Enumerable) across both
-    the AGW smart-contract wallet and the EOA signer — cards may sit in either.
-    Fetches in 50k-block chunks to stay within ZKsync RPC limits.
+    Trade an EIP-191 personal_sign for a 15-minute Litany session JWT.
+    Returns the response cookies on success, None on failure.
+
+    Canonical message format (from Litany docs):
+      Litany Protocol — The Mesh
+      Action: session_issue
+      Wallet: <lowercase>
+      Nonce: <32 hex chars>
+      Date: <YYYY-MM-DDTHH:MM:SSZ>
     """
-    w3 = Web3(Web3.HTTPProvider(ABSTRACT_RPC))
-    contract = w3.eth.contract(
-        address=Web3.to_checksum_address(CARDS_CONTRACT),
-        abi=ERC721_ABI,
+    nonce   = secrets.token_hex(16)
+    date    = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    message = (
+        "Litany Protocol — The Mesh\n"
+        "Action: session_issue\n"
+        f"Wallet: {address.lower()}\n"
+        f"Nonce: {nonce}\n"
+        f"Date: {date}"
     )
-    addr_set    = {a.lower() for a in addresses}
-    latest      = w3.eth.block_number
-    chunk       = 50_000
-    candidate_ids: set[int] = set()
+    signed  = account.sign_message(encode_defunct(text=message))
+    sig_hex = signed.signature.hex()
+    if not sig_hex.startswith("0x"):
+        sig_hex = "0x" + sig_hex
 
-    log(f"Scanning Transfer events for {list(addr_set)} up to block {latest}...", indent=1)
+    try:
+        r = requests.post(
+            f"{API_BASE}/session/issue",
+            json={
+                "wallet":    address.lower(),
+                "nonce":     nonce,
+                "date":      date,
+                "signature": sig_hex,
+                "message":   message,
+            },
+            timeout=15,
+        )
+        if r.ok:
+            log("Session issued OK.", indent=1)
+            return r.cookies
+        log(f"[warn] Session issue returned {r.status_code}: {r.text[:300]}", indent=1)
+        return None
+    except Exception as e:
+        log(f"[warn] Session issue error: {e}", indent=1)
+        return None
 
-    for addr in addr_set:
-        addr_padded = "0x" + "0" * 24 + addr[2:]
-        block = 0
-        while block <= latest:
-            end = min(block + chunk - 1, latest)
-            try:
-                entries = w3.eth.get_logs({
-                    "address":   Web3.to_checksum_address(CARDS_CONTRACT),
-                    "topics":    [TRANSFER_TOPIC, None, addr_padded],
-                    "fromBlock": block,
-                    "toBlock":   end,
-                })
-                for entry in entries:
-                    candidate_ids.add(int(entry["topics"][2].hex(), 16))
-            except Exception as e:
-                log(f"[warn] get_logs({block}-{end}): {e}", indent=1)
-            block = end + 1
 
-    log(f"Transfer candidates: {len(candidate_ids)} token(s)", indent=1)
+def get_available_claims(cookies) -> list[int]:
+    """
+    Fetch token IDs available for claiming today (requires active session).
+    Handles various possible response shapes from the API.
+    """
+    r = requests.get(
+        f"{API_BASE}/wallet/available-claims",
+        cookies=cookies,
+        timeout=15,
+    )
+    r.raise_for_status()
+    body = r.json()
+    data = body.get("data", body)
 
-    owned = []
-    for token_id in candidate_ids:
-        try:
-            owner = contract.functions.ownerOf(token_id).call()
-            if owner.lower() in addr_set:
-                owned.append(token_id)
-        except Exception:
-            pass
-
-    return sorted(owned)
+    if isinstance(data, list):
+        return [int(x) for x in data]
+    if isinstance(data, dict):
+        for key in ("token_ids", "available", "tokens", "available_token_ids"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [int(x) for x in val]
+    return []
 
 # ── Litany Mesh API ───────────────────────────────────────────────────────────
 
@@ -170,28 +165,17 @@ def build_and_sign(
     is_first_claim: bool,
 ) -> dict:
     """
-    Build the canonical Litany Mesh claim message, sign it with EIP-191
+    Build the canonical Litany Mesh claim message, sign with EIP-191
     personal_sign, and return the full POST body.
 
-    Canonical format (from docs):
-      Litany Protocol — The Mesh
-      Action: claim
-      Wallet: <lowercase>
-      Nonce: <32 hex chars>
-      Date: <YYYY-MM-DDTHH:MM:SSZ>
-      TokenIds: <sorted ascending, comma-separated>
-      CellIds: <in same order as sorted TokenIds>
-      FirstClaim: true|false
-
-    The message TokenIds are always sorted ascending. CellIds follow the same
+    TokenIds are sorted ascending in the message; CellIds follow the same
     positional order so the server can re-derive each token→cell pairing.
     """
-    # Sort pairs by token_id ascending so message is deterministic
-    sorted_pairs = sorted(pairs, key=lambda p: p[0])
-    sorted_token_ids = [p[0] for p in sorted_pairs]
-    cell_ids_ordered = [p[1] for p in sorted_pairs]
+    sorted_pairs       = sorted(pairs, key=lambda p: p[0])
+    sorted_token_ids   = [p[0] for p in sorted_pairs]
+    cell_ids_ordered   = [p[1] for p in sorted_pairs]
 
-    nonce = secrets.token_hex(16)   # 16 random bytes = 32 hex chars
+    nonce = secrets.token_hex(16)
     date  = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
     message = (
@@ -205,7 +189,7 @@ def build_and_sign(
         f"FirstClaim: {'true' if is_first_claim else 'false'}"
     )
 
-    signed = account.sign_message(encode_defunct(text=message))
+    signed  = account.sign_message(encode_defunct(text=message))
     sig_hex = signed.signature.hex()
     if not sig_hex.startswith("0x"):
         sig_hex = "0x" + sig_hex
@@ -233,16 +217,9 @@ def find_best_cells(
     """
     Return open cells ranked best-first.
 
-    For first claims: targets the home-region (capital starter zone) for the
-    faction. These cells are pre-designated as claimable at game start.
-
-    For subsequent claims: ranks open cells adjacent to any faction territory
-    by the number of neighboring faction cells (higher = more contiguous,
-    harder to break).
-
-    Null-waste biome cells are excluded from targets (impassable).
-    Home-region cells (the fortress ring itself) are also excluded — they're
-    uncapturable per game rules.
+    First claim: targets home_region cells for the faction (starter zone).
+    Subsequent: ranks open cells adjacent to faction territory by the number
+    of neighboring faction cells (higher = more contiguous).
     """
     cells_by_qr = {(c["q"], c["r"]): c for c in map_cells}
 
@@ -259,23 +236,19 @@ def find_best_cells(
             return False
         if cell["id"] in exclude_cell_ids:
             return False
-        # Home-region cells are fortress-protected and uncapturable
         if cell.get("special_type") == "fortress" or cell.get("state") == "fortress":
             return False
         return True
 
     if is_first or not faction_qr:
-        # Look for cells explicitly tagged to our faction's starter zone
         starters = [
             c for c in map_cells
             if is_capturable(c) and c.get("home_region") == my_faction
         ]
         if starters:
             return starters
-        # Fallback: any open non-null cell (shouldn't normally be needed)
         return [c for c in map_cells if is_capturable(c)]
 
-    # Score candidates by faction contiguity
     scores: dict[int, dict] = {}
     for (q, r) in faction_qr:
         for nq, nr in hex_neighbors(q, r):
@@ -306,29 +279,35 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
 
     if not my_faction:
         log("[error] Wallet has no faction assigned.", indent=1)
-        log("Complete faction classification at https://litany.gg/docs/agents/skills/mesh", indent=1)
+        log("Complete faction classification at https://litany.gg", indent=1)
         return
 
-    # Daily budget enforced server-side; BUDGET_EXCEEDED error terminates the loop early
     remaining = DAILY_MAX
 
-    # ── Step 2: token IDs ──────────────────────────────────────────────────────
+    # ── Step 2: resolve token IDs ──────────────────────────────────────────────
     env_token_str = os.environ.get("MESH_TOKEN_IDS", "").strip()
     if env_token_str:
         token_ids = [int(t.strip()) for t in env_token_str.split(",") if t.strip()]
-        log(f"Token IDs from MESH_TOKEN_IDS: {token_ids}", indent=1)
+        log(f"Token IDs from MESH_TOKEN_IDS env var: {token_ids}", indent=1)
     else:
-        log("Fetching owned token IDs on-chain...", indent=1)
-        eoa = account.address
-        try:
-            token_ids = get_owned_tokens([address, eoa])
-        except Exception as e:
-            log(f"[error] On-chain token lookup failed: {e}", indent=1)
-            log("Set MESH_TOKEN_IDS=<id1>,<id2>,... to bypass on-chain lookup.", indent=1)
+        log("Requesting available-claims via Litany session...", indent=1)
+        cookies   = issue_session(account, address)
+        token_ids = []
+        if cookies is not None:
+            try:
+                token_ids = get_available_claims(cookies)
+                log(f"Available token IDs from API: {token_ids}", indent=1)
+            except Exception as e:
+                log(f"[warn] available-claims fetch failed: {e}", indent=1)
+
+        if not token_ids:
+            log("[error] Could not determine token IDs.", indent=1)
+            log("Set MESH_TOKEN_IDS=<id1>,<id2>,... in Railway env vars to fix this.", indent=1)
+            log("Find your token IDs at litany.gg (open your card inventory).", indent=1)
             return
 
     if not token_ids:
-        log("[error] Wallet owns no Litany Cards. Cannot claim cells.", indent=1)
+        log("[error] No token IDs available for claiming today.", indent=1)
         return
 
     log(f"Available tokens: {token_ids}", indent=1)
@@ -346,8 +325,8 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
 
     log("Fetching my territory...", indent=1)
     try:
-        territory    = get_territory(address)
-        my_cell_ids  = {c["id"] for c in territory.get("cells", [])}
+        territory   = get_territory(address)
+        my_cell_ids = {c["id"] for c in territory.get("cells", [])}
     except Exception as e:
         log(f"[warn] Territory fetch failed ({e}), assuming zero cells.", indent=1)
         my_cell_ids = set()
@@ -356,9 +335,8 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
     log(f"Cells held: {len(my_cell_ids)} | First-claim: {is_first}", indent=1)
 
     # ── Step 4: claim loop ─────────────────────────────────────────────────────
-    used_tokens:   set[int] = set()
-    claimed_total: int      = 0
-    # Cells we've already targeted this cycle (avoid re-submitting rejected cells)
+    used_tokens:    set[int] = set()
+    claimed_total:  int      = 0
     excluded_cells: set[int] = set()
 
     while remaining > 0:
@@ -379,7 +357,7 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
         batch_cells  = [c["id"] for c in target_cells[:batch_size]]
         pairs        = list(zip(batch_tokens, batch_cells))
 
-        log(f"Batch: {len(pairs)} pairs", indent=1)
+        log(f"Batch: {len(pairs)} pair(s)", indent=1)
         for tok, cell in pairs:
             log(f"token {tok} → cell {cell}", indent=2)
 
@@ -393,7 +371,6 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
 
         payload = build_and_sign(account, address, pairs, is_first)
 
-        # Submit with retry
         backoff = 1
         while True:
             try:
@@ -419,7 +396,6 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
                     time.sleep(COOLDOWN_S)
                 break
 
-            # Parse error body
             error_code = ""
             try:
                 body = resp.json()
@@ -432,13 +408,12 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
                 log(f"Rate-limited ({error_code}). Waiting {wait}s...", indent=2)
                 time.sleep(wait)
                 backoff = min(backoff * 2, BACKOFF_MAX)
-                # Re-sign so the timestamp stays within the ±120 s window
                 payload = build_and_sign(account, address, pairs, is_first)
                 continue
 
             if resp.status_code == 409:
                 if error_code == "TOKEN_ALREADY_USED_TODAY":
-                    log("Some tokens already used today. Marking as consumed.", indent=2)
+                    log("Tokens already used today. Marking as consumed.", indent=2)
                     used_tokens.update(batch_tokens)
                     break
                 if error_code == "BUDGET_EXCEEDED":
@@ -446,13 +421,12 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
                     remaining = 0
                     break
                 if error_code == "NOT_ADJACENT":
-                    log("Cells not adjacent to faction territory. Excluding this batch.", indent=2)
+                    log("Cells not adjacent to faction territory. Excluding batch.", indent=2)
                     excluded_cells.update(batch_cells)
                     break
 
             if resp.status_code == 401:
                 log(f"[error] Auth/signature failure ({error_code}): {body}", indent=2)
-                log("Check that wallet address matches the private key.", indent=2)
                 return
 
             log(f"[error] {resp.status_code} {error_code}: {body}", indent=2)
@@ -465,21 +439,23 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
 def seconds_until_next_utc_day() -> float:
     now      = datetime.datetime.utcnow()
     tomorrow = (now + datetime.timedelta(days=1)).replace(
-        hour=0, minute=1, second=0, microsecond=0   # 1-minute buffer after midnight
+        hour=0, minute=1, second=0, microsecond=0
     )
     return (tomorrow - now).total_seconds()
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
 
 def main():
-    private_key = os.environ.get("MESH_PRIVATE_KEY", "").strip()
+    private_key = os.environ.get("AGW_OWNER_PRIVATE_KEY", "").strip()
     if not private_key:
-        print("Error: MESH_PRIVATE_KEY environment variable is required.")
-        print("  export MESH_PRIVATE_KEY=0x<your_private_key>")
+        print("Error: AGW_OWNER_PRIVATE_KEY environment variable is required.")
         sys.exit(1)
 
     account = Account.from_key(private_key)
-    address = os.environ.get("MESH_ADDRESS", account.address).strip()
+    address = os.environ.get(
+        "AGW_ADDRESS",
+        "0x9d60f5906d43aa12b0496765ec202bf498e9cd1f",
+    ).strip()
     dry_run = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
     loop    = os.environ.get("MESH_LOOP", "false").lower() == "true"
 

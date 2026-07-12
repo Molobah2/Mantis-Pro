@@ -2939,8 +2939,9 @@ def mesh_claimer_dashboard():
   <button id="runBtn" onclick="runNow()" {btn_disabled}>{btn_label}</button>
 
   <p style="margin-top:32px; font-size:12px; color:#444">
-    Uses <code>AGW_OWNER_PRIVATE_KEY</code> (already set in Railway).<br>
-    Optionally set <code>MESH_TOKEN_IDS</code> (comma-sep) to skip on-chain lookup.<br>
+    Uses <code>AGW_OWNER_PRIVATE_KEY</code> (set in Railway).<br>
+    Token IDs are fetched automatically via signed Litany session.<br>
+    Override: set <code>MESH_TOKEN_IDS=id1,id2</code> in Railway if session fails.<br>
     Set <code>MESH_DRY_RUN=true</code> to simulate without posting.
   </p>
 
