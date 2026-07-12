@@ -359,6 +359,30 @@ def find_best_cells(
 
     log(f"Territory QR anchors: {len(my_qr)} (from IDs: {len(my_territory_ids)})", indent=1)
 
+    # ── Diagnostic: sample cell structure and neighbor states ──────────────────
+    if map_cells:
+        sample = map_cells[0]
+        log(f"Sample cell fields: {list(sample.keys())}", indent=1)
+        log(f"Sample cell: {sample}", indent=1)
+
+    # Count states across ALL map cells to find the right field value
+    state_dist: dict = {}
+    for c in map_cells:
+        s = c.get("state", "<missing>")
+        state_dist[s] = state_dist.get(s, 0) + 1
+    log(f"Map state distribution: {state_dist}", indent=1)
+
+    # Check what states our neighbors actually have
+    nb_states: dict = {}
+    for (q, r) in list(my_qr)[:20]:
+        for nq, nr in hex_neighbors(q, r):
+            nc = cells_by_qr.get((nq, nr))
+            if nc:
+                s = nc.get("state", "<missing>")
+                nb_states[s] = nb_states.get(s, 0) + 1
+    log(f"Neighbor states (first 20 anchors): {nb_states}", indent=1)
+    # ──────────────────────────────────────────────────────────────────────────
+
     def is_capturable(cell: dict) -> bool:
         if cell.get("state") != "open":
             return False
