@@ -182,6 +182,33 @@ app.post("/direct-upvote", async (req, res) => {
   }
 });
 
+// POST /sign-message — sign a personal_sign message via AGW client (EIP-1271 compatible)
+// Use this instead of raw EOA signing when the server verifies against a smart contract wallet.
+app.post("/sign-message", async (req, res) => {
+  const { ownerPrivKey, message } = req.body as {
+    ownerPrivKey: string;
+    message:      string;
+  };
+  if (!ownerPrivKey || !message) {
+    return res.status(400).json({ error: "ownerPrivKey and message required" });
+  }
+  try {
+    const key           = ownerPrivKey.startsWith("0x") ? ownerPrivKey : `0x${ownerPrivKey}`;
+    const ownerAccount  = privateKeyToAccount(key as `0x${string}`);
+    const abstractClient = await createAbstractClient({
+      signer:    ownerAccount as any,
+      chain:     abstract,
+      transport: http("https://api.mainnet.abs.xyz"),
+    });
+    const signature = await abstractClient.signMessage({ message });
+    return res.json({ signature, agwAddress: abstractClient.account.address });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[sign-message]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
 const PORT = parseInt(process.env.WALLET_HELPER_PORT ?? "3456", 10);
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`[wallet-helper] listening on 127.0.0.1:${PORT}`);

@@ -306,10 +306,27 @@ def build_and_sign(
         f"FirstClaim: {'true' if is_first_claim else 'false'}"
     )
 
-    signed  = account.sign_message(encode_defunct(text=message))
-    sig_hex = signed.signature.hex()
-    if not sig_hex.startswith("0x"):
-        sig_hex = "0x" + sig_hex
+    # Prefer AGW-client signing via wallet-helper (EIP-1271 compliant for smart wallet verification)
+    sig_hex = None
+    pk = os.environ.get("AGW_OWNER_PRIVATE_KEY", "").strip()
+    if pk:
+        try:
+            r = requests.post(
+                "http://127.0.0.1:3456/sign-message",
+                json={"ownerPrivKey": pk, "message": message},
+                timeout=15,
+            )
+            if r.ok:
+                sig_hex = r.json().get("signature")
+                log(f"AGW-client signature obtained via wallet-helper", indent=2)
+        except Exception as _e:
+            log(f"[warn] wallet-helper sign failed ({_e}), falling back to EOA direct sign", indent=2)
+
+    if not sig_hex:
+        signed  = account.sign_message(encode_defunct(text=message))
+        sig_hex = signed.signature.hex()
+        if not sig_hex.startswith("0x"):
+            sig_hex = "0x" + sig_hex
 
     return {
         "wallet":         address.lower(),
