@@ -348,43 +348,16 @@ def find_best_cells(
         if cell and "q" in cell and "r" in cell:
             my_qr.add((cell["q"], cell["r"]))
 
-    # Fallback: scan map for any cell labelled with our faction (case-insensitive)
+    # Fallback: scan territory endpoint for any cells we recognise in the map
+    # (map has no faction/state field — my_territory_ids is the only reliable source)
     if not my_qr:
-        my_qr = {
-            (c["q"], c["r"])
-            for c in map_cells
-            if c.get("faction", "").lower() == my_faction.lower()
-               and c.get("state") in ("held", "fortress")
-        }
+        log("[warn] No territory IDs resolved to map cells — nothing to expand from.", indent=1)
 
     log(f"Territory QR anchors: {len(my_qr)} (from IDs: {len(my_territory_ids)})", indent=1)
 
-    # ── Diagnostic: sample cell structure and neighbor states ──────────────────
-    if map_cells:
-        sample = map_cells[0]
-        log(f"Sample cell fields: {list(sample.keys())}", indent=1)
-        log(f"Sample cell: {sample}", indent=1)
-
-    # Count states across ALL map cells to find the right field value
-    state_dist: dict = {}
-    for c in map_cells:
-        s = c.get("state", "<missing>")
-        state_dist[s] = state_dist.get(s, 0) + 1
-    log(f"Map state distribution: {state_dist}", indent=1)
-
-    # Check what states our neighbors actually have
-    nb_states: dict = {}
-    for (q, r) in list(my_qr)[:20]:
-        for nq, nr in hex_neighbors(q, r):
-            nc = cells_by_qr.get((nq, nr))
-            if nc:
-                s = nc.get("state", "<missing>")
-                nb_states[s] = nb_states.get(s, 0) + 1
-    log(f"Neighbor states (first 20 anchors): {nb_states}", indent=1)
-    # ──────────────────────────────────────────────────────────────────────────
-
     def is_capturable(cell: dict) -> bool:
-        if cell.get("state") != "open":
+        # Map API uses 'claimable' bool — there is no 'state' field
+        if not cell.get("claimable", False):
             return False
         if cell.get("biome") == "null_waste":
             return False
@@ -398,7 +371,7 @@ def find_best_cells(
         starters = [
             c for c in map_cells
             if is_capturable(c)
-            and c.get("home_region", "").lower() == my_faction.lower()
+            and (c.get("home_region") or "").lower() == my_faction.lower()
         ]
         if starters:
             return starters
