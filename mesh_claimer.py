@@ -479,10 +479,11 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
     log(f"Cells held: {len(my_cell_ids)} | First-claim: {is_first}", indent=1)
 
     # ── Step 4: claim loop ─────────────────────────────────────────────────────
-    used_tokens:    set[int] = set()
-    claimed_total:  int      = 0
-    excluded_cells: set[int] = set()
-    consecutive_errors: int  = 0
+    used_tokens:    set[int]  = set()
+    claimed_total:  int       = 0
+    claimed_cells:  list[int] = []
+    excluded_cells: set[int]  = set()
+    consecutive_errors: int   = 0
 
     while remaining > 0:
         avail_tokens = [t for t in token_ids if t not in used_tokens]
@@ -533,6 +534,7 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
                     result = resp.text
                 log(f"[ok] Accepted: {json.dumps(result)}", indent=2)
                 used_tokens.update(batch_tokens)
+                claimed_cells.extend(batch_cells)
                 claimed_total     += len(pairs)
                 remaining         -= len(pairs)
                 is_first           = False
@@ -588,7 +590,9 @@ def run_claim_cycle(account, address: str, dry_run: bool = False):
             break
 
     log(f"Cycle done. Claimed {claimed_total} cell(s) this cycle.")
-    return claimed_total
+    if claimed_cells:
+        log(f"Cell IDs: {claimed_cells}")
+    return claimed_total, claimed_cells
 
 # ── Daily Loop ────────────────────────────────────────────────────────────────
 

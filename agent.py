@@ -2857,7 +2857,10 @@ button { font-family: inherit; cursor: pointer; border: none; }
 }
 .hero-num { font-size: 64px; font-weight: 800; letter-spacing: -4px; line-height: 1; }
 .hero-lbl { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink3); margin-top: 7px; }
+.hero-today { color: var(--gr); font-weight: 600; }
 .hero-rhs { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
+.cells-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.cell-chip { font-family: var(--mono); font-size: 11px; background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.25); color: var(--gr); border-radius: 6px; padding: 3px 9px; }
 
 .pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 13px; border-radius: 20px; font-family: var(--mono); font-size: 11px; font-weight: 500; }
 .pill-active { background: var(--em-s); color: var(--em); border: 1px solid var(--em-b); }
@@ -2949,7 +2952,7 @@ details.dbg pre { padding: 14px 16px; font-family: var(--mono); font-size: 11px;
   <div class="hero">
     <div>
       <div class="hero-num" id="heroNum">{{ total_claimed }}</div>
-      <div class="hero-lbl">Total cells claimed</div>
+      <div class="hero-lbl">Total cells claimed &nbsp;<span id="heroToday" class="hero-today">{{ claims_today }}/10 today</span></div>
     </div>
     <div class="hero-rhs">
       <div class="pill pill-idle" id="statusPill">
@@ -2966,7 +2969,7 @@ details.dbg pre { padding: 14px 16px; font-family: var(--mono); font-size: 11px;
       <div class="stat-v mono" id="sLastRun">{{ last_run or 'Never' }}</div>
     </div>
     <div class="stat">
-      <div class="stat-k">Last Cycle</div>
+      <div class="stat-k">This Cycle</div>
       <div class="stat-v em" id="sLastClaimed">{{ last_claimed }}</div>
       <div class="stat-sub">cells claimed</div>
     </div>
@@ -2991,6 +2994,16 @@ details.dbg pre { padding: 14px 16px; font-family: var(--mono); font-size: 11px;
     <div class="err-v">{{ last_error }}</div>
   </div>
   {% endif %}
+
+  <div class="card" id="cellsCard" style="{{ 'display:none' if not last_cell_ids else '' }}">
+    <div class="card-head">
+      <div class="card-title">Last Claimed Cells</div>
+      <div class="card-badge" id="cellsBadge">{{ last_claimed }} cell{{ 's' if last_claimed != 1 else '' }}</div>
+    </div>
+    <div class="card-body">
+      <div id="cellsList" class="cells-list">{% for cid in last_cell_ids %}<span class="cell-chip">#{{ cid }}</span>{% endfor %}</div>
+    </div>
+  </div>
 
   <div class="card">
     <div class="card-head">
@@ -3086,11 +3099,26 @@ function applyState(d) {
   var lr = document.getElementById('sLastRun');
   var lc = document.getElementById('sLastClaimed');
   var hn = document.getElementById('heroNum');
+  var ht = document.getElementById('heroToday');
   var dp = document.getElementById('dbgPre');
   if (lr) lr.textContent = d.last_run ? rel(d.last_run) : 'Never';
   if (lc && d.last_claimed !== undefined) lc.textContent = d.last_claimed;
   if (hn && d.total_claimed !== undefined) hn.textContent = d.total_claimed;
+  if (ht && d.claims_today !== undefined) ht.textContent = d.claims_today + '/10 today';
   if (dp) dp.textContent = JSON.stringify(d, null, 2);
+  /* update claimed cells card */
+  var cc = document.getElementById('cellsCard');
+  var cl = document.getElementById('cellsList');
+  var cb = document.getElementById('cellsBadge');
+  if (cc && cl && d.last_cell_ids !== undefined) {
+    if (d.last_cell_ids.length) {
+      cc.style.display = '';
+      cb.textContent = d.last_cell_ids.length + ' cell' + (d.last_cell_ids.length !== 1 ? 's' : '');
+      cl.innerHTML = d.last_cell_ids.map(function(id){ return '<span class="cell-chip">#' + id + '</span>'; }).join('');
+    } else {
+      cc.style.display = 'none';
+    }
+  }
 }
 
 /* poll status */
@@ -3164,10 +3192,12 @@ function triggerClaim() {
 </html>"""
 
 _mesh_state = {
-    "running":      False,
-    "last_run":     None,   # ISO UTC string
-    "last_claimed": 0,
-    "last_error":   None,
+    "running":       False,
+    "last_run":      None,   # ISO UTC string
+    "last_claimed":  0,
+    "last_cell_ids": [],
+    "claims_today":  0,
+    "last_error":    None,
     "total_claimed": 0,
 }
 _mesh_lock = threading.Lock()
@@ -3194,19 +3224,27 @@ def _run_mesh_claimer():
         address = _AGW_ADDRESS.strip()
         dry_run = os.environ.get("MESH_DRY_RUN", "false").lower() == "true"
 
-        cycle_count = _mc.run_claim_cycle(account, address, dry_run) or 0
+        result = _mc.run_claim_cycle(account, address, dry_run)
+        if isinstance(result, tuple):
+            cycle_count, cell_ids = result
+        else:
+            cycle_count, cell_ids = (result or 0), []
 
-        # Re-read wallet info for lifetime total display
+        # Re-read wallet info for lifetime + today totals
         try:
             info         = _mc.get_wallet_info(address)
             lifetime     = int(info.get("total_claims", 0))
+            claims_today = int(info.get("claims_today", 0))
         except Exception:
-            lifetime = 0
+            lifetime     = 0
+            claims_today = 0
 
         import datetime as _dt
         with _mesh_lock:
-            _mesh_state["last_run"]     = _dt.datetime.utcnow().isoformat() + "Z"
-            _mesh_state["last_claimed"] = cycle_count
+            _mesh_state["last_run"]      = _dt.datetime.utcnow().isoformat() + "Z"
+            _mesh_state["last_claimed"]  = cycle_count
+            _mesh_state["last_cell_ids"] = cell_ids
+            _mesh_state["claims_today"]  = claims_today
             _mesh_state["total_claimed"] = lifetime
     except Exception as e:
         with _mesh_lock:
@@ -3271,8 +3309,10 @@ def mesh_claimer_dashboard():
         address=address or "",
         wallet_short=wallet_short,
         total_claimed=state.get("total_claimed", 0),
+        claims_today=state.get("claims_today", 0),
         last_run=state.get("last_run"),
         last_claimed=state.get("last_claimed", 0),
+        last_cell_ids=state.get("last_cell_ids", []),
         last_error=state.get("last_error"),
         running=state.get("running", False),
         dry_run=state.get("dry_run", False),
