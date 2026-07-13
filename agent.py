@@ -2640,13 +2640,8 @@ Should I mint a new card right now? Consider balance, supply, and market conditi
         if decision.get("alerts"):
             print(f"Flagged cards: {decision['alerts']}")
 
-        if decision["mint"] and balance >= 0.003:
-            separator("MINTING NEW CARD")
-            result = mint_card()
-            print(result)
-        else:
-            separator("NO MINT THIS SESSION")
-            print("Conditions not met or AI advised against minting.")
+        separator("NO MINT THIS SESSION")
+        print("Minting disabled.")
     except Exception as e:
         print(f"AI decision error: {e}")
 
