@@ -3264,6 +3264,21 @@ try:
 except ImportError:
     pass
 
+def _hydrate_mesh_state():
+    """Seed lifetime total and today's count from Litany API on startup."""
+    try:
+        from portal_upvote.config import AGW_ADDRESS as _AGW_ADDR2
+        import mesh_claimer as _mc2
+        info = _mc2.get_wallet_info(_AGW_ADDR2)
+        with _mesh_lock:
+            _mesh_state["total_claimed"] = int(info.get("total_claims", 0))
+            _mesh_state["claims_today"]  = int(info.get("claims_today", 0))
+        print(f"[mesh] State hydrated: {_mesh_state['total_claimed']} lifetime, {_mesh_state['claims_today']}/10 today")
+    except Exception as _he:
+        print(f"[mesh] State hydration failed: {_he}")
+
+threading.Thread(target=_hydrate_mesh_state, daemon=True).start()
+
 @app.route("/mesh/status")
 def mesh_claimer_status():
     from portal_upvote.config import AGW_ADDRESS as _AGW_ADDRESS
