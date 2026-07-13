@@ -2946,8 +2946,8 @@ details.dbg pre { padding: 14px 16px; font-family: var(--mono); font-size: 11px;
 
   <div class="hero">
     <div>
-      <div class="hero-num" id="heroNum">{{ total_claimed }}</div>
-      <div class="hero-lbl">Total cells claimed</div>
+      <div class="hero-num" id="heroNum">{{ tool_claimed }}</div>
+      <div class="hero-lbl">Cells claimed by tool &nbsp;<span style="color:var(--ink3);font-weight:400">{{ total_claimed }} wallet total</span></div>
     </div>
     <div class="hero-rhs">
       <div class="pill pill-idle" id="statusPill">
@@ -3097,7 +3097,7 @@ function applyState(d) {
   var hn = document.getElementById('heroNum');
   var dp = document.getElementById('dbgPre');
   if (lr) lr.textContent = d.last_run ? rel(d.last_run) : 'Never';
-  if (hn && d.total_claimed !== undefined) hn.textContent = d.total_claimed;
+  if (hn && d.total_claimed !== undefined) hn.textContent = Math.max(0, d.total_claimed - (d.baseline || 0));
   if (ct && d.claims_today !== undefined) ct.innerHTML = d.claims_today + '<span style="font-size:18px;font-weight:400;color:var(--ink3)">/10</span>';
   if (lc && d.last_claimed !== undefined) lc.textContent = d.last_claimed + ' this cycle';
   if (dp) dp.textContent = JSON.stringify(d, null, 2);
@@ -3186,6 +3186,8 @@ function triggerClaim() {
 </body>
 </html>"""
 
+_MESH_BASELINE = int(os.environ.get("MESH_BASELINE", "748"))
+
 _mesh_state = {
     "running":       False,
     "last_run":      None,   # ISO UTC string
@@ -3194,6 +3196,7 @@ _mesh_state = {
     "claims_today":  0,
     "last_error":    None,
     "total_claimed": 0,
+    "baseline":      _MESH_BASELINE,
 }
 _mesh_lock = threading.Lock()
 
@@ -3332,6 +3335,7 @@ def mesh_claimer_dashboard():
         address=address or "",
         wallet_short=wallet_short,
         total_claimed=state.get("total_claimed", 0),
+        tool_claimed=max(0, state.get("total_claimed", 0) - _MESH_BASELINE),
         claims_today=state.get("claims_today", 0),
         last_run=state.get("last_run"),
         last_claimed=state.get("last_claimed", 0),
