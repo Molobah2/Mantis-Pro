@@ -3265,15 +3265,28 @@ except ImportError:
     pass
 
 def _hydrate_mesh_state():
-    """Seed lifetime total and today's count from Litany API on startup."""
+    """Seed lifetime total and today's count from Litany API on startup.
+    If claims_today == 0 and we're past 00:02 UTC, fire a catchup claim
+    (handles the case where a Railway redeploy killed the scheduled run).
+    """
     try:
         from portal_upvote.config import AGW_ADDRESS as _AGW_ADDR2
         import mesh_claimer as _mc2
-        info = _mc2.get_wallet_info(_AGW_ADDR2)
+        import datetime as _dt2
+        info         = _mc2.get_wallet_info(_AGW_ADDR2)
+        claims_today = int(info.get("claims_today", 0))
         with _mesh_lock:
             _mesh_state["total_claimed"] = int(info.get("total_claims", 0))
-            _mesh_state["claims_today"]  = int(info.get("claims_today", 0))
-        print(f"[mesh] State hydrated: {_mesh_state['total_claimed']} lifetime, {_mesh_state['claims_today']}/10 today")
+            _mesh_state["claims_today"]  = claims_today
+        print(f"[mesh] State hydrated: {_mesh_state['total_claimed']} lifetime, {claims_today}/10 today")
+
+        # Fire a catchup if the 00:02 UTC window was missed due to a redeploy
+        now_utc     = _dt2.datetime.utcnow()
+        past_window = now_utc.hour > 0 or now_utc.minute >= 2
+        key_set     = bool(os.environ.get("AGW_OWNER_PRIVATE_KEY", ""))
+        if claims_today == 0 and past_window and key_set:
+            print("[mesh] Today's 00:02 UTC claim missed — firing catchup")
+            threading.Thread(target=_run_mesh_claimer, daemon=True).start()
     except Exception as _he:
         print(f"[mesh] State hydration failed: {_he}")
 
