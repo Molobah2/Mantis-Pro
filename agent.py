@@ -2947,7 +2947,7 @@ details.dbg pre { padding: 14px 16px; font-family: var(--mono); font-size: 11px;
   <div class="hero">
     <div>
       <div class="hero-num" id="heroNum">{{ total_claimed }}</div>
-      <div class="hero-lbl">Total cells claimed &nbsp;<span id="heroToday" class="hero-today">{{ claims_today }}/10 today</span></div>
+      <div class="hero-lbl">Total cells claimed</div>
     </div>
     <div class="hero-rhs">
       <div class="pill pill-idle" id="statusPill">
@@ -2964,9 +2964,9 @@ details.dbg pre { padding: 14px 16px; font-family: var(--mono); font-size: 11px;
       <div class="stat-v mono" id="sLastRun">{{ last_run or 'Never' }}</div>
     </div>
     <div class="stat">
-      <div class="stat-k">This Cycle</div>
-      <div class="stat-v em" id="sLastClaimed">{{ last_claimed }}</div>
-      <div class="stat-sub">cells claimed</div>
+      <div class="stat-k">Claimed Today</div>
+      <div class="stat-v em" id="sClaimsToday">{{ claims_today }}<span style="font-size:18px;font-weight:400;color:var(--ink3)">/10</span></div>
+      <div class="stat-sub" id="sLastClaimed">{{ last_claimed }} this cycle</div>
     </div>
     <div class="stat">
       <div class="stat-k">Schedule</div>
@@ -3092,14 +3092,14 @@ function applyState(d) {
     btn.disabled = false; btn.textContent = 'Claim Now';
   }
   var lr = document.getElementById('sLastRun');
+  var ct = document.getElementById('sClaimsToday');
   var lc = document.getElementById('sLastClaimed');
   var hn = document.getElementById('heroNum');
-  var ht = document.getElementById('heroToday');
   var dp = document.getElementById('dbgPre');
   if (lr) lr.textContent = d.last_run ? rel(d.last_run) : 'Never';
-  if (lc && d.last_claimed !== undefined) lc.textContent = d.last_claimed;
   if (hn && d.total_claimed !== undefined) hn.textContent = d.total_claimed;
-  if (ht && d.claims_today !== undefined) ht.textContent = d.claims_today + '/10 today';
+  if (ct && d.claims_today !== undefined) ct.innerHTML = d.claims_today + '<span style="font-size:18px;font-weight:400;color:var(--ink3)">/10</span>';
+  if (lc && d.last_claimed !== undefined) lc.textContent = d.last_claimed + ' this cycle';
   if (dp) dp.textContent = JSON.stringify(d, null, 2);
   /* update claimed cells card */
   var cc = document.getElementById('cellsCard');
