@@ -86,6 +86,70 @@ def require_admin(f):
         return f(*args, **kwargs)
     return wrapper
 
+# ── Browser admin session (signed cookie) ───────────────────────────────────
+# Separate from require_admin's X-Admin-Key header check: a plain page GET or a
+# same-origin fetch() from the dashboard can't set custom headers, but browsers
+# auto-attach cookies. Visiting a protected page with ?key=<ADMIN_SECRET> once
+# issues this cookie; it then authenticates that page load and any same-origin
+# fetch() calls (e.g. the "Claim Now" button) for its lifetime.
+
+ADMIN_COOKIE_NAME = "mp_admin"
+ADMIN_COOKIE_MAX_AGE = 7 * 86400  # 7 days
+
+def _sign_admin_cookie(secret: str, ts: str) -> str:
+    return hmac.new(secret.encode(), ts.encode(), hashlib.sha256).hexdigest()
+
+def issue_admin_cookie(response, secret: str):
+    """Attach a fresh signed admin-session cookie to a Flask response."""
+    ts = str(int(time.time()))
+    mac = _sign_admin_cookie(secret, ts)
+    response.set_cookie(
+        ADMIN_COOKIE_NAME,
+        f"{ts}.{mac}",
+        max_age=ADMIN_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=True,
+        samesite="Lax",
+    )
+    return response
+
+def verify_admin_cookie(cookie_value: str) -> bool:
+    """Check a signed admin-session cookie. Open if ADMIN_SECRET is unset (matches check_admin_key)."""
+    secret = _admin_secret()
+    if not secret:
+        return True
+    if not cookie_value or "." not in cookie_value:
+        return False
+    ts_str, mac = cookie_value.split(".", 1)
+    try:
+        ts = int(ts_str)
+    except ValueError:
+        return False
+    if time.time() - ts > ADMIN_COOKIE_MAX_AGE:
+        return False
+    expected = _sign_admin_cookie(secret, ts_str)
+    return hmac.compare_digest(mac, expected)
+
+# ── URL safety ───────────────────────────────────────────────────────────────
+
+def require_loopback_url(url: str) -> Optional[str]:
+    """Returns an error string if url isn't loopback, else None. Guards
+    private-key POSTs from being redirected off-box by a misconfigured env var."""
+    from urllib.parse import urlparse
+    host = urlparse(url).hostname
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        return f"Refusing to send private key to non-loopback host: {host!r}"
+    return None
+
+def check_admin_login(request) -> bool:
+    """
+    True if the request already carries a valid admin cookie OR the correct
+    ?key= query param (the login path — caller should then call issue_admin_cookie).
+    """
+    if verify_admin_cookie(request.cookies.get(ADMIN_COOKIE_NAME, "")):
+        return True
+    return check_admin_key(request.args.get("key", ""))
+
 # ── Input validation ──────────────────────────────────────────────────────────
 
 def validate_session_input(body: dict) -> Optional[str]:

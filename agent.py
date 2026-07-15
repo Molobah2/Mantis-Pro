@@ -5,7 +5,6 @@ import subprocess
 import threading
 import time
 import sqlite3
-import io
 import re
 import base64
 from web3 import Web3
@@ -265,9 +264,11 @@ def id_get(wallet):
     try:
         with _id_lock:
             conn = _id_db()
-            cur = conn.execute("SELECT wallet,name,twitter,avatar,source,updated FROM identities WHERE wallet=?", (wallet,))
-            r = cur.fetchone()
-            conn.close()
+            try:
+                cur = conn.execute("SELECT wallet,name,twitter,avatar,source,updated FROM identities WHERE wallet=?", (wallet,))
+                r = cur.fetchone()
+            finally:
+                conn.close()
         if r:
             row = {"wallet": r[0], "name": r[1], "twitter": r[2], "avatar": r[3], "source": r[4], "updated": r[5]}
             _id_mem[wallet] = row
@@ -284,10 +285,12 @@ def id_put(wallet, name, twitter, avatar, source):
     try:
         with _id_lock:
             conn = _id_db()
-            conn.execute("INSERT OR REPLACE INTO identities VALUES (?,?,?,?,?,?)",
-                         (wallet, name, twitter, avatar, source, row["updated"]))
-            conn.commit()
-            conn.close()
+            try:
+                conn.execute("INSERT OR REPLACE INTO identities VALUES (?,?,?,?,?,?)",
+                             (wallet, name, twitter, avatar, source, row["updated"]))
+                conn.commit()
+            finally:
+                conn.close()
     except Exception as e:
         print(f"id_put {wallet}: {e}")
     return row
@@ -705,10 +708,12 @@ def _prof_db_get(wallet):
     try:
         with _id_lock:
             conn = _id_db()
-            row  = conn.execute(
-                "SELECT data, updated FROM profiles WHERE wallet=?", (wallet,)
-            ).fetchone()
-            conn.close()
+            try:
+                row = conn.execute(
+                    "SELECT data, updated FROM profiles WHERE wallet=?", (wallet,)
+                ).fetchone()
+            finally:
+                conn.close()
         if row:
             return json.loads(row[0]), time.time() - row[1]
     except Exception:
@@ -720,12 +725,14 @@ def _prof_db_put(wallet, data):
         payload = json.dumps(data, default=str)
         with _id_lock:
             conn = _id_db()
-            conn.execute(
-                "INSERT OR REPLACE INTO profiles(wallet,data,updated) VALUES(?,?,?)",
-                (wallet, payload, time.time())
-            )
-            conn.commit()
-            conn.close()
+            try:
+                conn.execute(
+                    "INSERT OR REPLACE INTO profiles(wallet,data,updated) VALUES(?,?,?)",
+                    (wallet, payload, time.time())
+                )
+                conn.commit()
+            finally:
+                conn.close()
     except Exception as e:
         print(f"prof db put {wallet}: {e}")
 
@@ -734,11 +741,13 @@ def _warmup_profile_cache():
     try:
         with _id_lock:
             conn = _id_db()
-            rows = conn.execute(
-                "SELECT wallet,data,updated FROM profiles WHERE updated>? ORDER BY updated DESC LIMIT 200",
-                (time.time() - _OP_PROF_STALE,)
-            ).fetchall()
-            conn.close()
+            try:
+                rows = conn.execute(
+                    "SELECT wallet,data,updated FROM profiles WHERE updated>? ORDER BY updated DESC LIMIT 200",
+                    (time.time() - _OP_PROF_STALE,)
+                ).fetchall()
+            finally:
+                conn.close()
         for wallet, data_json, ts in rows:
             try:
                 _op_prof_cache[wallet] = {"ts": ts, "data": json.loads(data_json)}
@@ -818,10 +827,10 @@ def _server_owned_cards(addr):
             all_recv, all_sent = [], []
             for f in r_futs:
                 try: all_recv.extend(f.result())
-                except: pass
+                except Exception: pass
             for f in s_futs:
                 try: all_sent.extend(f.result())
-                except: pass
+                except Exception: pass
             return _net_to_set(all_recv, all_sent)
         except Exception as e2:
             print(f"rpc nft chunked {addr}: {e2}")
@@ -844,7 +853,7 @@ def _server_owned_cards(addr):
                 for n in (j.get("nfts") or []):
                     if (n.get("contract") or "").lower() == CARDS_ADDR.lower():
                         try: os_ids.add(int(n.get("identifier") or n.get("token_id") or 0))
-                        except: pass
+                        except Exception: pass
                 nxt = j.get("next"); pg += 1
                 if not nxt:
                     break
@@ -980,12 +989,12 @@ def _referral_data(addr):
         try:
             return requests.get(f"{BASE}/api/market/referrals/codes?wallet={addr}",
                                 timeout=10).json()
-        except: return {}
+        except Exception: return {}
     def _rel():
         try:
             return requests.get(f"{BASE}/api/market/referrals/relationship?wallet={addr}",
                                 timeout=10).json()
-        except: return {}
+        except Exception: return {}
     from concurrent.futures import ThreadPoolExecutor as _TPE
     with _TPE(max_workers=2) as ex:
         f_c = ex.submit(_codes); f_r = ex.submit(_rel)
@@ -1185,7 +1194,7 @@ def recent_transfers():
                     try:
                         result = f.result()
                         if result: all_logs.extend(result)
-                    except: pass
+                    except Exception: pass
             if len(all_logs) >= NEED:
                 break
 
@@ -1199,7 +1208,7 @@ def recent_transfers():
             try:
                 b = _rpc_rt("eth_getBlockByNumber", [hex(bn), False])
                 return bn, int(b["timestamp"],16) if b and b.get("timestamp") else None
-            except: return bn, None
+            except Exception: return bn, None
         with ThreadPoolExecutor(max_workers=min(12, len(unique_blks))) as ex:
             for bn, ts in ex.map(_get_ts, unique_blks):
                 if ts: blk_ts[bn] = ts
@@ -1303,7 +1312,7 @@ def holders_overview():
                 try:
                     r = f.result()
                     if r: all_logs.extend(r)
-                except: pass
+                except Exception: pass
 
         all_logs.sort(key=lambda l: (int(l["blockNumber"],16), int(l.get("logIndex","0x0"),16)))
 
@@ -1424,7 +1433,7 @@ def holders_overview():
         id_map = {}
         try:
             id_map = {a: id_get(a) or {} for a in top_50_addrs}
-        except: pass
+        except Exception: pass
 
         top_holders = []
         for rank, (addr, cnt) in enumerate(sorted_by_count[:100], 1):
@@ -1533,7 +1542,7 @@ def referral_leaderboard():
                         "referral_points": obj.get("referral_points", 0),
                         "tier":            obj.get("tier", ""),
                     })
-            except: pass
+            except Exception: pass
         leaders.sort(key=lambda x: x.get("rank", 9999))
         if leaders:
             _ref_lb_cache["ts"]   = now
@@ -1597,7 +1606,7 @@ def contract_activity():
                 futs = [ex.submit(_get_logs, caddr, topics, fb, tb) for fb, tb in ranges]
                 for f in futs:
                     try: all_logs.extend(f.result())
-                    except: pass
+                    except Exception: pass
             return all_logs
 
     def _blk_timestamp(blkn):
@@ -1605,7 +1614,7 @@ def contract_activity():
             b = _rpc_ca("eth_getBlockByNumber", [hex(blkn), False])
             if b and b.get("timestamp"):
                 return blkn, int(b["timestamp"], 16)
-        except:
+        except Exception:
             pass
         return blkn, None
 
@@ -1776,15 +1785,32 @@ app.after_request(_sec.security_headers)
 @app.route("/portal-upvote")
 def portal_upvote_page():
     import json as _json
+    from flask import Response, redirect
+
+    admin_secret = os.getenv("ADMIN_SECRET", "").strip()
+    has_cookie = _sec.verify_admin_cookie(request.cookies.get(_sec.ADMIN_COOKIE_NAME, ""))
+
+    if not has_cookie:
+        # First-time login: correct ?key= issues the session cookie, then
+        # redirects to the clean URL so the secret doesn't linger in history/logs.
+        if admin_secret and _sec.check_admin_key(request.args.get("key", "")):
+            resp = redirect("/portal-upvote")
+            _sec.issue_admin_cookie(resp, admin_secret)
+            return resp
+        if admin_secret:
+            return Response(
+                "Unauthorized. Visit /portal-upvote?key=<ADMIN_SECRET> once to log in.",
+                401,
+            )
+        # ADMIN_SECRET unset — backward-compat open, matches require_admin's policy.
+
     path = os.path.join(os.path.dirname(__file__), "portal_upvote.html")
     with open(path, "r", encoding="utf-8") as f:
         html = f.read()
     # Inject ADMIN_SECRET as a JS global so the owner page can sign its requests.
-    # Never exposed to the public — this page is the admin management UI.
-    admin_key = os.getenv("ADMIN_SECRET", "")
-    injection = f'<script>window.__ADMIN_KEY__={_json.dumps(admin_key)};</script>'
+    # Gated above by admin cookie — never reachable without it.
+    injection = f'<script>window.__ADMIN_KEY__={_json.dumps(admin_secret)};</script>'
     html = html.replace("</head>", injection + "\n</head>", 1)
-    from flask import Response
     return Response(html, mimetype="text/html")
 
 @app.route("/portal-upvote/store-session", methods=["POST"])
@@ -1908,8 +1934,12 @@ def portal_upvote_direct():
     if app_id is None:
         return jsonify({"error": "appId required"}), 400
     try:
+        helper_url = os.getenv('NODE_HELPER_URL', 'http://127.0.0.1:3456')
+        _loopback_err = _sec.require_loopback_url(helper_url)
+        if _loopback_err:
+            return jsonify({"error": _loopback_err}), 500
         resp = _r.post(
-            f"{os.getenv('NODE_HELPER_URL', 'http://127.0.0.1:3456')}/direct-upvote",
+            f"{helper_url}/direct-upvote",
             json={"ownerPrivKey": owner_key, "appId": int(app_id), "network": NETWORK},
             timeout=60,
         )
@@ -2251,9 +2281,11 @@ def run_identity_refresh():
             cutoff = time.time() - _ID_TTL
             with _id_lock:
                 conn = _id_db()
-                stale = [r[0] for r in conn.execute(
-                    "SELECT wallet FROM identities WHERE updated < ? LIMIT 200", (cutoff,)).fetchall()]
-                conn.close()
+                try:
+                    stale = [r[0] for r in conn.execute(
+                        "SELECT wallet FROM identities WHERE updated < ? LIMIT 200", (cutoff,)).fetchall()]
+                finally:
+                    conn.close()
             for w in stale:
                 resolve_identity(w, network=True)
             # warm avatar bytes so rows never wait on a live unavatar request
@@ -2459,7 +2491,8 @@ def read_skill(filename):
     try:
         with open(filename, "r", encoding="utf-8") as f:
             return f.read()
-    except:
+    except Exception as e:
+        print(f"read_skill {filename}: {e}")
         return f"[{filename} not found]"
 
 litany_skill   = read_skill("LITANY_SKILL.txt")
@@ -2521,7 +2554,8 @@ def score_card(token_id):
 def get_floor_price():
     stats = requests.get(
         f"https://api.opensea.io/api/v2/collections/{COLLECTION_SLUG}/stats",
-        headers=headers
+        headers=headers,
+        timeout=10,
     ).json()
     return stats.get("total", {}).get("floor_price", 0)
 
@@ -2529,7 +2563,8 @@ def scan_listings():
     response = requests.get(
         f"https://api.opensea.io/api/v2/listings/collection/{COLLECTION_SLUG}/best",
         headers=headers,
-        params={"limit": 50}
+        params={"limit": 50},
+        timeout=10,
     ).json()
     results = []
     if "listings" in response:
@@ -2546,29 +2581,9 @@ def scan_listings():
                     "trait":       card["trait"],
                     "apex_count":  card["apex_count"]
                 })
-            except:
+            except Exception:
                 pass
     return results
-
-def mint_card():
-    payload = {
-        "address": LITANY_CONTRACT,
-        "abi": [{
-            "inputs": [{"internalType": "uint256", "name": "quantity", "type": "uint256"}],
-            "name": "mint", "outputs": [],
-            "stateMutability": "payable", "type": "function"
-        }],
-        "functionName": "mint",
-        "args": [1],
-        "value": MINT_PRICE_WEI
-    }
-    with open("mint_payload.json", "w") as f:
-        json.dump(payload, f)
-    result = subprocess.run(
-        "agw-cli contract write --json @mint_payload.json --execute",
-        capture_output=True, text=True, shell=True
-    )
-    return result.stdout + result.stderr
 
 def ask_claude(situation):
     response = client.messages.create(
@@ -3233,9 +3248,15 @@ def _run_mesh_claimer():
             info         = _mc.get_wallet_info(address)
             lifetime     = int(info.get("total_claims", 0))
             claims_today = int(info.get("claims_today", 0))
-        except Exception:
-            lifetime     = 0
-            claims_today = 0
+        except Exception as e:
+            # Wallet-info refresh failed after a claim cycle that may have
+            # succeeded — keep last-known-good counters instead of zeroing
+            # them, so a transient API hiccup can't reset claims_today and
+            # trigger an unwanted catchup claim on next hydration.
+            print(f"[mesh] wallet info refresh failed, keeping prior state: {e}")
+            with _mesh_lock:
+                lifetime     = _mesh_state["total_claimed"]
+                claims_today = _mesh_state["claims_today"]
 
         import datetime as _dt
         with _mesh_lock:
@@ -3304,6 +3325,9 @@ def mesh_claimer_status():
 
 @app.route("/mesh/run", methods=["POST"])
 def mesh_claimer_run():
+    admin_secret = os.getenv("ADMIN_SECRET", "").strip()
+    if admin_secret and not _sec.verify_admin_cookie(request.cookies.get(_sec.ADMIN_COOKIE_NAME, "")):
+        return jsonify({"error": "Unauthorized. Log in via /portal-upvote?key=<ADMIN_SECRET> first."}), 401
     if not os.environ.get("AGW_OWNER_PRIVATE_KEY", ""):
         return jsonify({"error": "AGW_OWNER_PRIVATE_KEY not set in Railway env vars"}), 400
     with _mesh_lock:
