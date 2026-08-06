@@ -978,15 +978,15 @@ footer {
 
   <!-- ── Section 1: Hero ── -->
   <section id="hero" aria-label="Hero">
-    <h1 class="hero-headline">Vote every day,<br>automatically.</h1>
+    <h1 class="hero-headline" id="hero-headline">Vote every day,<br>automatically.</h1>
 
-    <p class="hero-subtitle">Connect your Abstract Global Wallet once. Mantis Pro casts one Portal upvote every day at 09:00&nbsp;UTC, completely hands-free.</p>
+    <p class="hero-subtitle" id="hero-subtitle">Connect your Abstract Global Wallet once. Mantis Pro casts one Portal upvote every day at 09:00&nbsp;UTC, completely hands-free.</p>
 
     <!-- Register Card -->
     <div class="register-card-wrap">
       <div class="register-card" role="region" aria-label="Wallet registration">
-        <div class="register-card-title">Connect your wallet</div>
-        <div class="register-card-desc">One connection. Daily votes, automated forever.</div>
+        <div class="register-card-title" id="register-card-title">Connect your wallet</div>
+        <div class="register-card-desc" id="register-card-desc">One connection. Daily votes, automated forever.</div>
 
         <!-- AGW bundle mounts here -->
         <div id="agw-root" aria-live="polite">
@@ -1013,8 +1013,8 @@ footer {
       <div class="success-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
-      <div class="success-title">You're registered.</div>
-      <div class="success-desc">Your first automated vote executes at 09:00&nbsp;UTC tomorrow.</div>
+      <div class="success-title" id="success-title">You're registered.</div>
+      <div class="success-desc" id="success-desc">Your first automated vote executes at 09:00&nbsp;UTC tomorrow.</div>
       <div class="success-addr-pill" id="success-addr" title="Your Abstract Global Wallet address"></div>
       <a id="success-link" href="/portal-upvote/my-votes" class="success-link">
         View my votes
@@ -1313,6 +1313,23 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   });
 })();
+
+/* ── Regenerate mode ──
+   Reached via the "Regenerate Session" button on /portal-upvote/my-votes.
+   Same connect + register-session flow underneath (it's an upsert keyed by
+   wallet address) — this only swaps the copy so it reads as a renewal
+   instead of first-time onboarding marketing. */
+var IS_REGENERATE = new URLSearchParams(location.search).get('regenerate') === '1';
+
+if (IS_REGENERATE) {
+  document.getElementById('hero-headline').innerHTML = 'Refresh your<br>session key.';
+  document.getElementById('hero-subtitle').textContent =
+    'Reconnect your Abstract Global Wallet to get a fresh session — no need to wait for the old one to expire.';
+  document.getElementById('register-card-title').textContent = 'Reconnect your wallet';
+  document.getElementById('register-card-desc').textContent = 'Replaces your current session with a new 30-day one.';
+  document.getElementById('success-title').textContent = 'Session refreshed.';
+  document.getElementById('success-desc').textContent = 'Your automated votes continue uninterrupted for another 30 days.';
+}
 
 /* ── Helpers ── */
 function escHtml(s) {

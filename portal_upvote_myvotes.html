@@ -375,6 +375,32 @@
     background: currentColor;
   }
 
+  .regen-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    color: var(--t2);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    white-space: nowrap;
+  }
+
+  .regen-btn:hover {
+    border-color: var(--border-hi);
+    color: var(--t1);
+    background: var(--surface-hi);
+  }
+
+  .regen-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+
   .hero-meta {
     display: flex;
     gap: 24px;
@@ -1168,6 +1194,14 @@
               <div class="status-dot"></div>
               <span id="status-text">&#8212;</span>
             </div>
+            <a href="/portal-upvote/register?regenerate=1" class="regen-btn hidden" id="regen-btn"
+               title="Get a fresh session key any time — no need to wait for expiry">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              Regenerate Session
+            </a>
           </div>
           <div class="hero-meta" id="hero-meta"></div>
           <div id="not-reg-msg" class="not-reg-banner hidden">
@@ -1503,6 +1537,7 @@
       pillTxt.textContent = 'Not Registered';
       notReg.classList.remove('hidden');
       document.getElementById('hero-meta').innerHTML = '';
+      document.getElementById('regen-btn').classList.add('hidden');
       return;
     }
 
@@ -1510,6 +1545,10 @@
     var active = exp > now;
     pill.className = 'status-pill ' + (active ? 'active' : 'expired');
     pillTxt.textContent = active ? 'Active' : 'Session Expired';
+
+    var regenBtn = document.getElementById('regen-btn');
+    regenBtn.href = '/portal-upvote/register?regenerate=1&address=' + encodeURIComponent(addr);
+    regenBtn.classList.remove('hidden');
 
     var dl = daysLeft(exp);
     var expDateStr = exp ? new Date(exp * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—';
