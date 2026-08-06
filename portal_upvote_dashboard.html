@@ -1274,7 +1274,7 @@ function render(d, lb) {
       row.className = 'lb-row';
       row.innerHTML =
         '<span class="lb-rank' + (top ? ' top' : '') + '">#' + (i + 1) + '</span>' +
-        '<span class="lb-addr' + (top ? ' top' : '') + '">' + esc(shortAddr(entry.address)) + '</span>' +
+        '<span class="lb-addr' + (top ? ' top' : '') + '">' + esc(entry.voter_name || shortAddr(entry.address)) + '</span>' +
         '<span class="lb-count' + (top ? ' top' : '') + '">' + (entry.vote_count || 0).toLocaleString() + '</span>';
       lbEl.appendChild(row);
     });
@@ -1295,7 +1295,7 @@ function render(d, lb) {
       row.innerHTML =
         '<span class="fe-when">'   + timeAgo(v.upvoted_at) + '</span>' +
         '<span class="fe-app">'    + esc(v.app_name || 'Unknown') + '</span>' +
-        '<span class="fe-wallet">' + shortAddr(v.user_address) + '</span>' +
+        '<span class="fe-wallet">' + esc(v.voter_name || shortAddr(v.user_address)) + '</span>' +
         '<span class="fe-badge' + (ok ? '' : ' fail') + '">' +
           '<span class="fe-badge-dot"></span>' +
           (ok ? 'Success' : 'Failed') +

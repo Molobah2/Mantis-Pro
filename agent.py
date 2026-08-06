@@ -421,6 +421,40 @@ def resolve_identity(wallet, network=True):
         return id_put(wallet, lit.get("name"), None, lit.get("avatar"), "litany")
     return id_put(wallet, None, None, None, None)  # cache the negative result too
 
+_id_resolving = set()
+_id_resolving_lock = threading.Lock()
+
+def _display_name(addr):
+    """Cache-only display name (AGW portal / ANS / Litany, in that priority — see
+    resolve_identity). Never blocks on network: an uncached address kicks off a
+    background resolve (deduped) and returns None for this request; the name is
+    picked up on a later poll once resolved."""
+    if not addr:
+        return None
+    addr = addr.lower()
+    row = id_get(addr)
+    if row is not None:
+        return row.get("name")
+    with _id_resolving_lock:
+        if addr in _id_resolving:
+            return None
+        _id_resolving.add(addr)
+    def _bg():
+        try:
+            resolve_identity(addr, network=True)
+        finally:
+            with _id_resolving_lock:
+                _id_resolving.discard(addr)
+    threading.Thread(target=_bg, daemon=True).start()
+    return None
+
+def _attach_voter_names(entries, addr_key):
+    """Attach a resolved 'voter_name' field to each dict in entries, deduping
+    lookups across repeated addresses in the same list."""
+    unique_addrs = {e[addr_key].lower() for e in entries if e.get(addr_key)}
+    names = {a: _display_name(a) for a in unique_addrs}
+    return [dict(e, voter_name=names.get(e[addr_key].lower()) if e.get(addr_key) else None) for e in entries]
+
 # ── LITANY MESH API (public, no auth — verified endpoints) ───────
 _MESH_BASE = "https://litany.gg/api/mesh"
 _mesh_lb = {"data": None, "ts": 0.0}
@@ -2211,7 +2245,7 @@ def portal_upvote_register_session():
 @app.route("/api/upvote-leaderboard")
 def upvote_leaderboard():
     try:
-        board = _upvote_store.get_leaderboard(20)
+        board = _attach_voter_names(_upvote_store.get_leaderboard(20), "address")
         total_users = _upvote_store.get_user_count()
         return jsonify({"ok": True, "leaderboard": board, "total_users": total_users})
     except Exception as e:
@@ -2249,10 +2283,10 @@ def upvote_dashboard_api():
         next_app = sorted(catalog, key=lambda a: _last.get(a["id"], 0.0))[0]
 
     # Logs per period
-    today_votes = _upvote_store.get_upvote_log_since(midnight_utc)
-    week_votes  = _upvote_store.get_upvote_log_since(now - 7  * 86400)
-    month_votes = _upvote_store.get_upvote_log_since(now - 30 * 86400)
-    all_votes   = _upvote_store.get_upvote_log(200)
+    today_votes = _attach_voter_names(_upvote_store.get_upvote_log_since(midnight_utc), "user_address")
+    week_votes  = _attach_voter_names(_upvote_store.get_upvote_log_since(now - 7  * 86400), "user_address")
+    month_votes = _attach_voter_names(_upvote_store.get_upvote_log_since(now - 30 * 86400), "user_address")
+    all_votes   = _attach_voter_names(_upvote_store.get_upvote_log(200), "user_address")
 
     resp = jsonify({
         "authorized":   authorized,
