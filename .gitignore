@@ -7,6 +7,8 @@ __pycache__/
 portal_upvote.db
 identities.db
 opensea_automint.db
+scripts/opensea_spike_findings.json
+scripts/cheapshot_graphql.json
 roots.sst
 spark-install.ps1
 test.json
