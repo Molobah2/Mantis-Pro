@@ -1,0 +1,280 @@
+import time
+
+import pytest
+
+from opensea_automint import store
+
+
+@pytest.fixture(autouse=True)
+def isolated_db(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    """Point the store module at a fresh temp DB file for every test so tests
+    never touch a real/shared DB file."""
+    db_path = tmp_path / "opensea_automint_test.db"
+    monkeypatch.setattr(store, "_DB", str(db_path))
+    yield db_path
+
+
+# ── Table creation ───────────────────────────────────────────────────
+
+def test_conn_table_creation_is_idempotent() -> None:
+    c1 = store._conn()
+    c1.close()
+    # Calling _conn() again must not raise (CREATE TABLE IF NOT EXISTS + guarded ALTER TABLE)
+    c2 = store._conn()
+    c2.close()
+
+
+# ── Smart accounts ───────────────────────────────────────────────────
+
+def test_smart_account_upsert_and_get_round_trips() -> None:
+    store.upsert_smart_account("0xOwner1", "0xSmartAcct1")
+
+    result = store.get_smart_account("0xOwner1")
+
+    assert result is not None
+    assert result["owner_address"] == "0xowner1"
+    assert result["smart_account_address"] == "0xSmartAcct1"
+
+
+def test_smart_account_upsert_updates_on_conflict() -> None:
+    store.upsert_smart_account("0xOwner1", "0xSmartAcctOld")
+    store.upsert_smart_account("0xOwner1", "0xSmartAcctNew")
+
+    result = store.get_smart_account("0xOwner1")
+
+    assert result["smart_account_address"] == "0xSmartAcctNew"
+
+
+def test_get_smart_account_returns_none_when_not_found() -> None:
+    assert store.get_smart_account("0xNoSuchOwner") is None
+
+
+# ── Session grants ───────────────────────────────────────────────────
+
+def test_session_grant_insert_and_get_active_round_trips() -> None:
+    grant_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xOwner2",
+        smart_account_address="0xSmartAcct2",
+        encrypted_session_key="encrypted-blob",
+        permission_config='{"scope":"mint"}',
+        allowed_targets='["0xCollection"]',
+        value_cap_wei="1000000000000000000",
+        expires_at=time.time() + 3600,
+    ))
+
+    active = store.get_active_session_grant("0xOwner2")
+
+    assert isinstance(grant_id, int)
+    assert active is not None
+    assert active["id"] == grant_id
+    assert active["encrypted_session_key"] == "encrypted-blob"
+    assert active["revoked"] == 0
+
+
+def test_get_active_session_grant_excludes_revoked_grants() -> None:
+    grant_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xOwner3",
+        smart_account_address="0xSmartAcct3",
+        encrypted_session_key="key",
+        permission_config="{}",
+        allowed_targets="[]",
+        value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+    store.revoke_session_grant(grant_id)
+
+    active = store.get_active_session_grant("0xOwner3")
+
+    assert active is None
+
+
+def test_get_active_session_grant_excludes_expired_grants() -> None:
+    store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xOwner4",
+        smart_account_address="0xSmartAcct4",
+        encrypted_session_key="key",
+        permission_config="{}",
+        allowed_targets="[]",
+        value_cap_wei="0",
+        expires_at=time.time() - 3600,  # already expired
+    ))
+
+    active = store.get_active_session_grant("0xOwner4")
+
+    assert active is None
+
+
+# ── Tracked drops ─────────────────────────────────────────────────────
+
+def test_tracked_drop_upsert_by_slug_updates_existing_row_not_duplicate() -> None:
+    id1 = store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="cool-drop",
+        name="Cool Drop v1",
+        contract_address="0xContract1",
+        mint_page_url="https://opensea.io/collection/cool-drop",
+        source="api",
+        stage_data="{}",
+    ))
+    id2 = store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="cool-drop",
+        name="Cool Drop v2",
+        contract_address="0xContract1Updated",
+        mint_page_url="https://opensea.io/collection/cool-drop",
+        source="playwright",
+        stage_data='{"stage":"live"}',
+    ))
+
+    drops = store.get_tracked_drops()
+
+    assert id1 == id2
+    assert len(drops) == 1
+    assert drops[0]["name"] == "Cool Drop v2"
+    assert drops[0]["contract_address"] == "0xContract1Updated"
+    assert drops[0]["source"] == "playwright"
+
+
+def test_get_tracked_drop_by_id_round_trips() -> None:
+    drop_id = store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="another-drop",
+        name="Another Drop",
+        contract_address="0xContract2",
+        mint_page_url="https://opensea.io/collection/another-drop",
+        source="manual",
+        stage_data="{}",
+    ))
+
+    result = store.get_tracked_drop(drop_id)
+
+    assert result is not None
+    assert result["collection_slug"] == "another-drop"
+
+
+def test_get_tracked_drop_returns_none_when_not_found() -> None:
+    assert store.get_tracked_drop(999999) is None
+
+
+# ── Arm requests ──────────────────────────────────────────────────────
+
+def test_arm_request_status_transitions_and_get() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner5",
+        drop_id=1,
+        session_grant_id=1,
+        quantity=2,
+        max_price_wei="500000000000000000",
+        go_live_at=time.time() + 60,
+    ))
+
+    initial = store.get_arm_request(arm_id)
+    assert initial["status"] == "pending_schedule"
+
+    store.update_arm_request_status(arm_id, "armed")
+    updated = store.get_arm_request(arm_id)
+    assert updated["status"] == "armed"
+
+
+def test_get_pending_arm_requests_filters_by_status() -> None:
+    pending_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner6", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    scheduled_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner6", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.update_arm_request_status(scheduled_id, "scheduled")
+
+    fired_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner6", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.update_arm_request_status(fired_id, "fired")
+
+    pending = store.get_pending_arm_requests()
+    pending_ids = {r["id"] for r in pending}
+
+    assert pending_id in pending_ids
+    assert scheduled_id in pending_ids
+    assert fired_id not in pending_ids
+
+
+def test_get_arm_request_returns_none_when_not_found() -> None:
+    assert store.get_arm_request(999999) is None
+
+
+# ── Mint attempts ─────────────────────────────────────────────────────
+
+def test_record_and_get_mint_attempts() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner7", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+
+    store.record_mint_attempt(store.MintAttemptInput(
+        arm_request_id=arm_id, tx_hash="0xTx1", user_op_hash="0xOp1",
+        status="succeeded", error_message=None, gas_used="21000", block_number=12345,
+    ))
+    store.record_mint_attempt(store.MintAttemptInput(
+        arm_request_id=arm_id, tx_hash=None, user_op_hash="0xOp2",
+        status="failed", error_message="insufficient funds", gas_used=None, block_number=None,
+    ))
+
+    attempts = store.get_mint_attempts(arm_id)
+
+    assert len(attempts) == 2
+    assert attempts[0]["status"] == "succeeded"
+    assert attempts[1]["status"] == "failed"
+    assert attempts[1]["error_message"] == "insufficient funds"
+
+
+def test_get_mint_attempts_returns_empty_list_when_none_recorded() -> None:
+    assert store.get_mint_attempts(999999) == []
+
+
+# ── Eligibility cache ─────────────────────────────────────────────────
+
+def test_eligibility_upsert_and_get_round_trips() -> None:
+    store.upsert_eligibility(store.EligibilityInput(
+        drop_id=1, owner_address="0xOwner8", is_eligible=True,
+        merkle_proof='["0xproof1","0xproof2"]', phase_id="public", source="api",
+    ))
+
+    result = store.get_eligibility(1, "0xOwner8")
+
+    assert result is not None
+    assert result["is_eligible"] is True
+    assert result["merkle_proof"] == '["0xproof1","0xproof2"]'
+    assert result["phase_id"] == "public"
+
+
+def test_eligibility_upsert_with_unknown_status_stores_none() -> None:
+    store.upsert_eligibility(store.EligibilityInput(
+        drop_id=2, owner_address="0xOwner9", is_eligible=None,
+        merkle_proof=None, phase_id=None, source="api",
+    ))
+
+    result = store.get_eligibility(2, "0xOwner9")
+
+    assert result is not None
+    assert result["is_eligible"] is None
+
+
+def test_eligibility_upsert_updates_existing_row() -> None:
+    store.upsert_eligibility(store.EligibilityInput(
+        drop_id=3, owner_address="0xOwner10", is_eligible=None,
+        merkle_proof=None, phase_id=None, source="api",
+    ))
+    store.upsert_eligibility(store.EligibilityInput(
+        drop_id=3, owner_address="0xOwner10", is_eligible=False,
+        merkle_proof=None, phase_id="whitelist", source="playwright",
+    ))
+
+    result = store.get_eligibility(3, "0xOwner10")
+
+    assert result["is_eligible"] is False
+    assert result["phase_id"] == "whitelist"
+    assert result["source"] == "playwright"
+
+
+def test_get_eligibility_returns_none_when_not_found() -> None:
+    assert store.get_eligibility(999999, "0xNoSuchOwner") is None

@@ -6,6 +6,7 @@ __pycache__/
 .upvote_session
 portal_upvote.db
 identities.db
+opensea_automint.db
 roots.sst
 spark-install.ps1
 test.json

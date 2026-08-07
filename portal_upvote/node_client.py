@@ -1,14 +1,20 @@
 import base64
+import binascii
 import json
+import logging
 import os
+import time
+
 import requests as _req
+
 from . import config as _cfg
+from wallet_crypto import decrypt_secret
+
+logger = logging.getLogger(__name__)
 
 
-def _load_session():
+def _load_session() -> tuple[str, str, str]:
     """Read and decrypt the session key from .upvote_session file (owner / single-user path)."""
-    from Crypto.Cipher import AES
-
     enc_key_hex = os.getenv("SESSION_KEY_ENCRYPTION_KEY", "")
     if len(enc_key_hex) != 64:
         raise RuntimeError(
@@ -17,44 +23,29 @@ def _load_session():
         )
 
     if not os.path.exists(_cfg.SESSION_FILE):
-        raise RuntimeError(
-            f"No session file found. Authorize first at /portal-upvote"
-        )
+        raise RuntimeError("No session file found. Authorize first at /portal-upvote")
 
     with open(_cfg.SESSION_FILE) as f:
         data = json.load(f)
 
-    raw            = base64.b64decode(data["encrypted_key"])
-    nonce, tag, ct = raw[:16], raw[16:32], raw[32:]
-    cipher         = AES.new(bytes.fromhex(enc_key_hex), AES.MODE_EAX, nonce=nonce)
-    session_priv   = cipher.decrypt_and_verify(ct, tag).decode()
+    session_priv = decrypt_secret(data["encrypted_key"], key_hex=enc_key_hex)
 
     return session_priv, data.get("session_config", "{}"), data.get("agw_address", _cfg.AGW_ADDRESS)
 
 
-def _decrypt_user_session(user):
+def _decrypt_user_session(user: dict) -> tuple[str, str, str]:
     """Decrypt a user row's encrypted_key from the users DB table."""
-    from Crypto.Cipher import AES
-
     enc_key_hex = os.getenv("SESSION_KEY_ENCRYPTION_KEY", "")
     if len(enc_key_hex) != 64:
         raise RuntimeError("SESSION_KEY_ENCRYPTION_KEY not set or invalid")
 
-    raw            = base64.b64decode(user["encrypted_key"])
-    nonce, tag, ct = raw[:16], raw[16:32], raw[32:]
-    cipher         = AES.new(bytes.fromhex(enc_key_hex), AES.MODE_EAX, nonce=nonce)
-    session_priv   = cipher.decrypt_and_verify(ct, tag).decode()
+    session_priv = decrypt_secret(user["encrypted_key"], key_hex=enc_key_hex)
 
     return session_priv, user.get("session_config", "{}"), user["address"]
 
 
-def call_upvote(app_id):
-    """
-    Decrypt session key (owner/file path), forward upvote request to Node helper.
-    Returns {"txHash": "0x..."} or raises RuntimeError.
-    """
-    session_priv, session_config, agw_address = _load_session()
-
+def _post_upvote(session_priv: str, session_config: str, agw_address: str, app_id: int | str) -> dict:
+    """Shared POST to the Node wallet-helper /upvote route. Raises RuntimeError on failure."""
     payload = {
         "sessionPrivKey": session_priv,
         "agwAddress":     agw_address,
@@ -74,50 +65,40 @@ def call_upvote(app_id):
     return result
 
 
-def call_upvote_for_user(user, app_id):
+def call_upvote(app_id: int | str) -> dict:
+    """
+    Decrypt session key (owner/file path), forward upvote request to Node helper.
+    Returns {"txHash": "0x..."} or raises RuntimeError.
+    """
+    session_priv, session_config, agw_address = _load_session()
+    return _post_upvote(session_priv, session_config, agw_address, app_id)
+
+
+def call_upvote_for_user(user: dict, app_id: int | str) -> dict:
     """
     Decrypt session key from DB user row and forward upvote request to Node helper.
     user: dict with keys address, encrypted_key, session_config.
     Returns {"txHash": "0x..."} or raises RuntimeError.
     """
     session_priv, session_config, agw_address = _decrypt_user_session(user)
-
-    payload = {
-        "sessionPrivKey": session_priv,
-        "agwAddress":     agw_address,
-        "sessionConfig":  session_config,
-        "appId":          int(app_id),
-        "network":        _cfg.NETWORK,
-    }
-
-    try:
-        r = _req.post(f"{_cfg.NODE_HELPER_URL}/upvote", json=payload, timeout=30)
-    except _req.exceptions.ConnectionError:
-        raise RuntimeError("Node wallet-helper is not running on port 3456")
-
-    result = r.json()
-    if r.status_code != 200 or result.get("error"):
-        raise RuntimeError(result.get("error", f"HTTP {r.status_code}"))
-    return result
+    return _post_upvote(session_priv, session_config, agw_address, app_id)
 
 
-def node_health():
+def node_health() -> bool:
     try:
         r = _req.get(f"{_cfg.NODE_HELPER_URL}/health", timeout=5)
         return r.status_code == 200
-    except Exception:
+    except _req.exceptions.RequestException:
         return False
 
 
-def restore_from_env():
+def restore_from_env() -> bool:
     """
     Restore session file from UPVOTE_SESSION_B64 env var on startup.
     The env var holds the raw session JSON as base64 — set it in Railway after
     authorizing via the browser so it survives container restarts.
     Returns True if session file is now present and not expired, False otherwise.
     """
-    import time
-
     # Already have a valid session file — nothing to do.
     if os.path.exists(_cfg.SESSION_FILE):
         try:
@@ -125,23 +106,30 @@ def restore_from_env():
                 sess = json.load(f)
             if sess.get("expires_at", 0) > time.time():
                 return True
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("[upvote] existing session file unreadable: %s", e)
 
     b64 = os.getenv("UPVOTE_SESSION_B64", "").strip()
     if not b64:
         return False
 
     try:
-        raw  = base64.b64decode(b64)
+        raw = base64.b64decode(b64)
         data = json.loads(raw)
-        if data.get("expires_at", 0) <= time.time():
-            print("[upvote] UPVOTE_SESSION_B64 is expired — re-authorize at /portal-upvote")
-            return False
+    except (ValueError, json.JSONDecodeError, binascii.Error) as e:
+        logger.warning("[upvote] UPVOTE_SESSION_B64 could not be decoded: %s", e)
+        return False
+
+    if data.get("expires_at", 0) <= time.time():
+        logger.warning("[upvote] UPVOTE_SESSION_B64 is expired — re-authorize at /portal-upvote")
+        return False
+
+    try:
         with open(_cfg.SESSION_FILE, "w") as f:
             json.dump(data, f)
-        print(f"[upvote] session restored from env var, expires={data.get('expires_at')}")
-        return True
-    except Exception as e:
-        print(f"[upvote] restore_from_env error: {e}")
+    except OSError as e:
+        logger.warning("[upvote] could not write session file: %s", e)
         return False
+
+    logger.info("[upvote] session restored from env var, expires=%s", data.get("expires_at"))
+    return True
