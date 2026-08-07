@@ -21,12 +21,21 @@ opensea_automint_bp = Blueprint("opensea_automint", __name__)
 _DASHBOARD_HTML_FILENAME = "opensea_automint_dashboard.html"
 
 
+def _displayable_drops() -> list[dict]:
+    """Tracked drops shaped for the frontend, excluding ones that aren't
+    currently or soon minting (already-minted / secondary-market-only
+    collections) — the dashboard only shows actionable drops."""
+    rows = store.get_tracked_drops()
+    shaped = [drops.to_display_dict(row) for row in rows]
+    return [d for d in shaped if d["status"] in drops.DISPLAYABLE_STATUSES]
+
+
 @opensea_automint_bp.route("/api/opensea/drops")
 def api_drops() -> Response:
-    """Public read-only listing of tracked drops, each shaped by
-    drops.to_display_dict (flattened status/status_detail + is_publicly_mintable)."""
-    rows = store.get_tracked_drops()
-    return jsonify({"drops": [drops.to_display_dict(row) for row in rows]})
+    """Public read-only listing of tracked drops currently or soon minting,
+    each shaped by drops.to_display_dict (flattened status/status_detail +
+    is_publicly_mintable)."""
+    return jsonify({"drops": _displayable_drops()})
 
 
 @opensea_automint_bp.route("/api/opensea/drops/refresh", methods=["POST"])
@@ -44,8 +53,7 @@ def api_refresh_drops() -> Response:
         return jsonify({"error": "ADMIN_SECRET not configured — refresh disabled"}), 503
 
     drops.get_drops(force_refresh=True)
-    rows = store.get_tracked_drops()
-    shaped = [drops.to_display_dict(row) for row in rows]
+    shaped = _displayable_drops()
     return jsonify({"drops": shaped, "count": len(shaped)})
 
 

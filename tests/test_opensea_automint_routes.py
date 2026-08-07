@@ -53,8 +53,23 @@ def _not_minting_row() -> dict:
     }
 
 
+def _upcoming_row() -> dict:
+    return {
+        "id": 5,
+        "collection_slug": "divergents",
+        "name": "DIVERGENTS",
+        "contract_address": "",
+        "chain": "ethereum",
+        "mint_page_url": "https://opensea.io/collection/divergents",
+        "discovered_at": 1000.0,
+        "source": "playwright",
+        "stage_data": '{"status": "upcoming", "status_detail": "August 14 at 1:00 PM GMT"}',
+        "updated_at": 1000.0,
+    }
+
+
 def test_api_drops_returns_expected_shape(client, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(store, "get_tracked_drops", lambda: [_minting_now_row(), _not_minting_row()])
+    monkeypatch.setattr(store, "get_tracked_drops", lambda: [_minting_now_row(), _upcoming_row()])
 
     resp = client.get("/api/opensea/drops")
 
@@ -67,15 +82,15 @@ def test_api_drops_returns_expected_shape(client, monkeypatch: pytest.MonkeyPatc
     assert minting["status"] == "minting_now"
     assert minting["is_publicly_mintable"] is True
 
-    not_minting = next(d for d in body["drops"] if d["collection_slug"] == "god-pull")
-    assert not_minting["status"] == "not_minting"
-    assert not_minting["is_publicly_mintable"] is False
+    upcoming = next(d for d in body["drops"] if d["collection_slug"] == "divergents")
+    assert upcoming["status"] == "upcoming"
+    assert upcoming["is_publicly_mintable"] is False
 
 
-def test_api_drops_handles_malformed_stage_data_without_crashing(
+def test_api_drops_excludes_not_minting_and_unknown_status(
     client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    bad_row = {
+    unknown_status_row = {
         "id": 3,
         "collection_slug": "broken",
         "name": "Broken Drop",
@@ -87,15 +102,17 @@ def test_api_drops_handles_malformed_stage_data_without_crashing(
         "stage_data": "not valid json{{{",
         "updated_at": 1000.0,
     }
-    monkeypatch.setattr(store, "get_tracked_drops", lambda: [bad_row])
+    monkeypatch.setattr(
+        store, "get_tracked_drops",
+        lambda: [_minting_now_row(), _not_minting_row(), unknown_status_row],
+    )
 
     resp = client.get("/api/opensea/drops")
 
     assert resp.status_code == 200
     body = resp.get_json()
-    assert len(body["drops"]) == 1
-    assert body["drops"][0]["status"] == ""
-    assert body["drops"][0]["is_publicly_mintable"] is False
+    slugs = {d["collection_slug"] for d in body["drops"]}
+    assert slugs == {"cheap-shot"}
 
 
 def test_api_drops_handles_missing_stage_data_field(client, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -117,9 +134,7 @@ def test_api_drops_handles_missing_stage_data_field(client, monkeypatch: pytest.
 
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["drops"][0]["status"] == ""
-    assert body["drops"][0]["status_detail"] is None
-    assert body["drops"][0]["is_publicly_mintable"] is False
+    assert body["drops"] == []
 
 
 def test_api_drops_returns_empty_list_when_no_drops_tracked(

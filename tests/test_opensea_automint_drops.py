@@ -178,6 +178,58 @@ class _FakePage:
         return self._locator
 
 
+# ── _scroll_to_load_more ────────────────────────────────────────────────
+
+class _FakeScrollPage:
+    """Simulates document.body.scrollHeight growing for a few iterations
+    then plateauing, like a real lazy-loading page running out of content."""
+
+    def __init__(self, heights: list[int]) -> None:
+        self._heights = heights
+        self._call_index = 0
+        self.scroll_calls = 0
+        self.wait_calls = 0
+
+    def evaluate(self, script: str) -> int:
+        if "scrollTo" in script:
+            self.scroll_calls += 1
+            return None
+        height = self._heights[min(self._call_index, len(self._heights) - 1)]
+        self._call_index += 1
+        return height
+
+    def wait_for_timeout(self, _ms: int) -> None:
+        self.wait_calls += 1
+
+
+def test_scroll_to_load_more_stops_early_once_height_plateaus() -> None:
+    # Height grows for 3 reads then stops changing — should stop scrolling
+    # well before the _SCROLL_ITERATIONS cap once nothing new loads.
+    page = _FakeScrollPage(heights=[1000, 2000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000])
+
+    drops._scroll_to_load_more(page)
+
+    assert page.scroll_calls < drops._SCROLL_ITERATIONS
+    assert page.scroll_calls == 3  # grew at reads 2,3 then plateaued at read 4 -> stop
+
+
+def test_scroll_to_load_more_caps_at_max_iterations_if_always_growing() -> None:
+    ever_growing = [1000 * (i + 2) for i in range(drops._SCROLL_ITERATIONS + 5)]
+    page = _FakeScrollPage(heights=ever_growing)
+
+    drops._scroll_to_load_more(page)
+
+    assert page.scroll_calls == drops._SCROLL_ITERATIONS
+
+
+def test_scroll_to_load_more_swallows_errors_without_raising() -> None:
+    class _BrokenPage:
+        def evaluate(self, _script: str) -> int:
+            raise RuntimeError("navigation happened mid-scroll")
+
+    drops._scroll_to_load_more(_BrokenPage())  # must not raise
+
+
 def test_scrape_all_cards_dedupes_repeated_hrefs() -> None:
     page = _FakePage([
         _FakeCard("/collection/cheap-shot", CHEAP_SHOT),

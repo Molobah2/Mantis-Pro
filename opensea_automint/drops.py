@@ -38,6 +38,10 @@ _POST_LOAD_SETTLE_MS = 3_000
 _CARD_TEXT_TIMEOUT_MS = 2_000
 _MAX_DROP_CARDS = 200          # defensive cap — opensea.io/drops is external content we don't control
 _MAX_DETAIL_LENGTH = 200       # truncate before this reaches an unbounded TEXT column
+_SCROLL_ITERATIONS = 10        # opensea.io/drops lazy-loads more cards as you scroll
+_SCROLL_WAIT_MS = 1200         # let each batch of lazy-loaded cards render before scrolling again
+
+DISPLAYABLE_STATUSES = frozenset({"minting_now", "upcoming"})
 
 # e.g. "August 14 at 1:00 PM GMT"
 _FUTURE_DATE_RE = re.compile(r"[A-Z][a-z]+ \d{1,2} at \d{1,2}:\d{2} [AP]M [A-Z]{2,4}")
@@ -110,6 +114,23 @@ def parse_drop_card(href: str, visible_text: str) -> dict:
     }
 
 
+def _scroll_to_load_more(page) -> None:
+    """opensea.io/drops lazy-loads additional cards as the page scrolls.
+    Scrolls to the bottom a bounded number of times, stopping early once the
+    page stops growing (nothing new left to load)."""
+    try:
+        last_height = page.evaluate("document.body.scrollHeight")
+        for _ in range(_SCROLL_ITERATIONS):
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            page.wait_for_timeout(_SCROLL_WAIT_MS)
+            new_height = page.evaluate("document.body.scrollHeight")
+            if new_height <= last_height:
+                break
+            last_height = new_height
+    except Exception as e:
+        logger.debug("[drops] scroll-to-load-more failed, continuing with what's loaded: %s", e)
+
+
 def _scrape_card(cards, index: int) -> tuple[str, str] | None:
     """Read one card's (href, visible_text). Returns None on any Playwright
     failure (timeout, detached element) — logged, not silently discarded."""
@@ -171,6 +192,7 @@ def fetch_drops_live() -> list[dict]:
                 page = browser.new_page(user_agent=_USER_AGENT)
                 page.goto(_DROPS_URL, wait_until="networkidle", timeout=_PAGE_LOAD_TIMEOUT_MS)
                 page.wait_for_timeout(_POST_LOAD_SETTLE_MS)
+                _scroll_to_load_more(page)
                 drops = _scrape_all_cards(page)
             finally:
                 browser.close()
