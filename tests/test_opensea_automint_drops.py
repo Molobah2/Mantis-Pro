@@ -319,3 +319,62 @@ def test_get_drops_falls_back_to_store_when_live_fetch_is_empty(
 
     assert len(result) == 1
     assert result[0]["collection_slug"] == "stored-drop"
+
+
+# ── to_display_dict ─────────────────────────────────────────────────────
+
+def test_to_display_dict_flattens_minting_now_status() -> None:
+    row = {
+        "id": 1,
+        "collection_slug": "cheap-shot",
+        "stage_data": '{"status": "minting_now", "status_detail": null}',
+    }
+
+    result = drops.to_display_dict(row)
+
+    assert result["status"] == "minting_now"
+    assert result["status_detail"] is None
+    assert result["is_publicly_mintable"] is True
+    assert result["collection_slug"] == "cheap-shot"
+
+
+def test_to_display_dict_flattens_upcoming_status_with_detail() -> None:
+    row = {
+        "id": 2,
+        "stage_data": '{"status": "upcoming", "status_detail": "MINT STARTS IN"}',
+    }
+
+    result = drops.to_display_dict(row)
+
+    assert result["status"] == "upcoming"
+    assert result["status_detail"] == "MINT STARTS IN"
+    assert result["is_publicly_mintable"] is False
+
+
+def test_to_display_dict_handles_missing_stage_data() -> None:
+    row = {"id": 3, "collection_slug": "no-stage-data"}
+
+    result = drops.to_display_dict(row)
+
+    assert result["status"] == ""
+    assert result["status_detail"] is None
+    assert result["is_publicly_mintable"] is False
+
+
+def test_to_display_dict_handles_malformed_stage_data_without_crashing() -> None:
+    row = {"id": 4, "stage_data": "not valid json{{{"}
+
+    result = drops.to_display_dict(row)
+
+    assert result["status"] == ""
+    assert result["status_detail"] is None
+    assert result["is_publicly_mintable"] is False
+
+
+def test_to_display_dict_does_not_mutate_input_row() -> None:
+    row = {"id": 5, "stage_data": '{"status": "minting_now", "status_detail": null}'}
+    original = dict(row)
+
+    drops.to_display_dict(row)
+
+    assert row == original

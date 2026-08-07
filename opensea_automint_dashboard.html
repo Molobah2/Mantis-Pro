@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenSea Auto-Mint — Drops</title>
+<link rel="icon" type="image/png" href="/static/mantis-favicon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0d0e12;
+    --surface: rgba(255,255,255,0.058);
+    --surface-hi: rgba(255,255,255,0.095);
+    --border: rgba(200,208,235,0.11);
+    --border-hi: rgba(200,208,235,0.24);
+    --t0: #e8eaf2;
+    --t1: rgba(232,234,242,0.72);
+    --t2: rgba(232,234,242,0.44);
+    --t3: rgba(232,234,242,0.22);
+    --chrome: rgba(200,210,238,0.9);
+    --r: 20px;
+    --r-sm: 12px;
+    --err: rgba(240,80,80,0.88);
+    --accent: rgba(120,210,170,0.9);
+    --upcoming: rgba(230,190,90,0.9);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--t0);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 0 24px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: rgba(8,9,14,0.82);
+    backdrop-filter: blur(28px) saturate(1.8);
+    -webkit-backdrop-filter: blur(28px) saturate(1.8);
+    border-bottom: 1px solid rgba(200,208,235,0.1);
+  }
+
+  .logo-box {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: var(--surface-hi);
+    border: 1px solid var(--border-hi);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--chrome);
+    letter-spacing: -0.5px;
+    flex-shrink: 0;
+  }
+
+  .logo-name {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--t1);
+    letter-spacing: -0.2px;
+    flex-shrink: 0;
+  }
+
+  #refresh-btn {
+    margin-left: auto;
+    padding: 7px 16px;
+    background: var(--surface-hi);
+    border: 1px solid var(--border-hi);
+    border-radius: 100px;
+    color: var(--t1);
+    font-size: 12.5px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s;
+  }
+  #refresh-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(200,208,235,0.28); }
+  #refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+  /* ── MAIN ── */
+  main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  .hero-eyebrow {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--t3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .hero-title {
+    font-size: clamp(36px, 5vw, 56px);
+    font-weight: 200;
+    color: var(--t0);
+    letter-spacing: -2px;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .hero-subtitle {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--t2);
+    letter-spacing: 0.01em;
+    margin-bottom: 40px;
+  }
+
+  /* ── DROP GRID ── */
+  .drop-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .drop-card {
+    background: linear-gradient(145deg, rgba(255,255,255,0.078) 0%, rgba(255,255,255,0.028) 55%, rgba(255,255,255,0.055) 100%);
+    border: 1px solid rgba(200,208,235,0.12);
+    border-radius: var(--r-sm);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.11), 0 4px 20px rgba(0,0,0,0.35);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .drop-card:hover {
+    border-color: rgba(200,208,235,0.22);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 34px rgba(0,0,0,0.45);
+  }
+
+  .drop-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--t0);
+    letter-spacing: -0.2px;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    align-self: flex-start;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    background: rgba(255,255,255,0.055);
+    border: 1px solid rgba(200,208,235,0.14);
+    color: var(--t2);
+  }
+  .status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+  .status-badge.minting_now {
+    background: rgba(120,210,170,0.1);
+    border-color: rgba(120,210,170,0.28);
+    color: var(--accent);
+  }
+  .status-badge.upcoming {
+    background: rgba(230,190,90,0.1);
+    border-color: rgba(230,190,90,0.28);
+    color: var(--upcoming);
+  }
+  .status-badge.not_minting {
+    color: var(--t3);
+  }
+
+  .status-detail {
+    font-size: 11.5px;
+    color: var(--t3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .drop-link {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--t1);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+  }
+  .drop-link:hover { color: var(--t0); }
+
+  /* ── EMPTY / LOADING / ERROR ── */
+  .state-msg {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--t2);
+    font-size: 13.5px;
+  }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 600px) {
+    header { padding: 0 16px; gap: 12px; }
+    main { padding: 32px 16px 60px; }
+    .drop-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-box">M</div>
+  <span class="logo-name">Mantis Pro</span>
+  <button id="refresh-btn" class="hidden" type="button">Refresh</button>
+</header>
+
+<main>
+  <div class="hero-eyebrow">OpenSea Auto-Mint</div>
+  <div class="hero-title">Tracked Drops</div>
+  <div class="hero-subtitle">Public mint status &middot; opensea.io/drops</div>
+
+  <div id="loading-msg" class="state-msg">Loading drops…</div>
+  <div id="error-msg" class="state-msg hidden"></div>
+  <div id="empty-msg" class="state-msg hidden">No drops found yet.</div>
+  <div id="drop-grid" class="drop-grid"></div>
+</main>
+
+<script>
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Defense in depth: even though the server only ever sends opensea.io URLs
+// today, don't let an href attribute trust that unconditionally — refuse
+// anything that isn't actually an https://opensea.io link (blocks
+// javascript: URIs etc. if that server-side guarantee ever changes).
+function escUrl(url) {
+  if (typeof url === 'string' && /^https:\/\/opensea\.io\//.test(url)) {
+    return esc(url);
+  }
+  return '#';
+}
+
+function statusLabel(status, detail) {
+  if (status === 'minting_now') return 'Minting now';
+  if (status === 'upcoming') return 'Starts' + (detail ? ' ' + detail : '');
+  return 'Not currently minting';
+}
+
+function renderDrops(drops) {
+  var grid = document.getElementById('drop-grid');
+  var emptyMsg = document.getElementById('empty-msg');
+  grid.innerHTML = '';
+
+  if (!drops || drops.length === 0) {
+    emptyMsg.classList.remove('hidden');
+    return;
+  }
+  emptyMsg.classList.add('hidden');
+
+  drops.forEach(function (drop) {
+    var status = drop.status || 'not_minting';
+    var card = document.createElement('div');
+    card.className = 'drop-card';
+    card.innerHTML =
+      '<div class="drop-name">' + esc(drop.name || drop.collection_slug || 'Unknown') + '</div>' +
+      '<span class="status-badge ' + esc(status) + '"><span class="dot"></span>' +
+        esc(statusLabel(status, drop.status_detail)) +
+      '</span>' +
+      (drop.status_detail && status !== 'upcoming' ? '<div class="status-detail">' + esc(drop.status_detail) + '</div>' : '') +
+      '<a class="drop-link" href="' + escUrl(drop.mint_page_url) + '" target="_blank" rel="noopener">View on OpenSea &rarr;</a>';
+    grid.appendChild(card);
+  });
+}
+
+async function loadDrops() {
+  var loadingMsg = document.getElementById('loading-msg');
+  var errorMsg = document.getElementById('error-msg');
+  loadingMsg.classList.remove('hidden');
+  errorMsg.classList.add('hidden');
+  try {
+    var res = await fetch('/api/opensea/drops');
+    if (!res.ok) throw new Error('API ' + res.status);
+    var data = await res.json();
+    loadingMsg.classList.add('hidden');
+    renderDrops(data.drops || []);
+  } catch (err) {
+    loadingMsg.classList.add('hidden');
+    errorMsg.textContent = 'Could not load drops: ' + err.message;
+    errorMsg.classList.remove('hidden');
+  }
+}
+
+async function refreshDrops() {
+  var btn = document.getElementById('refresh-btn');
+  var adminKey = window.__ADMIN_KEY__ || '';
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  try {
+    var res = await fetch('/api/opensea/drops/refresh', {
+      method: 'POST',
+      headers: { 'X-Admin-Key': adminKey }
+    });
+    if (!res.ok) throw new Error('API ' + res.status);
+    var data = await res.json();
+    renderDrops(data.drops || []);
+  } catch (err) {
+    var errorMsg = document.getElementById('error-msg');
+    errorMsg.textContent = 'Refresh failed: ' + err.message;
+    errorMsg.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  if (window.__IS_ADMIN__) {
+    var btn = document.getElementById('refresh-btn');
+    btn.classList.remove('hidden');
+    btn.addEventListener('click', refreshDrops);
+  }
+  loadDrops();
+});
+</script>
+</body>
+</html>

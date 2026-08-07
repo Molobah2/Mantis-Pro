@@ -1816,6 +1816,14 @@ app.config.setdefault("MAX_CONTENT_LENGTH", 256 * 1024)
 # Security headers on every response
 app.after_request(_sec.security_headers)
 
+# ── OPENSEA AUTO-MINT ────────────────────────────────────────────────
+# Self-contained in opensea_automint/ as a Flask Blueprint (deliberate
+# one-off exception to this file's flat @app.route convention — keeps this
+# feature's routes out of agent.py's diff surface). See
+# opensea_automint/routes.py for the actual route definitions.
+from opensea_automint.routes import opensea_automint_bp
+app.register_blueprint(opensea_automint_bp)
+
 @app.route("/portal-upvote")
 def portal_upvote_page():
     import json as _json

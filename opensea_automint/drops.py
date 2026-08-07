@@ -182,6 +182,37 @@ def fetch_drops_live() -> list[dict]:
     return drops
 
 
+def to_display_dict(drop_row: dict) -> dict:
+    """
+    Flatten a store.get_tracked_drops()-shaped row (which packs status into
+    a "stage_data" JSON string) into an explicit, minimal frontend-facing
+    dict — deliberately NOT a **drop_row spread, so internal-only columns
+    (id, source, raw stage_data, contract_address, chain) never reach an
+    unauthenticated API caller. Defensive against missing/malformed
+    stage_data (falls back to an empty status rather than raising).
+    """
+    status = ""
+    status_detail = None
+    stage_data = drop_row.get("stage_data")
+    if stage_data:
+        try:
+            parsed = json.loads(stage_data)
+        except (TypeError, ValueError):
+            parsed = None
+        if isinstance(parsed, dict):
+            status = parsed.get("status") or ""
+            status_detail = parsed.get("status_detail")
+
+    return {
+        "collection_slug": drop_row.get("collection_slug"),
+        "name": drop_row.get("name"),
+        "mint_page_url": drop_row.get("mint_page_url"),
+        "status": status,
+        "status_detail": status_detail,
+        "is_publicly_mintable": status == "minting_now",
+    }
+
+
 def get_drops(force_refresh: bool = False) -> list[dict]:
     """
     Cached wrapper: returns cached drops if fresh, else calls fetch_drops_live(),
