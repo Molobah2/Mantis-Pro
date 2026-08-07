@@ -1824,6 +1824,31 @@ app.after_request(_sec.security_headers)
 from opensea_automint.routes import opensea_automint_bp
 app.register_blueprint(opensea_automint_bp)
 
+# Background refresh: the public GET /api/opensea/drops route deliberately
+# never triggers a live scrape itself (that's admin-gated on the /refresh
+# route, to stop anonymous visitors from spamming real browser automation
+# against opensea.io). Something still has to populate the DB periodically —
+# this interval job is that "something". Immediate one-off thread on top so
+# the dashboard isn't empty for the first 15 minutes after a deploy.
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler as _BS3
+    from opensea_automint import drops as _opensea_drops
+
+    def _run_opensea_refresh():
+        try:
+            _opensea_drops.get_drops(force_refresh=True)
+        except Exception as e:
+            print(f"[opensea-automint] background refresh failed: {e}")
+
+    _opensea_scheduler = _BS3(timezone="UTC")
+    _opensea_scheduler.add_job(_run_opensea_refresh, "interval", minutes=15,
+                                id="opensea_automint_refresh", replace_existing=True)
+    _opensea_scheduler.start()
+    threading.Thread(target=_run_opensea_refresh, daemon=True).start()
+    print("[opensea-automint] APScheduler started — drop refresh every 15 min")
+except ImportError:
+    print("[opensea-automint] APScheduler not installed — drops will only refresh via admin endpoint")
+
 @app.route("/portal-upvote")
 def portal_upvote_page():
     import json as _json
