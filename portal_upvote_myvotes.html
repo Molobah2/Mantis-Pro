@@ -7,21 +7,21 @@
 <link rel="icon" type="image/png" href="/static/mantis-favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #060907;
-    --surface: rgba(76,255,145,0.058);
-    --surface-hi: rgba(76,255,145,0.095);
-    --border: rgba(76,255,145,0.11);
-    --border-hi: rgba(76,255,145,0.24);
-    --t0: #eafff2;
-    --t1: rgba(220,255,232,0.72);
-    --t2: rgba(220,255,232,0.44);
-    --t3: rgba(220,255,232,0.22);
-    --chrome: rgba(76,255,145,0.9);
+    --bg: #0d0e12;
+    --surface: rgba(255,255,255,0.058);
+    --surface-hi: rgba(255,255,255,0.095);
+    --border: rgba(200,208,235,0.11);
+    --border-hi: rgba(200,208,235,0.24);
+    --t0: #e8eaf2;
+    --t1: rgba(232,234,242,0.72);
+    --t2: rgba(232,234,242,0.44);
+    --t3: rgba(232,234,242,0.22);
+    --chrome: rgba(200,210,238,0.9);
     --r: 20px;
     --r-sm: 12px;
     --err: rgba(240,80,80,0.88);
@@ -31,7 +31,7 @@
   html { scroll-behavior: smooth; }
 
   body {
-    background: #060907;
+    background: #0d0e12;
     color: var(--t0);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-weight: 400;
@@ -46,7 +46,7 @@
     content: '';
     position: fixed;
     inset: 0;
-    background: radial-gradient(circle 520px at var(--mx) var(--my), rgba(76,255,145,0.065) 0%, transparent 100%);
+    background: radial-gradient(circle 520px at var(--mx) var(--my), rgba(188,200,238,0.065) 0%, transparent 100%);
     pointer-events: none;
     z-index: 0;
     will-change: background;
@@ -71,7 +71,7 @@
   .orb-1 {
     width: 860px;
     height: 860px;
-    background: radial-gradient(circle, rgba(76,255,145,0.85) 0%, rgba(60,200,120,0.4) 40%, transparent 70%);
+    background: radial-gradient(circle, rgba(200,210,240,0.85) 0%, rgba(160,178,225,0.4) 40%, transparent 70%);
     top: -200px;
     left: -150px;
     animation: orbFloat1 65s ease-in-out infinite alternate;
@@ -80,7 +80,7 @@
   .orb-2 {
     width: 740px;
     height: 740px;
-    background: radial-gradient(circle, rgba(90,235,150,0.7) 0%, rgba(55,190,115,0.3) 40%, transparent 70%);
+    background: radial-gradient(circle, rgba(185,195,232,0.7) 0%, rgba(145,162,215,0.3) 40%, transparent 70%);
     bottom: -100px;
     right: -100px;
     animation: orbFloat2 55s ease-in-out infinite alternate;
@@ -89,7 +89,7 @@
   .orb-3 {
     width: 560px;
     height: 560px;
-    background: radial-gradient(circle, rgba(100,255,165,0.65) 0%, rgba(65,205,125,0.25) 45%, transparent 70%);
+    background: radial-gradient(circle, rgba(210,215,240,0.65) 0%, rgba(170,182,225,0.25) 45%, transparent 70%);
     top: 40%;
     left: 30%;
     opacity: 0.09;
@@ -116,25 +116,6 @@
     background: radial-gradient(ellipse at 50% 35%, transparent 20%, rgba(5,6,10,0.6) 100%);
   }
 
-  /* ─── Pixel Particle Field ─── */
-  #pixel-field { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
-  .pixel-dot {
-    position: absolute;
-    background: var(--chrome);
-    box-shadow: 0 0 6px 1px rgba(76,255,145,0.65);
-    animation: pixelFloat 7s ease-in-out infinite;
-  }
-  @keyframes pixelFloat {
-    0%, 100% { transform: translateY(0); opacity: 0.15; }
-    50%      { transform: translateY(-16px); opacity: 0.6; }
-  }
-
-  /* ─── Glow Utilities ─── */
-  .glow-text {
-    text-shadow: 0 0 10px rgba(76,255,145,0.65), 0 0 28px rgba(76,255,145,0.35), 0 0 56px rgba(76,255,145,0.15);
-  }
-  .font-pixel { font-family: 'Press Start 2P', 'Inter', monospace; }
-
   /* ── Layout ── */
   #page-root {
     position: relative;
@@ -160,7 +141,7 @@
     background: rgba(8,9,14,0.82);
     backdrop-filter: blur(28px) saturate(1.8);
     -webkit-backdrop-filter: blur(28px) saturate(1.8);
-    border-bottom: 1px solid rgba(76,255,145,0.1);
+    border-bottom: 1px solid rgba(200,208,235,0.1);
   }
 
   .nav-inner {
@@ -177,7 +158,7 @@
     width: 34px;
     height: 34px;
     border-radius: 10px;
-    background: linear-gradient(135deg, rgba(90,255,155,0.15) 0%, rgba(90,255,155,0.06) 100%);
+    background: linear-gradient(135deg, rgba(215,215,228,0.15) 0%, rgba(215,215,228,0.06) 100%);
     border: 1px solid var(--border-hi);
     display: flex;
     align-items: center;
@@ -222,34 +203,34 @@
 
   .nav-link.active {
     color: var(--t0);
-    background: rgba(76,255,145,0.1);
+    background: rgba(255,255,255,0.1);
   }
 
   .nav-spacer { flex: 1; }
 
   /* ── Glass Card ── */
   .card {
-    background: linear-gradient(145deg, rgba(76,255,145,0.078) 0%, rgba(76,255,145,0.028) 55%, rgba(76,255,145,0.055) 100%);
-    border: 1px solid rgba(76,255,145,0.12);
+    background: linear-gradient(145deg, rgba(255,255,255,0.078) 0%, rgba(255,255,255,0.028) 55%, rgba(255,255,255,0.055) 100%);
+    border: 1px solid rgba(200,208,235,0.12);
     border-radius: var(--r);
     position: relative;
     overflow: hidden;
     backdrop-filter: blur(6px) saturate(1.2);
     -webkit-backdrop-filter: blur(6px) saturate(1.2);
-    box-shadow: inset 0 1px 0 rgba(76,255,145,0.13), inset 0 -1px 0 rgba(0,0,0,0.2), 0 8px 40px rgba(0,0,0,0.45);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), inset 0 -1px 0 rgba(0,0,0,0.2), 0 8px 40px rgba(0,0,0,0.45);
     transition: border-color 0.25s, box-shadow 0.25s;
   }
   .card::before {
     content: '';
     position: absolute;
     top: 0; left: -100%; width: 55%; height: 100%;
-    background: linear-gradient(105deg, transparent 0%, rgba(76,255,145,0.065) 50%, transparent 100%);
+    background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.065) 50%, transparent 100%);
     pointer-events: none;
     transition: left 0s;
   }
   .card:hover {
-    border-color: rgba(76,255,145,0.22);
-    box-shadow: inset 0 1px 0 rgba(76,255,145,0.18), inset 0 -1px 0 rgba(0,0,0,0.2), 0 14px 56px rgba(0,0,0,0.55);
+    border-color: rgba(200,208,235,0.22);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.2), 0 14px 56px rgba(0,0,0,0.55);
   }
   .card:hover::before {
     left: 155%;
@@ -288,7 +269,7 @@
     width: 56px;
     height: 56px;
     border-radius: 16px;
-    background: linear-gradient(135deg, rgba(90,255,155,0.12) 0%, rgba(90,255,155,0.04) 100%);
+    background: linear-gradient(135deg, rgba(215,215,228,0.12) 0%, rgba(215,215,228,0.04) 100%);
     border: 1.5px solid var(--border-hi);
     display: flex;
     align-items: center;
@@ -321,7 +302,7 @@
     align-items: center;
     gap: 8px;
     padding: 6px 12px;
-    background: rgba(76,255,145,0.04);
+    background: rgba(255,255,255,0.04);
     border: 1px solid var(--border);
     border-radius: 8px;
     transition: border-color 0.2s, background 0.2s;
@@ -347,7 +328,7 @@
     left: 50%;
     transform: translateX(-50%);
     background: rgba(18,20,28,0.96);
-    border: 1px solid rgba(76,255,145,0.18);
+    border: 1px solid rgba(200,208,235,0.18);
     backdrop-filter: blur(8px);
     color: var(--t0);
     font-family: 'Inter', sans-serif;
@@ -376,9 +357,9 @@
   }
 
   .status-pill.active {
-    color: rgba(90,255,155,0.9);
-    background: rgba(90,255,155,0.08);
-    border-color: rgba(90,255,155,0.2);
+    color: rgba(215,215,228,0.9);
+    background: rgba(215,215,228,0.08);
+    border-color: rgba(215,215,228,0.2);
   }
 
   .status-pill.expired {
@@ -400,17 +381,16 @@
     gap: 6px;
     padding: 4px 12px;
     border-radius: 20px;
-    background: rgba(76,255,145,0.07);
-    border: 1px solid rgba(76,255,145,0.28);
-    color: var(--chrome);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    color: var(--t2);
     font-size: 12px;
     font-weight: 500;
     font-family: 'Inter', sans-serif;
     cursor: pointer;
     text-decoration: none;
-    transition: border-color 0.2s, color 0.2s, background 0.2s, box-shadow 0.2s;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
     white-space: nowrap;
-    box-shadow: 0 0 10px rgba(76,255,145,0.18);
   }
 
   .regen-btn:hover {
@@ -477,13 +457,11 @@
   }
 
   .stat-value {
-    font-family: 'Press Start 2P', 'Inter', monospace;
-    font-size: 20px;
-    font-weight: 400;
-    color: var(--chrome);
-    text-shadow: 0 0 8px rgba(76,255,145,0.6), 0 0 22px rgba(76,255,145,0.3);
-    line-height: 1.4;
-    letter-spacing: 0;
+    font-size: 36px;
+    font-weight: 300;
+    color: var(--t0);
+    line-height: 1;
+    letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
   }
 
@@ -530,8 +508,8 @@
     gap: 9px;
     padding: 11px 22px;
     border-radius: 100px;
-    background: linear-gradient(135deg, rgba(76,255,145,0.1) 0%, rgba(76,255,145,0.045) 100%);
-    border: 1px solid rgba(76,255,145,0.22);
+    background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.045) 100%);
+    border: 1px solid rgba(200,208,235,0.22);
     color: var(--t0);
     font-size: 13px;
     font-weight: 500;
@@ -539,19 +517,19 @@
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
-    box-shadow: inset 0 1px 0 rgba(76,255,145,0.14), 0 4px 16px rgba(0,0,0,0.3), 0 0 18px rgba(76,255,145,0.22);
-    transition: background 0.2s, border-color 0.2s, opacity 0.2s, box-shadow 0.2s;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 4px 16px rgba(0,0,0,0.3);
+    transition: background 0.2s, border-color 0.2s, opacity 0.2s;
   }
   #run-agent-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, rgba(76,255,145,0.14) 0%, rgba(76,255,145,0.07) 100%);
-    border-color: rgba(76,255,145,0.36);
+    background: linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.07) 100%);
+    border-color: rgba(200,208,235,0.36);
   }
   #run-agent-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   .run-spinner {
     width: 13px; height: 13px;
-    border: 1.5px solid rgba(220,255,232,0.3);
-    border-top-color: rgba(220,255,232,0.85);
+    border: 1.5px solid rgba(232,234,242,0.3);
+    border-top-color: rgba(232,234,242,0.85);
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
     display: none;
@@ -572,8 +550,8 @@
     color: rgba(140,230,180,0.9);
   }
   #run-result.already {
-    background: rgba(76,255,145,0.06);
-    border: 1px solid rgba(76,255,145,0.14);
+    background: rgba(200,208,235,0.06);
+    border: 1px solid rgba(200,208,235,0.14);
     color: var(--t2);
   }
   #run-result.error {
@@ -612,13 +590,11 @@
   }
 
   .countdown-digits {
-    font-family: 'Press Start 2P', 'Inter', monospace;
-    font-size: 32px;
-    font-weight: 400;
-    color: var(--chrome);
-    text-shadow: 0 0 10px rgba(76,255,145,0.65), 0 0 28px rgba(76,255,145,0.35);
-    letter-spacing: 0;
-    line-height: 1.5;
+    font-size: 56px;
+    font-weight: 300;
+    color: var(--t0);
+    letter-spacing: -0.04em;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
   }
@@ -642,7 +618,7 @@
   }
 
   @media (max-width: 480px) {
-    .countdown-digits { font-size: 22px; }
+    .countdown-digits { font-size: 38px; }
     .countdown-sep { font-size: 32px; margin: 0 4px; padding-bottom: 10px; }
   }
 
@@ -727,7 +703,7 @@
     flex-shrink: 0;
   }
 
-  .dot-ok   { background: rgba(90,255,155,0.7); }
+  .dot-ok   { background: rgba(215,215,228,0.7); }
   .dot-warn { background: rgba(248,200,113,0.8); }
   .dot-err  { background: var(--err); }
 
@@ -741,7 +717,7 @@
 
   .progress-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, rgba(90,255,155,0.3), rgba(90,255,155,0.75));
+    background: linear-gradient(90deg, rgba(215,215,228,0.3), rgba(215,215,228,0.75));
     border-radius: 2px;
     transition: width 0.9s cubic-bezier(0.16, 1, 0.3, 1);
     width: 0%;
@@ -764,7 +740,7 @@
   .history-tabs {
     display: flex;
     gap: 3px;
-    background: rgba(76,255,145,0.03);
+    background: rgba(255,255,255,0.03);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 3px;
@@ -784,7 +760,7 @@
     font-family: 'Inter', sans-serif;
   }
 
-  .history-tab.active { color: var(--t0); background: rgba(76,255,145,0.09); }
+  .history-tab.active { color: var(--t0); background: rgba(255,255,255,0.09); }
   .history-tab:hover:not(.active) { color: var(--t1); }
 
   /* Empty state */
@@ -811,7 +787,7 @@
     top: 8px;
     bottom: 8px;
     width: 1px;
-    background: rgba(76,255,145,0.1);
+    background: rgba(255,255,255,0.1);
     border-radius: 1px;
   }
 
@@ -847,7 +823,7 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: rgba(90,255,155,0.5);
+    background: rgba(215,215,228,0.5);
     position: relative;
     z-index: 1;
     flex-shrink: 0;
@@ -873,10 +849,10 @@
     transition: border-color 0.15s, background 0.15s;
   }
 
-  .timeline-entry:hover .entry-main { background: rgba(76,255,145,0.025); }
+  .timeline-entry:hover .entry-main { background: rgba(255,255,255,0.025); }
 
   .timeline-entry.expanded .entry-main {
-    background: rgba(76,255,145,0.035);
+    background: rgba(255,255,255,0.035);
     border-color: var(--border);
   }
 
@@ -917,8 +893,8 @@
   }
 
   .chip-success {
-    color: rgba(90,255,155,0.8);
-    background: rgba(90,255,155,0.08);
+    color: rgba(215,215,228,0.8);
+    background: rgba(215,215,228,0.08);
   }
 
   .chip-failed {
@@ -966,7 +942,7 @@
     color: var(--chrome);
     text-decoration: underline;
     text-underline-offset: 3px;
-    text-decoration-color: rgba(90,255,155,0.3);
+    text-decoration-color: rgba(215,215,228,0.3);
     transition: text-decoration-color 0.2s;
   }
 
@@ -998,7 +974,7 @@
   /* ── Insights ── */
   .insights-card {
     padding: 32px 36px;
-    background: rgba(76,255,145,0.03);
+    background: rgba(255,255,255,0.03);
   }
 
   @media (max-width: 600px) { .insights-card { padding: 24px 20px; } }
@@ -1018,7 +994,7 @@
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: rgba(90,255,155,0.4);
+    background: rgba(215,215,228,0.4);
     flex-shrink: 0;
     margin-top: 9px;
   }
@@ -1069,8 +1045,8 @@
   @media (min-width: 700px) { .badge-card { min-width: 0; } }
 
   .badge-card.earned {
-    background: rgba(90,255,155,0.04);
-    border-color: rgba(90,255,155,0.14);
+    background: rgba(215,215,228,0.04);
+    border-color: rgba(215,215,228,0.14);
   }
 
   .badge-card.unearned { opacity: 0.28; }
@@ -1106,7 +1082,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 22px;
-    background: rgba(76,255,145,0.05);
+    background: rgba(255,255,255,0.05);
     border: 1px solid var(--border-hi);
     border-radius: 10px;
     color: var(--t1);
@@ -1117,7 +1093,7 @@
     transition: background 0.2s, border-color 0.2s;
   }
 
-  .retry-btn:hover { background: rgba(76,255,145,0.09); border-color: rgba(76,255,145,0.22); }
+  .retry-btn:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.22); }
 
   /* ── Skeleton skeletons ── */
   .sk-hero-card { padding: 40px 48px; display: flex; align-items: center; gap: 28px; }
@@ -1143,7 +1119,6 @@
   <div class="orb orb-3"></div>
   <div class="vignette"></div>
 </div>
-<div id="pixel-field" aria-hidden="true"></div>
 
 <!-- Page Root -->
 <div id="page-root">
@@ -1345,27 +1320,6 @@
 <script>
 (function () {
   'use strict';
-
-  /* ── Pixel particle field ── */
-  (function () {
-    var field = document.getElementById('pixel-field');
-    if (!field) return;
-    var frag = document.createDocumentFragment();
-    var count = window.innerWidth < 640 ? 14 : 26;
-    for (var i = 0; i < count; i++) {
-      var dot = document.createElement('div');
-      dot.className = 'pixel-dot';
-      var size = 2 + Math.round(Math.random() * 3);
-      dot.style.width = size + 'px';
-      dot.style.height = size + 'px';
-      dot.style.left = Math.random() * 100 + '%';
-      dot.style.top = Math.random() * 100 + '%';
-      dot.style.animationDelay = (Math.random() * 7).toFixed(2) + 's';
-      dot.style.animationDuration = (5 + Math.random() * 5).toFixed(2) + 's';
-      frag.appendChild(dot);
-    }
-    field.appendChild(frag);
-  })();
 
 
   /* ── Helpers ───────────────────────────────────────────────────── */
