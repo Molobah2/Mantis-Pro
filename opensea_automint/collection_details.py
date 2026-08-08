@@ -1,8 +1,16 @@
 """
 On-demand collection detail lookup for the OpenSea Auto-Mint dashboard: when a
-user clicks a drop card, fetches the collection's own OpenSea page
-(https://opensea.io/collection/<slug>) via Playwright and extracts its
-description and external (social/website) links.
+user clicks a drop card, fetches a collection's description, external
+(social/website) links, and — where discoverable — its mint contract
+address.
+
+API-first: OpenSea's official public v2 REST endpoint
+(GET https://api.opensea.io/api/v2/collections/<slug>) is tried first — it
+works without an API key (verified live), is far cheaper than a browser
+launch, and is our only source for a collection's actual contract address.
+Falls back to scraping the collection's own OpenSea page
+(https://opensea.io/collection/<slug>) via Playwright only when the API call
+fails outright, or succeeds without a usable description/links.
 
 Deliberately NOT eager — unlike drops.py's /drops-wide scrape, this is only
 triggered per-slug on user request, and cached per-slug (not globally) since
@@ -15,10 +23,13 @@ aria-label/title, so social vs. website links are classified by hostname
 pattern-matching rather than any semantic HTML marker.
 """
 import logging
+import os
 import re
 import threading
 import time
 from urllib.parse import urlparse
+
+import requests as _req
 
 from .drops import _USER_AGENT
 
@@ -50,6 +61,17 @@ _MAX_LINK_LENGTH = 2000  # defensive cap on a URL we'd hand to a frontend as a c
 
 _TWITTER_HOSTS = frozenset({"x.com", "www.x.com", "twitter.com", "www.twitter.com"})
 _INSTAGRAM_HOSTS = frozenset({"instagram.com", "www.instagram.com"})
+
+# OpenSea's official public v2 REST endpoint — verified live to work without
+# an API key, though one is sent when configured (more correct, future-proof
+# against rate limiting). Tried FIRST in fetch_collection_details_live,
+# before any Playwright browser launch: it's cheaper, faster, and — unlike
+# the page scrape — is the only way we have to discover a drop's actual
+# on-chain mint contract address.
+_OPENSEA_API_BASE = "https://api.opensea.io/api/v2/collections"
+_API_REQUEST_TIMEOUT_S = 10
+
+ETH_ADDR_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 
 
 def classify_external_link(href: str) -> str:
@@ -85,7 +107,7 @@ def validate_external_link(href: str | None) -> str | None:
     handling can't cause a false-trust bypass the way it could for a
     hostname-equality check.
     """
-    if not href:
+    if not href or not isinstance(href, str):
         return None
     if len(href) > _MAX_LINK_LENGTH:
         return None
@@ -138,20 +160,110 @@ def _extract_links(page) -> dict:
     return links
 
 
-def fetch_collection_details_live(slug: str) -> dict:
+def _as_stripped_str(value: object) -> str:
+    """Defensively coerce an untrusted JSON field to a stripped string —
+    external API responses aren't guaranteed to match our assumed shape
+    (e.g. a field we expect as a string could come back as a number or
+    list), and this module's functions are documented to never raise."""
+    return value.strip() if isinstance(value, str) else ""
+
+
+def fetch_collection_details_via_api(slug: str) -> dict | None:
+    """
+    Calls OpenSea's official public v2 REST endpoint
+    (GET /api/v2/collections/<slug>) directly — no browser launch required.
+    Works without an API key today (verified live), but sends one via the
+    x-api-key header when OPENSEA_API_KEY is configured, since that's more
+    correct and future-proofs against the key becoming required/rate-limited.
+
+    Returns None on any failure — request exception, non-200 status,
+    non-JSON body, or a JSON body that isn't a dict — never raises, mirroring
+    the resilience style used throughout this module. On success returns
+    {"description": ..., "links": {...}, "contract_address": ...}, omitting
+    any link category whose source field was empty/missing/invalid, and
+    contract_address only if a well-formed Ethereum contract address was
+    found among the collection's contracts.
+    """
+    headers = {"Accept": "application/json"}
+    api_key = os.getenv("OPENSEA_API_KEY", "").strip()
+    if api_key:
+        headers["x-api-key"] = api_key
+
+    try:
+        r = _req.get(f"{_OPENSEA_API_BASE}/{slug}", timeout=_API_REQUEST_TIMEOUT_S, headers=headers)
+    except _req.exceptions.RequestException as e:
+        logger.warning("[collection_details] OpenSea API request failed for %r: %s", slug, e)
+        return None
+
+    if r.status_code != 200:
+        logger.warning(
+            "[collection_details] OpenSea API returned HTTP %d for %r", r.status_code, slug
+        )
+        return None
+
+    try:
+        data = r.json()
+    except ValueError as e:
+        logger.warning("[collection_details] OpenSea API non-JSON response for %r: %s", slug, e)
+        return None
+
+    if not isinstance(data, dict):
+        logger.warning("[collection_details] OpenSea API unexpected response shape for %r", slug)
+        return None
+
+    description = _as_stripped_str(data.get("description")) or None
+    if description:
+        description = description[:_MAX_DESCRIPTION_LENGTH]
+
+    links: dict = {}
+
+    discord_url = validate_external_link(data.get("discord_url"))
+    if discord_url:
+        links["discord"] = discord_url
+
+    twitter_username = _as_stripped_str(data.get("twitter_username"))
+    if twitter_username:
+        twitter_url = validate_external_link(f"https://x.com/{twitter_username}")
+        if twitter_url:
+            links["twitter"] = twitter_url
+
+    instagram_username = _as_stripped_str(data.get("instagram_username"))
+    if instagram_username:
+        instagram_url = validate_external_link(f"https://instagram.com/{instagram_username}")
+        if instagram_url:
+            links["instagram"] = instagram_url
+
+    website_url = validate_external_link(data.get("project_url"))
+    if website_url:
+        links["website"] = website_url
+
+    contract_address = None
+    for contract in data.get("contracts") or []:
+        if not isinstance(contract, dict) or contract.get("chain") != "ethereum":
+            continue
+        address = contract.get("address")
+        if isinstance(address, str) and ETH_ADDR_RE.match(address):
+            contract_address = address
+            break
+
+    return {
+        "description": description,
+        "links": links,
+        "contract_address": contract_address,
+    }
+
+
+def _fetch_via_playwright(slug: str) -> dict:
     """
     Playwright I/O: navigates to https://opensea.io/collection/<slug> and
     extracts its description (first <p> element) and external links.
 
-    Raises ValueError if slug fails SLUG_RE — a programming-error guard,
-    callers must validate before calling. Returns
-    {"description": None, "links": {}} on any network/Playwright failure
-    rather than raising, mirroring drops.py's fetch_drops_live() resilience
-    pattern.
+    Returns {"description": None, "links": {}} on any Playwright/launch
+    failure rather than raising, mirroring drops.py's fetch_drops_live()
+    resilience pattern. Never discovers a contract_address — that's the
+    OpenSea API's job (see fetch_collection_details_via_api); callers
+    thread through whatever contract_address the API already found.
     """
-    if not SLUG_RE.match(slug):
-        raise ValueError(f"Invalid collection slug: {slug!r}")
-
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -187,6 +299,33 @@ def fetch_collection_details_live(slug: str) -> dict:
         _launch_semaphore.release()
 
     return {"description": description, "links": links}
+
+
+def fetch_collection_details_live(slug: str) -> dict:
+    """
+    Tries OpenSea's public API first (fetch_collection_details_via_api) —
+    cheap, fast, and the only source we have for a mint contract address.
+    Falls back to the existing Playwright scrape only if the API call fails
+    entirely, or succeeds but has neither a description nor any links
+    (a real browser launch is skipped whenever the API alone is enough).
+
+    Raises ValueError if slug fails SLUG_RE — a programming-error guard,
+    callers must validate before calling. The returned dict always has a
+    "contract_address" key; Playwright can never discover one, so a
+    contract_address found via the API is preserved even when the
+    Playwright fallback runs to fill in description/links.
+    """
+    if not SLUG_RE.match(slug):
+        raise ValueError(f"Invalid collection slug: {slug!r}")
+
+    api_result = fetch_collection_details_via_api(slug)
+    contract_address = api_result.get("contract_address") if api_result else None
+
+    if api_result and (api_result.get("description") or api_result.get("links")):
+        return {**api_result, "contract_address": contract_address}
+
+    playwright_result = _fetch_via_playwright(slug)
+    return {**playwright_result, "contract_address": contract_address}
 
 
 def get_collection_details(slug: str) -> dict:
