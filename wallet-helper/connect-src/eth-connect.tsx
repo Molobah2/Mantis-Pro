@@ -8,8 +8,8 @@ import {
   useConnect,
   useDisconnect,
 } from "wagmi";
-import { mainnet } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
+import { mainnet } from "viem/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Deliberately separate from connect.tsx (Abstract/AGW, session-key
