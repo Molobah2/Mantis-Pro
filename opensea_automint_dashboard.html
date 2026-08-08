@@ -376,6 +376,22 @@
     font-size: 13px;
     font-family: inherit;
   }
+  .grant-expiry-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--t2);
+  }
+  .grant-expiry-label select {
+    background: var(--surface);
+    border: 1px solid var(--border-hi);
+    border-radius: var(--r-sm);
+    color: var(--t0);
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
   .grant-section #grant-btn {
     align-self: flex-start;
     cursor: pointer;
@@ -585,6 +601,13 @@ function renderModalDetails(details, requestedForSlug, drop) {
   slot.outerHTML =
     descriptionHtml + linksHtml + noContentHtml +
     '<div id="grant-section-container">' + renderGrantSection(drop, currentModalContractAddress) + '</div>';
+
+  // Only kick off the on-chain lookup when the grant form actually rendered
+  // (wallet connected + contract known) — avoids a pointless RPC call when
+  // the section shows a "connect your wallet" notice instead.
+  if (currentModalContractAddress && document.getElementById('grant-expiry')) {
+    initGrantExpiry(currentModalContractAddress);
+  }
 }
 
 // ── Grant permission (session key) ──────────────────────────────────────
@@ -595,7 +618,76 @@ var GRANT_DEFAULT_VALUE_CAP_ETH = 0.05;
 var GRANT_MAX_QUANTITY = 10;
 var currentModalDrop = null;
 var currentModalContractAddress = null;
-var GRANT_EXPIRES_IN_SECONDS = 3600; // 1 hour — short-lived, matches the on-chain timestamp policy
+// Fallback when the real on-chain mint end time isn't available (e.g. a
+// token-gated/allowlist-only stage with no public getPublicDrop data).
+var GRANT_DEFAULT_EXPIRES_IN_SECONDS = 86400; // 24 hours
+
+// Fixed-duration choices offered alongside the auto-detected "until mint
+// ends" option — seconds chosen so the longest (29 days) stays a 1-day
+// safety margin under the backend's exact 30-day ceiling
+// (opensea_automint/security.py's _MAX_EXPIRES_AT_SECONDS_FROM_NOW).
+var GRANT_EXPIRY_PRESETS = [
+  [3600, '1 hour'],
+  [21600, '6 hours'],
+  [86400, '24 hours'],
+  [259200, '3 days'],
+  [604800, '7 days'],
+  [2505600, '29 days (maximum)'],
+];
+
+function formatExpiryDate(seconds) {
+  var d = new Date(Date.now() + seconds * 1000);
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// autoSeconds: the real on-chain-derived suggestion (or null while it's
+// still loading / unavailable). When present it's prepended and selected;
+// otherwise the 24-hour preset is selected so the form always has a valid
+// value even before the on-chain lookup resolves.
+function grantExpiryOptionsHtml(autoSeconds) {
+  var options = '';
+  if (autoSeconds) {
+    options += '<option value="' + autoSeconds + '" selected>Until mint ends — ' + esc(formatExpiryDate(autoSeconds)) + '</option>';
+  }
+  GRANT_EXPIRY_PRESETS.forEach(function (preset) {
+    var isDefaultSelected = !autoSeconds && preset[0] === GRANT_DEFAULT_EXPIRES_IN_SECONDS;
+    options += '<option value="' + preset[0] + '"' + (isDefaultSelected ? ' selected' : '') + '>' + preset[1] + '</option>';
+  });
+  return options;
+}
+
+// Tracks whether the user has manually touched the expiry <select> since it
+// was last (re)rendered — set by the delegated 'change' listener below, and
+// reset every time renderGrantSection builds a fresh select. Prevents the
+// async on-chain suggestion from clobbering a choice the user already made
+// while the getPublicDrop lookup was still in flight.
+var grantExpiryUserEdited = false;
+
+document.addEventListener('change', function (e) {
+  if (e.target && e.target.id === 'grant-expiry') grantExpiryUserEdited = true;
+});
+
+// Fires after the grant form is in the DOM: asks eth-connect.tsx's
+// publicClient to read the collection's real on-chain mint end time
+// (SeaDrop's getPublicDrop) and, if available, replaces the static preset
+// list with that as the selected default. Guards against the modal having
+// moved on to a different drop, or the user already having picked a
+// duration themselves, by the time the async lookup resolves.
+function initGrantExpiry(contractAddress) {
+  if (!window.getSuggestedExpirySeconds) return;
+  window.getSuggestedExpirySeconds(contractAddress)
+    .then(function (seconds) {
+      if (!seconds) return;
+      if (currentModalContractAddress !== contractAddress) return; // stale — modal moved on
+      if (grantExpiryUserEdited) return; // user already made their own choice — don't override it
+      var select = document.getElementById('grant-expiry');
+      if (select) select.innerHTML = grantExpiryOptionsHtml(seconds);
+    })
+    .catch(function () {
+      // Suggestion unavailable — the static preset options already
+      // rendered (24h default selected), nothing more to do.
+    });
+}
 
 function renderGrantSection(drop, contractAddress) {
   if (!drop || drop.status !== 'minting_now') return '';
@@ -608,6 +700,8 @@ function renderGrantSection(drop, contractAddress) {
     return '<div class="modal-details-state">Connect your wallet above to grant a minting permission for this drop.</div>';
   }
 
+  grantExpiryUserEdited = false; // fresh <select> below — no user choice to protect yet
+
   return (
     '<div class="grant-section" data-contract="' + esc(contractAddress) + '">' +
       '<div class="connect-label">Grant Minting Permission</div>' +
@@ -615,6 +709,7 @@ function renderGrantSection(drop, contractAddress) {
         '<label>Quantity<input type="number" id="grant-quantity" min="1" max="' + GRANT_MAX_QUANTITY + '" value="1"></label>' +
         '<label>Max ETH<input type="number" id="grant-value-cap" min="0" step="0.01" value="' + GRANT_DEFAULT_VALUE_CAP_ETH + '"></label>' +
       '</div>' +
+      '<label class="grant-expiry-label">Expires<select id="grant-expiry">' + grantExpiryOptionsHtml(null) + '</select></label>' +
       '<button id="grant-btn" type="button" class="modal-link-btn">Grant Permission</button>' +
       '<div id="grant-status" class="modal-details-state"></div>' +
     '</div>'
@@ -630,6 +725,9 @@ function refreshGrantSectionIfOpen() {
   // the "connect your wallet" notice for the real grant form without
   // needing to re-fetch collection details (already cached above).
   container.innerHTML = renderGrantSection(currentModalDrop, currentModalContractAddress);
+  if (currentModalContractAddress && document.getElementById('grant-expiry')) {
+    initGrantExpiry(currentModalContractAddress);
+  }
 }
 
 document.addEventListener('click', function (e) {
@@ -671,6 +769,8 @@ async function handleGrantClick(btn) {
 
   var quantity = Math.max(1, Math.min(GRANT_MAX_QUANTITY, parseInt(quantityInput.value, 10) || 1));
   var valueCapWei = ethStringToWei(valueCapInput.value);
+  var expirySelect = document.getElementById('grant-expiry');
+  var expiresInSeconds = (expirySelect && parseInt(expirySelect.value, 10)) || GRANT_DEFAULT_EXPIRES_IN_SECONDS;
 
   btn.disabled = true;
   btn.textContent = 'Granting…';
@@ -681,7 +781,7 @@ async function handleGrantClick(btn) {
       nftContractAddress: contractAddress,
       maxQuantity: quantity,
       valueCapWei: valueCapWei,
-      expiresInSeconds: GRANT_EXPIRES_IN_SECONDS,
+      expiresInSeconds: expiresInSeconds,
     });
     if (status) status.textContent = 'Permission granted (id ' + result.grantId + '). Nothing has been minted — this only authorizes a future, separate mint action.';
     btn.textContent = 'Granted';

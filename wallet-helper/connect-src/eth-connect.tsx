@@ -51,6 +51,42 @@ const SEADROP_MINT_PUBLIC_ABI = [
   },
 ] as const;
 
+// getPublicDrop(nftContract) is a public, no-wallet-required view function
+// on SeaDrop itself — verified against a real live collection (returned a
+// real, sensible endTime ~18 days out, not zero/garbage) before relying on
+// it here. Struct layout confirmed against SeaDrop's own SeaDropStructs.sol.
+const GET_PUBLIC_DROP_ABI = [
+  {
+    name: "getPublicDrop",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "nftContract", type: "address" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "mintPrice", type: "uint80" },
+          { name: "startTime", type: "uint48" },
+          { name: "endTime", type: "uint48" },
+          { name: "maxTotalMintableByWallet", type: "uint16" },
+          { name: "feeBps", type: "uint16" },
+          { name: "restrictFeeRecipients", type: "bool" },
+        ],
+      },
+    ],
+  },
+] as const;
+
+// Floor: below this we treat the drop as effectively already over rather
+// than offering a near-zero-length permission. Ceiling: kept under the
+// backend's exact 30-day cap (opensea_automint/security.py's
+// _MAX_EXPIRES_AT_SECONDS_FROM_NOW = 30*86400) with a 1-day safety margin,
+// so request latency or client clock skew can never push a real submission
+// past the server's own limit.
+const MIN_SUGGESTED_EXPIRY_SECONDS = 5 * 60;
+const MAX_SUGGESTED_EXPIRY_SECONDS = 29 * 86400;
+
 // Deliberately separate from connect.tsx (Abstract/AGW, session-key
 // automation) — this is Ethereum mainnet, a plain EOA wallet connection,
 // no session key yet. Keeping the two bundles and their window callback
@@ -82,6 +118,12 @@ declare global {
     // permission grant — the modal isn't part of this React tree, so this is
     // exposed on window rather than as a prop/callback.
     grantMintPermission?: (params: GrantMintPermissionParams) => Promise<{ grantId: number }>;
+    // Imperative bridge: looks up the real on-chain mint end time for a
+    // collection so the dashboard can suggest "expire when the mint ends"
+    // instead of an arbitrary fixed duration. Returns null when unavailable
+    // (no public drop stage, RPC error, or the drop has no on-chain end
+    // time) — callers fall back to their own manual duration options.
+    getSuggestedExpirySeconds?: (nftContractAddress: string) => Promise<number | null>;
   }
 }
 
@@ -230,6 +272,43 @@ async function grantMintPermission(
 }
 
 window.grantMintPermission = grantMintPermission;
+
+// Reads SeaDrop's real, on-chain public-stage end time for a collection and
+// returns how many seconds from now that is — clamped to a sane floor/ceiling
+// — so the dashboard can offer "expire when the mint ends" as a suggested
+// default instead of forcing every user through a fixed, arbitrary duration.
+// Read-only: no signing, no wallet prompt, works the moment publicClient is
+// available (doesn't require a full grant flow to have started).
+async function getSuggestedExpirySeconds(
+  nftContractAddress: string
+): Promise<number | null> {
+  const { publicClient } = walletStateRef.current;
+  if (!publicClient) return null;
+
+  try {
+    const drop = await publicClient.readContract({
+      address: SEADROP_ADDRESS,
+      abi: GET_PUBLIC_DROP_ABI,
+      functionName: "getPublicDrop",
+      args: [nftContractAddress as Address],
+    });
+
+    const endTime = Number(drop.endTime);
+    if (!endTime) return null; // no public drop stage configured for this contract
+
+    const secondsRemaining = endTime - Math.floor(Date.now() / 1000);
+    if (secondsRemaining <= MIN_SUGGESTED_EXPIRY_SECONDS) return null; // already ended, or ending imminently
+
+    return Math.min(secondsRemaining, MAX_SUGGESTED_EXPIRY_SECONDS);
+  } catch {
+    // Token-gated / allowlist-only stages, or any contract that doesn't
+    // implement SeaDrop's public-stage interface, reverts here — that's an
+    // expected "not available" outcome, not a bug to surface to the user.
+    return null;
+  }
+}
+
+window.getSuggestedExpirySeconds = getSuggestedExpirySeconds;
 
 function isSmartAccountAddressResponse(
   data: unknown
