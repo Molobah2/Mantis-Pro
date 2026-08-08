@@ -2,8 +2,9 @@ import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
-from opensea_automint import drops, store
+from opensea_automint import collection_details, drops, store
 from opensea_automint.routes import opensea_automint_bp
+from portal_upvote import security as _sec
 
 
 @pytest.fixture
@@ -207,3 +208,63 @@ def test_dashboard_page_serves_html(client) -> None:
 
     assert resp.status_code == 200
     assert "text/html" in resp.content_type
+
+
+# ── GET /api/opensea/collection/<slug> ───────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def reset_rate_limit_buckets():
+    """portal_upvote.security.rate_limit tracks state in a module-level,
+    in-memory dict shared across the whole test process — clear it before
+    each test so earlier tests' request counts can't bleed into these
+    rate-limit assertions."""
+    _sec._buckets.clear()
+    yield
+    _sec._buckets.clear()
+
+
+def test_api_collection_details_returns_expected_shape_for_valid_slug(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_details = {
+        "description": "A cool collection.",
+        "links": {"twitter": "https://x.com/foo", "website": "https://foo.xyz"},
+    }
+    monkeypatch.setattr(collection_details, "get_collection_details", lambda slug: fake_details)
+
+    resp = client.get("/api/opensea/collection/cheap-shot")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body == fake_details
+
+
+def test_api_collection_details_rejects_invalid_slug_with_400(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        collection_details, "get_collection_details",
+        lambda slug: calls.append(slug) or {"description": None, "links": {}},
+    )
+
+    resp = client.get("/api/opensea/collection/UPPERCASE")
+
+    assert resp.status_code == 400
+    # Route-layer validation must reject before ever calling into the module.
+    assert calls == []
+
+
+def test_api_collection_details_rate_limits_after_threshold(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        collection_details, "get_collection_details",
+        lambda slug: {"description": None, "links": {}},
+    )
+
+    last_resp = None
+    for _ in range(31):
+        last_resp = client.get("/api/opensea/collection/cheap-shot")
+
+    assert last_resp.status_code == 429

@@ -14,7 +14,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from portal_upvote import security as _sec
 
-from . import drops, store
+from . import collection_details, drops, store
 
 opensea_automint_bp = Blueprint("opensea_automint", __name__)
 
@@ -55,6 +55,42 @@ def api_refresh_drops() -> Response:
     drops.get_drops(force_refresh=True)
     shaped = _displayable_drops()
     return jsonify({"drops": shaped, "count": len(shaped)})
+
+
+_COLLECTION_DETAILS_RATE_LIMIT = 30
+_COLLECTION_DETAILS_RATE_WINDOW_SECONDS = 3600
+_COLLECTION_DETAILS_RATE_KEY = "collection-details"
+
+
+@opensea_automint_bp.route("/api/opensea/collection/<slug>")
+def api_collection_details(slug: str) -> Response:
+    """Public read-only collection detail lookup (description + external
+    links), sourced on-demand via a real Playwright page load per unique
+    slug — rate-limited per client IP even though it's read-only, since each
+    request can trigger real outbound browser automation.
+
+    30 requests/hour per IP is generous given get_collection_details's own
+    30-minute per-slug cache already absorbs repeat requests for the SAME
+    collection; this limit exists to bound requests across DIFFERENT slugs
+    (e.g. someone trying to enumerate/spam many distinct collection pages).
+
+    slug is validated against collection_details.SLUG_RE before ever
+    reaching get_collection_details — defense in depth / a clean 400 rather
+    than relying solely on the module's own ValueError guard.
+    """
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _COLLECTION_DETAILS_RATE_KEY,
+        limit=_COLLECTION_DETAILS_RATE_LIMIT,
+        window=_COLLECTION_DETAILS_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    if not collection_details.SLUG_RE.match(slug):
+        return jsonify({"error": "Invalid collection slug"}), 400
+
+    details = collection_details.get_collection_details(slug)
+    return jsonify(details)
 
 
 @opensea_automint_bp.route("/opensea-automint")

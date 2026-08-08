@@ -146,6 +146,7 @@
     border-color: rgba(200,208,235,0.22);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 34px rgba(0,0,0,0.45);
   }
+  .drop-card { cursor: pointer; }
 
   .drop-image-wrap {
     width: 100%;
@@ -238,6 +239,101 @@
 
   .hidden { display: none !important; }
 
+  /* ── DETAIL MODAL ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(6,7,10,0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .modal-panel {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: linear-gradient(160deg, rgba(24,26,34,0.98) 0%, rgba(14,15,20,0.98) 100%);
+    border: 1px solid rgba(200,208,235,0.16);
+    border-radius: var(--r);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 14px; right: 14px;
+    z-index: 1;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: rgba(10,11,15,0.6);
+    border: 1px solid rgba(200,208,235,0.18);
+    color: var(--t1);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .modal-close:hover { background: rgba(255,255,255,0.12); }
+
+  .modal-image-wrap {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: rgba(255,255,255,0.03);
+    overflow: hidden;
+  }
+  .modal-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .modal-body { padding: 22px 24px 26px; display: flex; flex-direction: column; gap: 14px; }
+
+  .modal-title { font-size: 20px; font-weight: 500; color: var(--t0); letter-spacing: -0.3px; }
+
+  .modal-description {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--t1);
+    white-space: pre-line;
+  }
+
+  .modal-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .modal-link-btn {
+    padding: 7px 14px;
+    border-radius: 100px;
+    background: var(--surface-hi);
+    border: 1px solid var(--border-hi);
+    color: var(--t1);
+    font-size: 12.5px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+  }
+  .modal-link-btn:hover { background: rgba(255,255,255,0.12); color: var(--t0); }
+
+  .modal-mint-link {
+    margin-top: 4px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--t0);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .modal-details-state {
+    font-size: 12.5px;
+    color: var(--t3);
+  }
+
   @media (max-width: 600px) {
     header { padding: 0 16px; gap: 12px; }
     main { padding: 32px 16px 60px; }
@@ -263,6 +359,13 @@
   <div id="empty-msg" class="state-msg hidden">No drops found yet.</div>
   <div id="drop-grid" class="drop-grid"></div>
 </main>
+
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <button id="modal-close" class="modal-close" type="button" aria-label="Close">&times;</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
 
 <script>
 function esc(s) {
@@ -297,6 +400,31 @@ function statusLabel(status, detail) {
   return 'Not currently minting';
 }
 
+// Detail-panel external links (X, Discord, Instagram, arbitrary project
+// websites) have no fixed trusted host the way the OpenSea/CDN links do —
+// arbitrary external sites are the whole point. Validate by *scheme* using
+// the browser's own URL parser (matches how the browser will actually
+// resolve the link when clicked) rather than a regex: reject anything that
+// isn't literally http/https, same rule the backend already enforces in
+// opensea_automint/collection_details.py's validate_external_link.
+function escExternalUrl(url) {
+  if (typeof url !== 'string' || url.length > 2000) return null;
+  try {
+    var parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    if (!parsed.hostname) return null;
+  } catch (e) {
+    return null;
+  }
+  // Render the parser's own normalized form, not the raw input string — keeps
+  // the validated and rendered values provably identical rather than relying
+  // on the raw string matching what was just validated.
+  return esc(parsed.href);
+}
+
+var LINK_LABELS = { twitter: 'X (Twitter)', discord: 'Discord', instagram: 'Instagram', website: 'Website' };
+var activeModalSlug = null; // which drop's modal is currently open, or null if closed
+
 function renderDrops(drops) {
   var grid = document.getElementById('drop-grid');
   var emptyMsg = document.getElementById('empty-msg');
@@ -330,8 +458,102 @@ function renderDrops(drops) {
         (drop.status_detail && status !== 'upcoming' ? '<div class="status-detail">' + esc(drop.status_detail) + '</div>' : '') +
         '<a class="drop-link" href="' + escUrl(drop.mint_page_url) + '" target="_blank" rel="noopener">View on OpenSea &rarr;</a>' +
       '</div>';
+
+    card.addEventListener('click', function (e) {
+      if (e.target.closest('a')) return; // let the mint link navigate normally
+      openModal(drop);
+    });
+
     grid.appendChild(card);
   });
+}
+
+function renderModalShell(drop) {
+  var status = drop.status || 'not_minting';
+  var name = esc(drop.name || drop.collection_slug || 'Unknown');
+  var imageUrl = escImgUrl(drop.image_url);
+  var imageHtml = imageUrl
+    ? '<div class="modal-image-wrap"><img class="modal-image" src="' + imageUrl + '" ' +
+      'alt="' + name + '" onerror="this.closest(\'.modal-image-wrap\').style.display=\'none\'"></div>'
+    : '';
+
+  return (
+    imageHtml +
+    '<div class="modal-body">' +
+      '<div class="modal-title" id="modal-title">' + name + '</div>' +
+      '<span class="status-badge ' + esc(status) + '"><span class="dot"></span>' +
+        esc(statusLabel(status, drop.status_detail)) +
+      '</span>' +
+      '<div id="modal-details-slot" class="modal-details-state">Loading details…</div>' +
+      '<a class="modal-mint-link" href="' + escUrl(drop.mint_page_url) + '" target="_blank" rel="noopener">View on OpenSea &rarr;</a>' +
+    '</div>'
+  );
+}
+
+function renderModalDetails(details, requestedForSlug) {
+  // Guards against a fast close-then-reopen-different-drop: if the fetch that
+  // resolves belongs to a slug that's no longer the open modal (either
+  // closed, or replaced by a different drop reusing the same element id),
+  // discard it rather than rendering the wrong project's links/description
+  // under the currently-displayed title.
+  if (requestedForSlug !== activeModalSlug) return;
+
+  var slot = document.getElementById('modal-details-slot');
+  if (!slot) return; // modal was closed before the fetch resolved
+
+  if (!details || (!details.description && (!details.links || Object.keys(details.links).length === 0))) {
+    slot.outerHTML = '<div class="modal-details-state">No additional details found.</div>';
+    return;
+  }
+
+  var descriptionHtml = details.description
+    ? '<div class="modal-description">' + esc(details.description) + '</div>'
+    : '';
+
+  var linkButtons = '';
+  if (details.links) {
+    Object.keys(details.links).forEach(function (category) {
+      var url = escExternalUrl(details.links[category]);
+      if (!url) return;
+      var label = LINK_LABELS[category] || esc(category);
+      linkButtons +=
+        '<a class="modal-link-btn" href="' + url + '" target="_blank" rel="noopener noreferrer">' +
+          esc(label) +
+        '</a>';
+    });
+  }
+  var linksHtml = linkButtons ? '<div class="modal-links">' + linkButtons + '</div>' : '';
+
+  slot.outerHTML = descriptionHtml + linksHtml;
+}
+
+async function openModal(drop) {
+  var overlay = document.getElementById('modal-overlay');
+  var content = document.getElementById('modal-content');
+  content.innerHTML = renderModalShell(drop);
+  overlay.classList.remove('hidden');
+
+  var slug = drop.collection_slug;
+  activeModalSlug = slug || null;
+  if (!slug) return;
+
+  try {
+    var res = await fetch('/api/opensea/collection/' + encodeURIComponent(slug));
+    if (!res.ok) throw new Error('API ' + res.status);
+    var details = await res.json();
+    renderModalDetails(details, slug);
+  } catch (err) {
+    if (slug !== activeModalSlug) return; // superseded by a different drop while this was in flight
+    var slot = document.getElementById('modal-details-slot');
+    if (slot) slot.textContent = 'Could not load additional details.';
+  }
+}
+
+function closeModal() {
+  var overlay = document.getElementById('modal-overlay');
+  overlay.classList.add('hidden');
+  document.getElementById('modal-content').innerHTML = '';
+  activeModalSlug = null;
 }
 
 async function loadDrops() {
@@ -381,6 +603,16 @@ document.addEventListener('DOMContentLoaded', function () {
     btn.classList.remove('hidden');
     btn.addEventListener('click', refreshDrops);
   }
+
+  var overlay = document.getElementById('modal-overlay');
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) closeModal(); // click on backdrop, not the panel itself
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
+  });
+
   loadDrops();
 });
 </script>
