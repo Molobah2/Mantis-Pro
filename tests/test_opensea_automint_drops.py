@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from opensea_automint import drops, store
@@ -132,6 +134,52 @@ def test_parse_drop_card_raises_value_error_for_non_collection_href() -> None:
         drops.parse_drop_card("/account/settings", CHEAP_SHOT)
 
 
+def test_parse_drop_card_accepts_trusted_seadn_image_url() -> None:
+    result = drops.parse_drop_card(
+        "/collection/cheap-shot", CHEAP_SHOT,
+        image_url="https://i2c.seadn.io/collection/cheap-shot/image.png?w=2000",
+    )
+
+    assert result["image_url"] == "https://i2c.seadn.io/collection/cheap-shot/image.png?w=2000"
+
+
+def test_parse_drop_card_rejects_untrusted_image_host() -> None:
+    result = drops.parse_drop_card(
+        "/collection/cheap-shot", CHEAP_SHOT,
+        image_url="https://evil.example.com/tracker.png",
+    )
+
+    assert result["image_url"] is None
+
+
+def test_parse_drop_card_rejects_non_https_image_url() -> None:
+    result = drops.parse_drop_card(
+        "/collection/cheap-shot", CHEAP_SHOT,
+        image_url="javascript:alert(1)",
+    )
+
+    assert result["image_url"] is None
+
+
+def test_parse_drop_card_handles_missing_image_url() -> None:
+    result = drops.parse_drop_card("/collection/cheap-shot", CHEAP_SHOT, image_url=None)
+
+    assert result["image_url"] is None
+
+
+def test_parse_drop_card_rejects_backslash_authority_confusion_trick() -> None:
+    # Python's urlparse().hostname would read this as host="i2c.seadn.io"
+    # (treating "evil.com\" as userinfo) while a real browser resolves the
+    # authority as "evil.com" — a hostname-equality check alone would wrongly
+    # trust this. The anchored-prefix check must reject it outright.
+    result = drops.parse_drop_card(
+        "/collection/cheap-shot", CHEAP_SHOT,
+        image_url="https://evil.com\\@i2c.seadn.io/x.png",
+    )
+
+    assert result["image_url"] is None
+
+
 def test_classify_long_countdown_detail_is_truncated() -> None:
     noisy = "Some Drop\nMINT STARTS IN\n" + "\n".join(["1234567890"] * 50)
 
@@ -143,10 +191,14 @@ def test_classify_long_countdown_detail_is_truncated() -> None:
 # ── _scrape_all_cards (dedup, skip-on-error) ───────────────────────────
 
 class _FakeCard:
-    def __init__(self, href: str | None, text: str, raises: bool = False) -> None:
+    def __init__(
+        self, href: str | None, text: str, raises: bool = False,
+        image_url: str | None = None,
+    ) -> None:
         self._href = href
         self._text = text
         self._raises = raises
+        self.image_url = image_url
 
     def get_attribute(self, _name: str) -> str | None:
         if self._raises:
@@ -157,6 +209,21 @@ class _FakeCard:
         if self._raises:
             raise RuntimeError("detached element")
         return self._text
+
+    def locator(self, _selector: str) -> "_FakeImgLocator":
+        return _FakeImgLocator(self.image_url)
+
+
+class _FakeImgLocator:
+    def __init__(self, image_url: str | None) -> None:
+        self._image_url = image_url
+
+    @property
+    def first(self) -> "_FakeImgLocator":
+        return self
+
+    def get_attribute(self, _name: str, timeout: int = 0) -> str | None:  # noqa: ARG002
+        return self._image_url
 
 
 class _FakeLocator:
@@ -240,6 +307,19 @@ def test_scrape_all_cards_dedupes_repeated_hrefs() -> None:
 
     assert len(result) == 1
     assert result[0]["collection_slug"] == "cheap-shot"
+
+
+def test_scrape_all_cards_carries_image_url_through() -> None:
+    page = _FakePage([
+        _FakeCard(
+            "/collection/cheap-shot", CHEAP_SHOT,
+            image_url="https://i2c.seadn.io/collection/cheap-shot/image.png?w=2000",
+        ),
+    ])
+
+    result = drops._scrape_all_cards(page)
+
+    assert result[0]["image_url"] == "https://i2c.seadn.io/collection/cheap-shot/image.png?w=2000"
 
 
 def test_scrape_all_cards_skips_broken_card_without_raising() -> None:
@@ -430,3 +510,31 @@ def test_to_display_dict_does_not_mutate_input_row() -> None:
     drops.to_display_dict(row)
 
     assert row == original
+
+
+def test_to_display_dict_passes_through_trusted_image_url() -> None:
+    row = {
+        "id": 6,
+        "stage_data": json.dumps({
+            "status": "minting_now", "status_detail": None,
+            "image_url": "https://i2c.seadn.io/collection/cheap-shot/image.png?w=2000",
+        }),
+    }
+
+    result = drops.to_display_dict(row)
+
+    assert result["image_url"] == "https://i2c.seadn.io/collection/cheap-shot/image.png?w=2000"
+
+
+def test_to_display_dict_rejects_untrusted_image_url() -> None:
+    row = {
+        "id": 7,
+        "stage_data": json.dumps({
+            "status": "minting_now", "status_detail": None,
+            "image_url": "https://evil.example.com/tracker.png",
+        }),
+    }
+
+    result = drops.to_display_dict(row)
+
+    assert result["image_url"] is None

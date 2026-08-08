@@ -136,16 +136,38 @@
     background: linear-gradient(145deg, rgba(255,255,255,0.078) 0%, rgba(255,255,255,0.028) 55%, rgba(255,255,255,0.055) 100%);
     border: 1px solid rgba(200,208,235,0.12);
     border-radius: var(--r-sm);
-    padding: 20px;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 12px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.11), 0 4px 20px rgba(0,0,0,0.35);
     transition: border-color 0.2s, box-shadow 0.2s;
   }
   .drop-card:hover {
     border-color: rgba(200,208,235,0.22);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 34px rgba(0,0,0,0.45);
+  }
+
+  .drop-image-wrap {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: rgba(255,255,255,0.03);
+    overflow: hidden;
+  }
+  .drop-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.3s ease;
+  }
+  .drop-card:hover .drop-image { transform: scale(1.04); }
+
+  .drop-card-body {
+    padding: 16px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
   }
 
   .drop-name {
@@ -259,6 +281,16 @@ function escUrl(url) {
   return '#';
 }
 
+// Same defense-in-depth idea as escUrl, scoped to OpenSea's own image CDN.
+// Anything else (already filtered server-side, but don't rely on that
+// alone) is treated as "no image" rather than trusted into an <img src>.
+function escImgUrl(url) {
+  if (typeof url === 'string' && /^https:\/\/i2c\.seadn\.io\//.test(url)) {
+    return esc(url);
+  }
+  return null;
+}
+
 function statusLabel(status, detail) {
   if (status === 'minting_now') return 'Minting now';
   if (status === 'upcoming') return 'Starts' + (detail ? ' ' + detail : '');
@@ -278,15 +310,26 @@ function renderDrops(drops) {
 
   drops.forEach(function (drop) {
     var status = drop.status || 'not_minting';
+    var name = esc(drop.name || drop.collection_slug || 'Unknown');
+    var imageUrl = escImgUrl(drop.image_url);
+    var imageHtml = imageUrl
+      ? '<div class="drop-image-wrap"><img class="drop-image" src="' + imageUrl + '" ' +
+        'alt="' + name + '" loading="lazy" ' +
+        'onerror="this.closest(\'.drop-image-wrap\').style.display=\'none\'"></div>'
+      : '';
+
     var card = document.createElement('div');
     card.className = 'drop-card';
     card.innerHTML =
-      '<div class="drop-name">' + esc(drop.name || drop.collection_slug || 'Unknown') + '</div>' +
-      '<span class="status-badge ' + esc(status) + '"><span class="dot"></span>' +
-        esc(statusLabel(status, drop.status_detail)) +
-      '</span>' +
-      (drop.status_detail && status !== 'upcoming' ? '<div class="status-detail">' + esc(drop.status_detail) + '</div>' : '') +
-      '<a class="drop-link" href="' + escUrl(drop.mint_page_url) + '" target="_blank" rel="noopener">View on OpenSea &rarr;</a>';
+      imageHtml +
+      '<div class="drop-card-body">' +
+        '<div class="drop-name">' + name + '</div>' +
+        '<span class="status-badge ' + esc(status) + '"><span class="dot"></span>' +
+          esc(statusLabel(status, drop.status_detail)) +
+        '</span>' +
+        (drop.status_detail && status !== 'upcoming' ? '<div class="status-detail">' + esc(drop.status_detail) + '</div>' : '') +
+        '<a class="drop-link" href="' + escUrl(drop.mint_page_url) + '" target="_blank" rel="noopener">View on OpenSea &rarr;</a>' +
+      '</div>';
     grid.appendChild(card);
   });
 }

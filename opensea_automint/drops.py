@@ -89,10 +89,13 @@ def _truncate_detail(detail: str) -> str:
     return detail[:_MAX_DETAIL_LENGTH]
 
 
-def parse_drop_card(href: str, visible_text: str) -> dict:
+def parse_drop_card(href: str, visible_text: str, image_url: str | None = None) -> dict:
     """
-    Combine a scraped (href, visible_text) pair into a drop-shaped dict.
-    Raises ValueError if href doesn't start with "/collection/".
+    Combine a scraped (href, visible_text, image_url) triple into a
+    drop-shaped dict. Raises ValueError if href doesn't start with
+    "/collection/". image_url is validated to actually be an OpenSea CDN
+    URL (i2c.seadn.io) — anything else is dropped rather than trusted,
+    since it ends up as an <img src> on the dashboard.
     """
     if not href.startswith("/collection/"):
         raise ValueError(f"Expected href to start with '/collection/', got: {href!r}")
@@ -109,9 +112,30 @@ def parse_drop_card(href: str, visible_text: str) -> dict:
         "collection_slug": slug,
         "name": name,
         "mint_page_url": f"https://opensea.io{href}",
+        "image_url": _validate_image_url(image_url),
         "status": classification["status"],
         "status_detail": classification["detail"],
     }
+
+
+# Exact, anchored prefixes rather than urlparse().hostname — Python's URL
+# parser disagrees with browsers on backslash handling (e.g.
+# "https://evil.com\@i2c.seadn.io/x" parses as host="i2c.seadn.io" in
+# Python's urlparse but as host="evil.com" in a browser), which would let a
+# crafted URL slip past a hostname-equality check while a browser resolves
+# it to a different origin entirely. A literal prefix match has no such gap.
+_TRUSTED_IMAGE_URL_PREFIXES = (
+    "https://i2c.seadn.io/",
+    "https://openseauserdata.com/",
+)
+
+
+def _validate_image_url(image_url: str | None) -> str | None:
+    if not image_url:
+        return None
+    if not image_url.startswith(_TRUSTED_IMAGE_URL_PREFIXES):
+        return None
+    return image_url
 
 
 def _scroll_to_load_more(page) -> None:
@@ -131,9 +155,12 @@ def _scroll_to_load_more(page) -> None:
         logger.debug("[drops] scroll-to-load-more failed, continuing with what's loaded: %s", e)
 
 
-def _scrape_card(cards, index: int) -> tuple[str, str] | None:
-    """Read one card's (href, visible_text). Returns None on any Playwright
-    failure (timeout, detached element) — logged, not silently discarded."""
+def _scrape_card(cards, index: int) -> tuple[str, str, str | None] | None:
+    """Read one card's (href, visible_text, image_url). image_url is the
+    card's first <img> src (OpenSea's hero/banner image for the collection)
+    — best-effort, missing image doesn't fail the whole card. Returns None
+    on any Playwright failure (timeout, detached element) — logged, not
+    silently discarded."""
     try:
         card = cards.nth(index)
         href = card.get_attribute("href")
@@ -143,7 +170,16 @@ def _scrape_card(cards, index: int) -> tuple[str, str] | None:
         return None
     if not href or not text:
         return None
-    return href, text
+
+    image_url = None
+    try:
+        image_url = card.locator("img").first.get_attribute(
+            "src", timeout=_CARD_TEXT_TIMEOUT_MS
+        )
+    except Exception as e:
+        logger.debug("[drops] card %d image unreadable: %s", index, e)
+
+    return href, text, image_url
 
 
 def _scrape_all_cards(page) -> list[dict]:
@@ -158,12 +194,12 @@ def _scrape_all_cards(page) -> list[dict]:
         if scraped is None:
             skipped += 1
             continue
-        href, text = scraped
+        href, text, image_url = scraped
         if href in seen:
             continue
         seen.add(href)
         try:
-            drops.append(parse_drop_card(href, text))
+            drops.append(parse_drop_card(href, text, image_url))
         except ValueError as e:
             logger.debug("[drops] card skipped: %s", e)
             skipped += 1
@@ -215,6 +251,7 @@ def to_display_dict(drop_row: dict) -> dict:
     """
     status = ""
     status_detail = None
+    image_url = None
     stage_data = drop_row.get("stage_data")
     if stage_data:
         try:
@@ -224,11 +261,13 @@ def to_display_dict(drop_row: dict) -> dict:
         if isinstance(parsed, dict):
             status = parsed.get("status") or ""
             status_detail = parsed.get("status_detail")
+            image_url = _validate_image_url(parsed.get("image_url"))
 
     return {
         "collection_slug": drop_row.get("collection_slug"),
         "name": drop_row.get("name"),
         "mint_page_url": drop_row.get("mint_page_url"),
+        "image_url": image_url,
         "status": status,
         "status_detail": status_detail,
         "is_publicly_mintable": status == "minting_now",
@@ -258,6 +297,7 @@ def get_drops(force_refresh: bool = False) -> list[dict]:
                     stage_data=json.dumps({
                         "status": drop["status"],
                         "status_detail": drop["status_detail"],
+                        "image_url": drop.get("image_url"),
                     }),
                 ))
             _cache["drops"] = drops
