@@ -15,8 +15,13 @@ import { signerToEcdsaValidator } from "@zerodev/ecdsa-validator";
 import { createKernelAccount, addressToEmptyAccount } from "@zerodev/sdk";
 import { getEntryPoint, KERNEL_V3_1 } from "@zerodev/sdk/constants";
 
+// eth.llamarpc.com (the original default here) had a real, hours-long
+// outage in production (Cloudflare 521) — publicnode has been reliable
+// across every test run during this feature's development. Still just a
+// free public RPC; RPC_ETHEREUM_MAINNET overrides it with a paid provider
+// whenever that's set up.
 const ETH_RPC =
-  process.env.RPC_ETHEREUM_MAINNET ?? "https://eth.llamarpc.com";
+  process.env.RPC_ETHEREUM_MAINNET ?? "https://ethereum-rpc.publicnode.com";
 
 const entryPoint = getEntryPoint("0.7");
 
