@@ -10,11 +10,11 @@ a later, separate step.
 import json
 import os
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify, request, send_file
 
 from portal_upvote import security as _sec
 
-from . import collection_details, drops, store
+from . import collection_details, drops, node_client, store
 
 opensea_automint_bp = Blueprint("opensea_automint", __name__)
 
@@ -91,6 +91,69 @@ def api_collection_details(slug: str) -> Response:
 
     details = collection_details.get_collection_details(slug)
     return jsonify(details)
+
+
+_SMART_ACCOUNT_ADDRESS_RATE_LIMIT = 30
+_SMART_ACCOUNT_ADDRESS_RATE_WINDOW_SECONDS = 3600
+_SMART_ACCOUNT_ADDRESS_RATE_KEY = "smart-account-address"
+
+
+@opensea_automint_bp.route("/api/opensea/eth/smart-account-address")
+def api_smart_account_address() -> Response:
+    """Given ?owner=0x..., returns {"ownerAddress": ..., "smartAccountAddress": ...}.
+
+    Derivation is deterministic (same owner always yields the same smart
+    account address), so store.get_smart_account is checked FIRST — a cache
+    hit never needs to be recomputed and never touches the rate limiter
+    below, which only ever gates genuinely NEW owners.
+
+    On a cache miss: rate-limited per-IP (this triggers a real outbound RPC
+    call chain through the Node helper), then calls
+    node_client.get_smart_account_address, persists the result via
+    store.upsert_smart_account, and returns it.
+    """
+    owner = request.args.get("owner", "")
+    if not _sec.ETH_ADDR_RE.match(owner):
+        return jsonify({"error": "Invalid owner address"}), 400
+    owner = owner.lower()  # keep the response shape identical on cache hit vs. miss
+
+    cached = store.get_smart_account(owner)
+    if cached:
+        return jsonify({
+            "ownerAddress": cached["owner_address"],
+            "smartAccountAddress": cached["smart_account_address"],
+        })
+
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _SMART_ACCOUNT_ADDRESS_RATE_KEY,
+        limit=_SMART_ACCOUNT_ADDRESS_RATE_LIMIT,
+        window=_SMART_ACCOUNT_ADDRESS_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    try:
+        smart_account_address = node_client.get_smart_account_address(owner)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+
+    store.upsert_smart_account(owner, smart_account_address)
+    return jsonify({"ownerAddress": owner, "smartAccountAddress": smart_account_address})
+
+
+@opensea_automint_bp.route("/opensea-automint/eth-connect.bundle.js")
+def eth_connect_bundle() -> Response:
+    """Serve the pre-built Ethereum wallet-connect React bundle (built by
+    wallet-helper/connect-src's build.mjs) — mirrors agent.py's existing
+    /portal-upvote/connect.bundle.js route for the AGW bundle."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bundle_path = os.path.join(repo_root, "wallet-helper", "dist", "eth-connect.bundle.js")
+    if not os.path.exists(bundle_path):
+        return Response(
+            "/* eth-connect bundle not built */", status=404,
+            mimetype="application/javascript",
+        )
+    return send_file(bundle_path, mimetype="application/javascript", max_age=0)
 
 
 @opensea_automint_bp.route("/opensea-automint")

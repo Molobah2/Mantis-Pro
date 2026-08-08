@@ -2,7 +2,7 @@ import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
-from opensea_automint import collection_details, drops, store
+from opensea_automint import collection_details, drops, node_client, store
 from opensea_automint.routes import opensea_automint_bp
 from portal_upvote import security as _sec
 
@@ -266,5 +266,115 @@ def test_api_collection_details_rate_limits_after_threshold(
     last_resp = None
     for _ in range(31):
         last_resp = client.get("/api/opensea/collection/cheap-shot")
+
+    assert last_resp.status_code == 429
+
+
+# ── GET /api/opensea/eth/smart-account-address ───────────────────────────
+
+OWNER = "0x" + "a1" * 20
+SMART_ACCOUNT = "0x" + "b2" * 20
+
+
+def test_smart_account_address_rejects_missing_owner_with_400(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        node_client, "get_smart_account_address", lambda owner: calls.append(owner) or SMART_ACCOUNT
+    )
+
+    resp = client.get("/api/opensea/eth/smart-account-address")
+
+    assert resp.status_code == 400
+    assert calls == []
+
+
+def test_smart_account_address_rejects_invalid_owner_with_400(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        node_client, "get_smart_account_address", lambda owner: calls.append(owner) or SMART_ACCOUNT
+    )
+
+    resp = client.get("/api/opensea/eth/smart-account-address?owner=not-an-address")
+
+    assert resp.status_code == 400
+    assert calls == []
+
+
+def test_smart_account_address_returns_cached_row_without_calling_node(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        store, "get_smart_account",
+        lambda owner: {"owner_address": owner, "smart_account_address": SMART_ACCOUNT, "created_at": 1000.0},
+    )
+    calls = []
+    monkeypatch.setattr(
+        node_client, "get_smart_account_address", lambda owner: calls.append(owner) or SMART_ACCOUNT
+    )
+
+    resp = client.get(f"/api/opensea/eth/smart-account-address?owner={OWNER}")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body == {"ownerAddress": OWNER, "smartAccountAddress": SMART_ACCOUNT}
+    assert calls == []
+
+
+def test_smart_account_address_derives_and_persists_on_cache_miss(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(store, "get_smart_account", lambda owner: None)
+    monkeypatch.setattr(node_client, "get_smart_account_address", lambda owner: SMART_ACCOUNT)
+    upsert_calls = []
+    monkeypatch.setattr(
+        store, "upsert_smart_account",
+        lambda owner, smart_account_address: upsert_calls.append((owner, smart_account_address)),
+    )
+
+    resp = client.get(f"/api/opensea/eth/smart-account-address?owner={OWNER}")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body == {"ownerAddress": OWNER, "smartAccountAddress": SMART_ACCOUNT}
+    assert upsert_calls == [(OWNER, SMART_ACCOUNT)]
+
+
+def test_smart_account_address_returns_502_on_node_client_runtime_error(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(store, "get_smart_account", lambda owner: None)
+
+    def fake_derive(owner: str) -> str:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(node_client, "get_smart_account_address", fake_derive)
+    upsert_calls = []
+    monkeypatch.setattr(
+        store, "upsert_smart_account",
+        lambda owner, smart_account_address: upsert_calls.append((owner, smart_account_address)),
+    )
+
+    resp = client.get(f"/api/opensea/eth/smart-account-address?owner={OWNER}")
+
+    assert resp.status_code == 502
+    body = resp.get_json()
+    assert "boom" in body["error"]
+    assert upsert_calls == []
+
+
+def test_smart_account_address_rate_limits_cache_miss_requests(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(store, "get_smart_account", lambda owner: None)
+    monkeypatch.setattr(node_client, "get_smart_account_address", lambda owner: SMART_ACCOUNT)
+    monkeypatch.setattr(store, "upsert_smart_account", lambda owner, smart_account_address: None)
+
+    last_resp = None
+    for _ in range(31):
+        last_resp = client.get(f"/api/opensea/eth/smart-account-address?owner={OWNER}")
 
     assert last_resp.status_code == 429

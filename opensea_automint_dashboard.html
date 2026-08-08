@@ -122,7 +122,20 @@
     font-weight: 400;
     color: var(--t2);
     letter-spacing: 0.01em;
+    margin-bottom: 28px;
+  }
+
+  .connect-section {
+    max-width: 340px;
     margin-bottom: 40px;
+  }
+  .connect-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--t3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
   }
 
   /* ── DROP GRID ── */
@@ -353,6 +366,11 @@
   <div class="hero-eyebrow">OpenSea Auto-Mint</div>
   <div class="hero-title">Tracked Drops</div>
   <div class="hero-subtitle">Public mint status &middot; opensea.io/drops</div>
+
+  <div class="connect-section">
+    <div class="connect-label">Wallet (Ethereum mainnet)</div>
+    <div id="eth-connect-root"></div>
+  </div>
 
   <div id="loading-msg" class="state-msg">Loading drops…</div>
   <div id="error-msg" class="state-msg hidden"></div>
@@ -615,6 +633,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
   loadDrops();
 });
+
+window._onEthConnected = function (ownerAddress, smartAccountAddress) {
+  console.log('[eth-connect] connected', ownerAddress, '-> smart account', smartAccountAddress);
+};
+window._onEthConnectProgress = function (text) {
+  console.log('[eth-connect]', text);
+};
+window._onEthConnectError = function (msg) {
+  console.error('[eth-connect]', msg);
+};
 </script>
+<script src="/opensea-automint/eth-connect.bundle.js"></script>
 </body>
 </html>
