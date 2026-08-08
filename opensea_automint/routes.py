@@ -13,8 +13,9 @@ import os
 from flask import Blueprint, Response, jsonify, request, send_file
 
 from portal_upvote import security as _sec
+from wallet_crypto import encrypt_secret
 
-from . import collection_details, drops, node_client, store
+from . import collection_details, drops, node_client, security, store
 
 opensea_automint_bp = Blueprint("opensea_automint", __name__)
 
@@ -139,6 +140,90 @@ def api_smart_account_address() -> Response:
 
     store.upsert_smart_account(owner, smart_account_address)
     return jsonify({"ownerAddress": owner, "smartAccountAddress": smart_account_address})
+
+
+_SESSION_GRANT_RATE_LIMIT = 10
+_SESSION_GRANT_RATE_WINDOW_SECONDS = 3600
+_SESSION_GRANT_RATE_KEY = "session-grant"
+
+
+@opensea_automint_bp.route("/api/opensea/session-grant", methods=["POST"])
+def api_session_grant() -> Response:
+    """Stores a browser-approved, already-scoped session-key permission.
+    The backend never sees an unscoped private key — only this already-
+    approved, already-encrypted-on-arrival blob. Rate-limited per IP (this
+    writes to the DB and does real encryption work, and each grant is a
+    real cryptographic commitment even though nothing can fire yet)."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _SESSION_GRANT_RATE_KEY,
+        limit=_SESSION_GRANT_RATE_LIMIT,
+        window=_SESSION_GRANT_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    # silent=True avoids a raw Werkzeug 400 for a malformed/missing body
+    # before our own validation (with its clearer error message) runs.
+    body = request.get_json(silent=True) or {}
+
+    validation_error = security.validate_session_grant_input(body)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    owner_address = body["ownerAddress"].lower()
+    smart_account_address = body["smartAccountAddress"].lower()
+
+    # Cross-checks that the serializedApproval blob genuinely resolves to
+    # the claimed owner/smart-account addresses, via the Node helper
+    # (deserializes the blob against the real chain). Format validation
+    # above only proves the JSON is well-shaped — it can't catch a client
+    # POSTing a real, validly-signed approval for their OWN wallet labeled
+    # with someone ELSE's address. See node_client.verify_session_grant's
+    # docstring and wallet-helper/src/opensea/zerodevClient.ts's
+    # verifySessionGrantOwnership for why this closes that gap.
+    try:
+        verified, verify_error = node_client.verify_session_grant(
+            body["serializedApproval"], owner_address, smart_account_address
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    if not verified:
+        return jsonify({"error": verify_error or "Session grant verification failed"}), 400
+
+    permission_config = json.dumps({
+        "functionName": body["functionName"],
+        "maxQuantity": body["maxQuantity"],
+    })
+    allowed_targets = json.dumps(body["targets"])
+
+    try:
+        encrypted_session_key = encrypt_secret(body["serializedApproval"])
+    except ValueError:
+        # encrypt_secret's ValueError is raised when SESSION_KEY_ENCRYPTION_KEY
+        # is unset/malformed in this environment — an operator misconfiguration,
+        # not something to leak details about to the caller.
+        return jsonify({"error": "Session grant storage is temporarily unavailable"}), 500
+
+    # Only one grant is meant to be "active" per owner at a time (see
+    # store.get_active_session_grant) — revoke any prior ones at WRITE time
+    # rather than relying solely on "newest row wins" at read time, so a
+    # bulk/admin/reconciliation query can't mistake a superseded grant for
+    # a live one.
+    prior = store.get_active_session_grant(owner_address)
+    if prior:
+        store.revoke_session_grant(prior["id"])
+
+    grant_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address=owner_address,
+        smart_account_address=smart_account_address,
+        encrypted_session_key=encrypted_session_key,
+        permission_config=permission_config,
+        allowed_targets=allowed_targets,
+        value_cap_wei=str(int(body["valueCapWei"])),
+        expires_at=float(body["expiresAt"]),
+    ))
+
+    return jsonify({"grantId": grant_id}), 200
 
 
 @opensea_automint_bp.route("/opensea-automint/eth-connect.bundle.js")

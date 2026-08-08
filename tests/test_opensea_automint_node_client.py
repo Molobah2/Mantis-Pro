@@ -102,3 +102,85 @@ def test_get_smart_account_address_raises_runtime_error_on_non_dict_json(
 
     with pytest.raises(RuntimeError, match="unexpected response shape"):
         node_client.get_smart_account_address(OWNER)
+
+
+# ── verify_session_grant ─────────────────────────────────────────────────
+
+SERIALIZED_APPROVAL = "a" * 3300
+
+
+def test_verify_session_grant_returns_true_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        calls.append((url, json, timeout))
+        return _FakeResponse(200, {"valid": True})
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    valid, reason = node_client.verify_session_grant(SERIALIZED_APPROVAL, OWNER, SMART_ACCOUNT)
+
+    assert valid is True
+    assert reason is None
+    assert len(calls) == 1
+    url, body, _timeout = calls[0]
+    assert url.endswith("/eth/verify-session-grant")
+    assert body == {
+        "serializedApproval": SERIALIZED_APPROVAL,
+        "ownerAddress": OWNER,
+        "smartAccountAddress": SMART_ACCOUNT,
+    }
+
+
+def test_verify_session_grant_returns_false_with_reason_on_legitimate_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        return _FakeResponse(
+            400, {"error": "Approval does not resolve to the claimed smart account address"}
+        )
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    valid, reason = node_client.verify_session_grant(SERIALIZED_APPROVAL, OWNER, SMART_ACCOUNT)
+
+    assert valid is False
+    assert reason == "Approval does not resolve to the claimed smart account address"
+
+
+def test_verify_session_grant_raises_runtime_error_on_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        return _FakeResponse(500, {"error": "internal failure"})
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="internal failure"):
+        node_client.verify_session_grant(SERIALIZED_APPROVAL, OWNER, SMART_ACCOUNT)
+
+
+def test_verify_session_grant_raises_runtime_error_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int):
+        raise node_client._req.exceptions.ConnectionError()
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="Node wallet-helper is not running on port 3456"):
+        node_client.verify_session_grant(SERIALIZED_APPROVAL, OWNER, SMART_ACCOUNT)
+
+
+def test_verify_session_grant_raises_runtime_error_on_non_dict_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        return _FakeResponse(200, ["unexpected"])  # type: ignore[arg-type]
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="unexpected response shape"):
+        node_client.verify_session_grant(SERIALIZED_APPROVAL, OWNER, SMART_ACCOUNT)

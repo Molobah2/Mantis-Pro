@@ -14,6 +14,7 @@ import { mainnet } from "viem/chains";
 import { signerToEcdsaValidator } from "@zerodev/ecdsa-validator";
 import { createKernelAccount, addressToEmptyAccount } from "@zerodev/sdk";
 import { getEntryPoint, KERNEL_V3_1 } from "@zerodev/sdk/constants";
+import { deserializePermissionAccount } from "@zerodev/permissions";
 
 // eth.llamarpc.com (the original default here) had a real, hours-long
 // outage in production (Cloudflare 521) — publicnode has been reliable
@@ -55,4 +56,59 @@ export async function deriveSmartAccountAddress(
   });
 
   return account.address;
+}
+
+/**
+ * Verifies a browser-produced serialized session-key approval actually
+ * corresponds to the claimed owner/smart-account addresses BEFORE the
+ * backend ever persists it.
+ *
+ * Why this matters: serializePermissionAccount() requires the sudo signer
+ * to actually be able to sign (confirmed empirically — an address-only
+ * signer throws "Method not supported" if you try), so an attacker cannot
+ * forge a working approval for an address they don't control the private
+ * key for. But nothing stops a client from POSTing a genuinely-valid
+ * approval alongside FALSE ownerAddress/smartAccountAddress metadata
+ * fields — e.g. their own real approval, relabeled as someone else's. This
+ * closes that gap: deserializing the blob and checking its real resolved
+ * address against BOTH the claimed smartAccountAddress AND the
+ * independently-recomputed deterministic address for the claimed
+ * ownerAddress is only satisfiable if the approval was genuinely produced
+ * by that owner's real wallet.
+ */
+export async function verifySessionGrantOwnership(
+  serializedApproval: string,
+  claimedOwnerAddress: Address,
+  claimedSmartAccountAddress: Address
+): Promise<{ valid: boolean; error?: string }> {
+  let reconstructedAddress: Address;
+  try {
+    const reconstructed = await deserializePermissionAccount(
+      publicClient,
+      entryPoint,
+      KERNEL_V3_1,
+      serializedApproval
+    );
+    reconstructedAddress = reconstructed.address;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { valid: false, error: `Could not deserialize approval: ${msg}` };
+  }
+
+  if (reconstructedAddress.toLowerCase() !== claimedSmartAccountAddress.toLowerCase()) {
+    return {
+      valid: false,
+      error: "Approval does not resolve to the claimed smart account address",
+    };
+  }
+
+  const expectedAddress = await deriveSmartAccountAddress(claimedOwnerAddress);
+  if (expectedAddress.toLowerCase() !== claimedSmartAccountAddress.toLowerCase()) {
+    return {
+      valid: false,
+      error: "Claimed smart account address does not match the claimed owner address",
+    };
+  }
+
+  return { valid: true };
 }

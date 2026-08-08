@@ -1,8 +1,11 @@
+import json
+import time
+
 import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
-from opensea_automint import collection_details, drops, node_client, store
+from opensea_automint import collection_details, drops, node_client, routes, store
 from opensea_automint.routes import opensea_automint_bp
 from portal_upvote import security as _sec
 
@@ -378,3 +381,223 @@ def test_smart_account_address_rate_limits_cache_miss_requests(
         last_resp = client.get(f"/api/opensea/eth/smart-account-address?owner={OWNER}")
 
     assert last_resp.status_code == 429
+
+
+# ── POST /api/opensea/session-grant ──────────────────────────────────────
+
+GRANT_OWNER = "0x" + "a1" * 20
+GRANT_SMART_ACCOUNT = "0x" + "b2" * 20
+GRANT_TARGET_1 = "0x" + "d4" * 20
+GRANT_TARGET_2 = "0x" + "c3" * 20
+
+
+def _valid_grant_payload() -> dict:
+    return {
+        "ownerAddress": GRANT_OWNER,
+        "smartAccountAddress": GRANT_SMART_ACCOUNT,
+        "serializedApproval": "a" * 3300,
+        "targets": [GRANT_TARGET_1, GRANT_TARGET_2],
+        "functionName": "mintPublic",
+        "maxQuantity": 3,
+        "valueCapWei": "50000000000000000",
+        "expiresAt": time.time() + 3600,
+    }
+
+
+def _mock_verify_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(node_client, "verify_session_grant", lambda *a, **k: (True, None))
+
+
+def _mock_no_prior_grant(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(store, "get_active_session_grant", lambda owner: None)
+
+
+def test_session_grant_valid_payload_returns_200_and_calls_insert_with_encrypted_key(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = []
+
+    def fake_insert(grant: store.SessionGrantInput) -> int:
+        captured.append(grant)
+        return 42
+
+    _mock_verify_success(monkeypatch)
+    _mock_no_prior_grant(monkeypatch)
+    monkeypatch.setattr(store, "insert_session_grant", fake_insert)
+    monkeypatch.setattr(routes, "encrypt_secret", lambda plaintext: f"encrypted:{plaintext}")
+
+    payload = _valid_grant_payload()
+    resp = client.post("/api/opensea/session-grant", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body == {"grantId": 42}
+
+    assert len(captured) == 1
+    grant = captured[0]
+    assert grant.owner_address == GRANT_OWNER.lower()
+    assert grant.smart_account_address == GRANT_SMART_ACCOUNT.lower()
+    assert grant.encrypted_session_key != payload["serializedApproval"]
+    assert grant.encrypted_session_key == f"encrypted:{payload['serializedApproval']}"
+
+    parsed_targets = json.loads(grant.allowed_targets)
+    assert parsed_targets == [GRANT_TARGET_1, GRANT_TARGET_2]
+
+    parsed_config = json.loads(grant.permission_config)
+    assert parsed_config == {"functionName": "mintPublic", "maxQuantity": 3}
+
+    assert grant.value_cap_wei == "50000000000000000"
+
+
+def test_session_grant_smart_account_address_is_lowercased_consistently(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = []
+    _mock_verify_success(monkeypatch)
+    _mock_no_prior_grant(monkeypatch)
+    monkeypatch.setattr(
+        store, "insert_session_grant", lambda grant: captured.append(grant) or 1
+    )
+    monkeypatch.setattr(routes, "encrypt_secret", lambda plaintext: "encrypted")
+
+    payload = _valid_grant_payload()
+    payload["smartAccountAddress"] = "0x" + "B2" * 20  # mixed/upper-case on the wire
+
+    resp = client.post("/api/opensea/session-grant", json=payload)
+
+    assert resp.status_code == 200
+    assert captured[0].smart_account_address == ("0x" + "b2" * 20)
+
+
+def test_session_grant_invalid_payload_returns_400_and_never_calls_insert(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        store, "insert_session_grant", lambda grant: calls.append(grant) or 1
+    )
+
+    payload = _valid_grant_payload()
+    payload["ownerAddress"] = "not-an-address"
+
+    resp = client.post("/api/opensea/session-grant", json=payload)
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+    assert calls == []
+
+
+def test_session_grant_ownership_verification_failure_returns_400_and_never_calls_insert(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The blob is well-formed but doesn't actually resolve to the claimed
+    owner/smart-account addresses (e.g. a spoofed claim) — must be rejected
+    before ever touching encryption or the DB."""
+    monkeypatch.setattr(
+        node_client, "verify_session_grant",
+        lambda *a, **k: (False, "Approval does not resolve to the claimed smart account address"),
+    )
+    calls = []
+    monkeypatch.setattr(
+        store, "insert_session_grant", lambda grant: calls.append(grant) or 1
+    )
+
+    resp = client.post("/api/opensea/session-grant", json=_valid_grant_payload())
+
+    assert resp.status_code == 400
+    assert "resolve" in resp.get_json()["error"]
+    assert calls == []
+
+
+def test_session_grant_node_helper_failure_during_verification_returns_502(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def raise_runtime_error(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+
+    monkeypatch.setattr(node_client, "verify_session_grant", raise_runtime_error)
+    calls = []
+    monkeypatch.setattr(
+        store, "insert_session_grant", lambda grant: calls.append(grant) or 1
+    )
+
+    resp = client.post("/api/opensea/session-grant", json=_valid_grant_payload())
+
+    assert resp.status_code == 502
+    assert "error" in resp.get_json()
+    assert calls == []
+
+
+def test_session_grant_revokes_prior_active_grant_for_same_owner(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_verify_success(monkeypatch)
+    monkeypatch.setattr(routes, "encrypt_secret", lambda plaintext: "encrypted")
+    monkeypatch.setattr(store, "insert_session_grant", lambda grant: 99)
+
+    monkeypatch.setattr(
+        store, "get_active_session_grant", lambda owner: {"id": 7, "owner_address": owner}
+    )
+    revoked_ids = []
+    monkeypatch.setattr(
+        store, "revoke_session_grant", lambda grant_id: revoked_ids.append(grant_id)
+    )
+
+    resp = client.post("/api/opensea/session-grant", json=_valid_grant_payload())
+
+    assert resp.status_code == 200
+    assert revoked_ids == [7]
+
+
+def test_session_grant_rate_limits_after_threshold(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_verify_success(monkeypatch)
+    _mock_no_prior_grant(monkeypatch)
+    monkeypatch.setattr(store, "insert_session_grant", lambda grant: 1)
+    monkeypatch.setattr(routes, "encrypt_secret", lambda plaintext: "encrypted")
+
+    last_resp = None
+    for _ in range(11):
+        last_resp = client.post("/api/opensea/session-grant", json=_valid_grant_payload())
+
+    assert last_resp.status_code == 429
+
+
+def test_session_grant_malformed_json_body_returns_400_not_500(client) -> None:
+    resp = client.post(
+        "/api/opensea/session-grant",
+        data="not-valid-json{{{",
+        content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_session_grant_missing_body_returns_400_not_500(client) -> None:
+    resp = client.post("/api/opensea/session-grant")
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_session_grant_encrypt_secret_value_error_returns_500(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_encrypt(plaintext: str) -> str:
+        raise ValueError("SESSION_KEY_ENCRYPTION_KEY not set or invalid (need 64-char hex)")
+
+    _mock_verify_success(monkeypatch)
+    _mock_no_prior_grant(monkeypatch)
+    monkeypatch.setattr(routes, "encrypt_secret", fake_encrypt)
+    calls = []
+    monkeypatch.setattr(
+        store, "insert_session_grant", lambda grant: calls.append(grant) or 1
+    )
+
+    resp = client.post("/api/opensea/session-grant", json=_valid_grant_payload())
+
+    assert resp.status_code == 500
+    assert "error" in resp.get_json()
+    assert calls == []
