@@ -89,6 +89,25 @@ def _validate_signature(signature: object) -> Optional[str]:
     return None
 
 
+_MAX_STAGE_LABEL_LENGTH = 200
+
+
+def _validate_stage_label(stage_label: object) -> Optional[str]:
+    # Absent/empty means "the public stage" (the default, pre-existing
+    # behavior) — always valid. Anything else must be a plausible scraped
+    # stage name (see collection_details._MAX_SCHEDULE_FIELD_LENGTH, which
+    # this mirrors) — the real check (does this name match a real stage on
+    # this drop) happens in firing._resolve_signed_presale_stage, which
+    # needs a live OpenSea fetch this module deliberately never makes.
+    if stage_label is None or stage_label == "":
+        return None
+    if not isinstance(stage_label, str):
+        return "stageLabel must be a string"
+    if len(stage_label) > _MAX_STAGE_LABEL_LENGTH:
+        return "stageLabel is too long"
+    return None
+
+
 def _validate_timestamp(timestamp: object) -> Optional[str]:
     # bool is a subclass of int here too — same trap as maxQuantity/expiresAt.
     if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
@@ -184,6 +203,10 @@ def validate_arm_input(body: dict) -> Optional[str]:
     max_price_error = _validate_value_cap_wei(body.get("maxPriceWei"))
     if max_price_error:
         return max_price_error.replace("valueCapWei", "maxPriceWei")
+
+    stage_label_error = _validate_stage_label(body.get("stageLabel"))
+    if stage_label_error:
+        return stage_label_error
 
     signature_error = _validate_signature(body.get("signature"))
     if signature_error:

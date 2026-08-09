@@ -183,3 +183,63 @@ def fire_mint(
         raise RuntimeError(error_msg)
 
     return result
+
+
+def fire_signed_mint(
+    session_private_key: str,
+    nft_contract_address: str,
+    quantity: int,
+    value_cap_wei: str,
+    mint_params: dict,
+    salt: str,
+    signature: str,
+) -> dict:
+    """POST to the Node wallet-helper's /eth/fire-signed-mint route — the
+    allowlist/presale counterpart to fire_mint, for SeaDrop's mintSigned().
+
+    mint_params/salt/signature must come from opensea_session.
+    fetch_signed_mint_authorization, fetched fresh immediately before this
+    call — never fabricated, guessed, or reused from a prior attempt. Per
+    SeaDrop's own docs a signature is single-use; mint_params must be the
+    EXACT values the signer signed over, or the on-chain signature
+    recovery fails and the transaction reverts (a safe, definite failure —
+    see ethClient.ts's fireSignedMint docstring).
+
+    mint_params must have exactly these keys (all numeric-string except
+    restrictFeeRecipients): mintPrice, maxTotalMintableByWallet, startTime,
+    endTime, dropStageIndex, maxTokenSupplyForStage, feeBps,
+    restrictFeeRecipients (bool).
+
+    Same result shape / RuntimeError resilience as fire_mint.
+    """
+    payload = {
+        "sessionPrivateKey": session_private_key,
+        "nftContract": nft_contract_address,
+        "quantity": quantity,
+        "valueCapWei": value_cap_wei,
+        "mintParams": mint_params,
+        "salt": salt,
+        "signature": signature,
+    }
+
+    try:
+        r = _req.post(f"{_cfg.NODE_HELPER_URL}/eth/fire-signed-mint", json=payload, timeout=90)
+    except _req.exceptions.ConnectionError:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+    except _req.exceptions.Timeout:
+        raise RuntimeError("Node wallet-helper timed out")
+
+    try:
+        result = r.json()
+    except ValueError:
+        raise RuntimeError(f"Node helper returned a non-JSON response (HTTP {r.status_code})")
+
+    if not isinstance(result, dict):
+        raise RuntimeError("Node helper returned an unexpected response shape")
+
+    if r.status_code != 200:
+        error_msg = result.get("error", f"HTTP {r.status_code}")
+        logger.warning("[node_client] fire-signed-mint request-level failure: %s", error_msg)
+        raise RuntimeError(error_msg)
+
+    return result

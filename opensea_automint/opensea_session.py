@@ -1,0 +1,176 @@
+"""
+Server-side replay of the connected owner's authenticated OpenSea browser
+session — the only way to obtain a SeaDrop mintSigned() authorization
+(mintParams + salt + signature) for an allowlist/presale stage. OpenSea's
+own backend generates that signature per-wallet, on demand, inside an
+undocumented internal GraphQL API (gql.opensea.io) that only responds to
+an authenticated, eligible session — there is no public API for this (see
+RESEARCH_NOTES.md).
+
+The session is a captured `Cookie` header value from a real, already-
+logged-in opensea.io browser tab, stored as the OPENSEA_SESSION_COOKIE
+Railway env var — mirrors this project's existing UPVOTE_SESSION_B64
+pattern (portal_upvote/node_client.py) for the same kind of problem
+(replaying a captured third-party auth session server-side). Verified
+empirically (2026-08-09): a plain server-side HTTP replay of a real
+captured cookie against gql.opensea.io works cleanly with no browser
+fingerprint or Cloudflare challenge required.
+
+This is inherently fragile: it replays another site's undocumented,
+unversioned internal API using a session that WILL eventually expire or
+get invalidated (logout, password change, OpenSea rotating auth/cookies).
+There is no SLA here, and no automatic refresh — a stale session just
+means signed-mint stages become unfireable until re-captured. Every
+function in this module fails soft (returns None) on any unexpected
+response shape or failure; nothing here ever raises into the firing
+pipeline — a signed-presale stage that can't get its authorization is a
+normal, expected outcome (not yet live, session expired, not eligible),
+not a bug.
+"""
+import json
+import logging
+import os
+
+import requests as _req
+
+logger = logging.getLogger(__name__)
+
+_GRAPHQL_URL = "https://gql.opensea.io/graphql"
+
+# Mirrors a real Chrome request as closely as practical — captured
+# 2026-08-09 from a live, working request. x-app-id is OpenSea's own
+# static frontend identifier, not a secret or a computed signature.
+_BASE_HEADERS = {
+    "accept": "application/graphql-response+json, application/graphql+json, "
+              "application/json, text/event-stream, multipart/mixed",
+    "accept-language": "en-US,en;q=0.9",
+    "origin": "https://opensea.io",
+    "referer": "https://opensea.io/",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "x-app-id": "os2-web",
+    "x-graphql-operation-type": "query",
+}
+
+_REQUEST_TIMEOUT_SECONDS = 10
+
+
+def _session_cookie() -> str:
+    return os.getenv("OPENSEA_SESSION_COOKIE", "").strip()
+
+
+def is_configured() -> bool:
+    """Whether a captured OpenSea session is available at all. Callers
+    (firing.py) should check this before attempting a signed-mint stage
+    and treat "not configured" as a normal, expected reason that stage
+    isn't fireable — not an error."""
+    return bool(_session_cookie())
+
+
+def _persisted_query_get(operation_name: str, variables: dict, sha256_hash: str) -> dict | None:
+    """One persisted-query GET against OpenSea's GraphQL API, replaying
+    the captured session cookie. Returns the parsed top-level 'data'
+    object on success, or None on ANY failure (network error, non-200,
+    malformed JSON, GraphQL 'errors' in the body, no session configured,
+    session expired/rejected). Every failure mode is treated identically
+    by callers: "couldn't get this on this attempt" — never raises."""
+    cookie = _session_cookie()
+    if not cookie:
+        return None
+
+    params = {
+        "operationName": operation_name,
+        "variables": json.dumps(variables, separators=(",", ":")),
+        "extensions": json.dumps(
+            {"persistedQuery": {"sha256Hash": sha256_hash, "version": 1}},
+            separators=(",", ":"),
+        ),
+    }
+    headers = dict(_BASE_HEADERS)
+    headers["cookie"] = cookie
+
+    try:
+        r = _req.get(_GRAPHQL_URL, params=params, headers=headers, timeout=_REQUEST_TIMEOUT_SECONDS)
+    except _req.exceptions.RequestException as e:
+        logger.warning("[opensea_session] %s request failed: %s", operation_name, e)
+        return None
+
+    if r.status_code != 200:
+        logger.warning(
+            "[opensea_session] %s returned HTTP %d — session may be expired/invalid",
+            operation_name, r.status_code,
+        )
+        return None
+
+    try:
+        body = r.json()
+    except ValueError:
+        logger.warning("[opensea_session] %s returned a non-JSON response", operation_name)
+        return None
+
+    if not isinstance(body, dict):
+        logger.warning("[opensea_session] %s returned an unexpected response shape", operation_name)
+        return None
+
+    if body.get("errors"):
+        logger.warning("[opensea_session] %s returned GraphQL errors: %s", operation_name, body["errors"])
+        return None
+
+    return body.get("data")
+
+
+# Captured 2026-08-09 from a live request against opensea.io/collection/
+# gobbozhq/overview — persisted-query hashes are stable per query TEXT
+# (not per session/user), so this is safe to hardcode and reuse for any
+# collection/wallet.
+_DROP_ELIGIBILITY_SHA256 = "e1b54354df0d26d39c6b81429bd5e5d37749eaa4bdc027f987128f8c1e7d2308"
+
+
+def fetch_drop_eligibility(collection_slug: str, owner_address: str) -> list[dict] | None:
+    """Replays OpenSea's DropEligibilityQuery for one wallet + collection.
+    Returns the raw 'stages' list — each entry has stageType ('PUBLIC_SALE'
+    or 'SIGNED_PRESALE' seen so far), stageIndex, isEligible,
+    eligibleMaxTotalMintableByWallet, eligiblePrice — or None on failure.
+
+    This does NOT include a signature/salt — see
+    fetch_signed_mint_authorization for the actual mint authorization,
+    which is a separate, not-yet-captured request."""
+    data = _persisted_query_get(
+        "DropEligibilityQuery",
+        {"address": owner_address.lower(), "collectionSlug": collection_slug},
+        _DROP_ELIGIBILITY_SHA256,
+    )
+    if not data:
+        return None
+    drop = data.get("dropBySlug")
+    if not isinstance(drop, dict):
+        return None
+    stages = drop.get("stages")
+    return stages if isinstance(stages, list) else None
+
+
+def fetch_signed_mint_authorization(
+    collection_slug: str, owner_address: str, stage_index: int
+) -> dict | None:
+    """NOT YET WIRED. The actual GraphQL operation (name/variables/
+    persisted-query hash) that returns a fireable {mintParams, salt,
+    signature} for a SIGNED_PRESALE stage hasn't been captured yet —
+    OpenSea only reveals it once a stage is actually live and a connected,
+    eligible wallet starts the mint flow client-side (see
+    RESEARCH_NOTES.md). fetch_drop_eligibility (above) only confirms
+    eligibility; it does not carry a signature.
+
+    Always returns None until this is filled in with the real captured
+    request — firing.py treats that identically to "not available this
+    attempt" and fails the arm request with a clear reason, never firing
+    blind. Expected return shape once implemented: {"mintPrice": str,
+    "maxTotalMintableByWallet": str, "startTime": str, "endTime": str,
+    "dropStageIndex": str, "maxTokenSupplyForStage": str, "feeBps": str,
+    "restrictFeeRecipients": bool, "salt": str, "signature": "0x..."}.
+    """
+    logger.warning(
+        "[opensea_session] fetch_signed_mint_authorization not yet implemented "
+        "(collection=%s owner=%s stage=%d) — signed-mint stages cannot fire yet",
+        collection_slug, owner_address, stage_index,
+    )
+    return None

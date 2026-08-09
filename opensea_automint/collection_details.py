@@ -32,11 +32,13 @@ REST API almost always supplies the description first anyway (this fallback
 rarely executes in practice); flagged here rather than silently left
 misdocumented.
 """
+import calendar
 import logging
 import os
 import re
 import threading
 import time
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import requests as _req
@@ -176,8 +178,58 @@ def _extract_links(page) -> dict:
 _SCHEDULE_START_RE = re.compile(r"^Starts:\s*(.+)$")
 _SCHEDULE_END_RE = re.compile(r"^Ends:\s*(.+)$")
 
+_MONTH_NAMES = {name: i for i, name in enumerate(calendar.month_name) if name}
 
-def _parse_schedule_stage(text: str) -> dict | None:
+# e.g. "August 10 at 3:00 PM GMT" — every scraped schedule timestamp seen
+# live so far uses this exact shape (see drops.py's _FUTURE_DATE_RE, the
+# same pattern noticed there).
+_SCHEDULE_DATETIME_RE = re.compile(
+    r"^([A-Z][a-z]+)\s+(\d{1,2})\s+at\s+(\d{1,2}):(\d{2})\s*([AP]M)\s+GMT$"
+)
+
+
+def _parse_schedule_datetime_to_epoch(text: str | None, now: float | None = None) -> float | None:
+    """Parses a scraped schedule timestamp like "August 10 at 3:00 PM GMT"
+    into a Unix epoch (GMT == UTC for this purpose) — used as the go-live
+    reference for a signed-presale stage's countdown thread, since (unlike
+    the public stage's getPublicDrop) there is no on-chain getter for a
+    presale stage's timing.
+
+    The scraped text never includes a year, so one is inferred: assume the
+    current year, but roll forward to next year if that would put the date
+    more than ~30 days in the past (handles being scraped right at a
+    Dec/Jan boundary, when a stage dated e.g. "January 5" scraped in late
+    December means next year, not this one).
+
+    Returns None if the text doesn't match the expected shape — this is
+    scraped third-party markup, never guessed at."""
+    if not text:
+        return None
+    match = _SCHEDULE_DATETIME_RE.match(text.strip())
+    if not match:
+        return None
+    month_name, day_str, hour_str, minute_str, meridiem = match.groups()
+    month = _MONTH_NAMES.get(month_name)
+    if not month:
+        return None
+    hour = int(hour_str) % 12
+    if meridiem.upper() == "PM":
+        hour += 12
+
+    now_dt = datetime.fromtimestamp(now if now is not None else time.time(), tz=timezone.utc)
+    try:
+        candidate = datetime(now_dt.year, month, int(day_str), hour, int(minute_str), tzinfo=timezone.utc)
+    except ValueError:
+        return None
+    if (now_dt - candidate).days > 30:
+        try:
+            candidate = candidate.replace(year=now_dt.year + 1)
+        except ValueError:
+            return None
+    return candidate.timestamp()
+
+
+def _parse_schedule_stage(text: str, now: float | None = None) -> dict | None:
     """
     Parses one mint-schedule <li>'s plain visible text (verified live
     against a real upcoming drop) into a stage dict. Text renders as
@@ -227,6 +279,8 @@ def _parse_schedule_stage(text: str) -> dict | None:
         "stage_type": stage_type[:_MAX_SCHEDULE_FIELD_LENGTH],
         "starts": starts[:_MAX_SCHEDULE_FIELD_LENGTH] if starts else None,
         "ends": ends[:_MAX_SCHEDULE_FIELD_LENGTH] if ends else None,
+        "starts_epoch": _parse_schedule_datetime_to_epoch(starts, now),
+        "ends_epoch": _parse_schedule_datetime_to_epoch(ends, now),
         "detail": detail[:_MAX_SCHEDULE_FIELD_LENGTH] if detail else None,
     }
 

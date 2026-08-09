@@ -846,7 +846,7 @@ def test_arm_for_drop_returns_arm_and_attempts_when_armed(
 
     monkeypatch.setattr(
         firing, "get_arm_status_for_drop",
-        lambda owner, slug: {"arm": {"id": 1, "status": "armed"}, "attempts": []},
+        lambda owner, slug, stage_label="": {"arm": {"id": 1, "status": "armed"}, "attempts": []},
     )
 
     resp = client.get(f"/api/opensea/arm/for-drop?owner={ARM_OWNER}&collectionSlug=cool-drop")
@@ -860,7 +860,7 @@ def test_arm_for_drop_returns_null_arm_when_not_armed(
 ) -> None:
     from opensea_automint import firing
 
-    monkeypatch.setattr(firing, "get_arm_status_for_drop", lambda owner, slug: None)
+    monkeypatch.setattr(firing, "get_arm_status_for_drop", lambda owner, slug, stage_label="": None)
 
     resp = client.get(f"/api/opensea/arm/for-drop?owner={ARM_OWNER}&collectionSlug=cool-drop")
 
@@ -879,7 +879,7 @@ def test_arm_for_drop_rate_limits_after_threshold(
 ) -> None:
     from opensea_automint import firing
 
-    monkeypatch.setattr(firing, "get_arm_status_for_drop", lambda owner, slug: None)
+    monkeypatch.setattr(firing, "get_arm_status_for_drop", lambda owner, slug, stage_label="": None)
 
     last_resp = None
     for _ in range(61):

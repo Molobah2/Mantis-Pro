@@ -320,3 +320,105 @@ def test_fire_mint_raises_runtime_error_on_non_dict_json(monkeypatch: pytest.Mon
 
     with pytest.raises(RuntimeError, match="unexpected response shape"):
         node_client.fire_mint(SESSION_PRIVATE_KEY, NFT_CONTRACT, 1, VALUE_CAP_WEI)
+
+
+# ── fire_signed_mint ──────────────────────────────────────────────────────
+
+MINT_PARAMS = {
+    "mintPrice": "1000000000000000", "maxTotalMintableByWallet": "2",
+    "startTime": "1786100000", "endTime": "1786200000", "dropStageIndex": "1",
+    "maxTokenSupplyForStage": "4696", "feeBps": "0", "restrictFeeRecipients": True,
+}
+SALT = "12345"
+SIGNATURE = "0x" + "cd" * 65
+
+
+def test_fire_signed_mint_returns_success_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    success_result = {
+        "success": True, "txHash": "0x" + "b" * 64,
+        "blockNumber": "12345", "gasUsed": "210000",
+    }
+
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        calls.append((url, json, timeout))
+        return _FakeResponse(200, success_result)
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    result = node_client.fire_signed_mint(
+        SESSION_PRIVATE_KEY, NFT_CONTRACT, 1, VALUE_CAP_WEI, MINT_PARAMS, SALT, SIGNATURE,
+    )
+
+    assert result == success_result
+    url, body, timeout = calls[0]
+    assert url.endswith("/eth/fire-signed-mint")
+    assert body == {
+        "sessionPrivateKey": SESSION_PRIVATE_KEY,
+        "nftContract": NFT_CONTRACT,
+        "quantity": 1,
+        "valueCapWei": VALUE_CAP_WEI,
+        "mintParams": MINT_PARAMS,
+        "salt": SALT,
+        "signature": SIGNATURE,
+    }
+    assert timeout == 90
+
+
+def test_fire_signed_mint_returns_failure_result_as_a_normal_dict_not_an_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failure_result = {
+        "success": False, "txHash": None, "blockNumber": None,
+        "gasUsed": None, "error": "Gas estimation failed (would revert), nothing sent: reverted",
+    }
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(200, failure_result),
+    )
+
+    result = node_client.fire_signed_mint(
+        SESSION_PRIVATE_KEY, NFT_CONTRACT, 1, VALUE_CAP_WEI, MINT_PARAMS, SALT, SIGNATURE,
+    )
+
+    assert result == failure_result
+
+
+def test_fire_signed_mint_raises_runtime_error_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int):
+        raise node_client._req.exceptions.ConnectionError()
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="Node wallet-helper is not running on port 3456"):
+        node_client.fire_signed_mint(
+            SESSION_PRIVATE_KEY, NFT_CONTRACT, 1, VALUE_CAP_WEI, MINT_PARAMS, SALT, SIGNATURE,
+        )
+
+
+def test_fire_signed_mint_raises_runtime_error_on_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(500, {"error": "invalid mintParams"}),
+    )
+
+    with pytest.raises(RuntimeError, match="invalid mintParams"):
+        node_client.fire_signed_mint(
+            SESSION_PRIVATE_KEY, NFT_CONTRACT, 1, VALUE_CAP_WEI, MINT_PARAMS, SALT, SIGNATURE,
+        )
+
+
+def test_fire_signed_mint_raises_runtime_error_on_non_dict_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(200, ["unexpected"]),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RuntimeError, match="unexpected response shape"):
+        node_client.fire_signed_mint(
+            SESSION_PRIVATE_KEY, NFT_CONTRACT, 1, VALUE_CAP_WEI, MINT_PARAMS, SALT, SIGNATURE,
+        )

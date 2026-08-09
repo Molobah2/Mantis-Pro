@@ -59,20 +59,10 @@ def _init_schema(c: sqlite3.Connection) -> None:
         go_live_at         REAL,
         status             TEXT,
         created_at         REAL,
-        updated_at         REAL
+        updated_at         REAL,
+        stage_label        TEXT NOT NULL DEFAULT '',
+        stage_index        INTEGER
     )""")
-    # Enforces "at most one active arm request per (owner, drop)" at the DB
-    # level — the real guard against the TOCTOU race in firing.arm_drop's
-    # own check-then-insert (that check is only an optimization/early-exit
-    # for a clear error message; this index is what actually prevents two
-    # concurrent requests from both creating a row and each independently
-    # firing a real, duplicate mint). A partial index so terminal rows
-    # (succeeded/failed/cancelled/expired) never collide — re-arming after
-    # any of those must still be allowed.
-    c.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_arm_requests_active_owner_drop
-        ON arm_requests(owner_address, drop_id)
-        WHERE status IN ('pending_schedule', 'scheduled', 'armed', 'fired')
-    """)
     c.execute("""CREATE TABLE IF NOT EXISTS mint_attempts (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         arm_request_id  INTEGER,
@@ -121,6 +111,40 @@ def _init_schema(c: sqlite3.Connection) -> None:
         c.execute("ALTER TABLE mint_attempts ADD COLUMN latency_ms INTEGER")
     except sqlite3.OperationalError:
         pass  # column already exists
+    try:
+        # stage_label/stage_index let one arm request target a SPECIFIC
+        # named mint stage (e.g. "GTD", "FCFS") on a multi-stage drop, not
+        # just "the drop" (which implicitly meant its public stage before
+        # signed-presale support existed). '' (not NULL) means "the public
+        # stage" — kept NOT NULL specifically so the uniqueness index below
+        # works correctly (SQLite treats NULL as always-distinct in a
+        # unique index, which would silently defeat this constraint for
+        # every public-stage arm).
+        c.execute("ALTER TABLE arm_requests ADD COLUMN stage_label TEXT NOT NULL DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    try:
+        c.execute("ALTER TABLE arm_requests ADD COLUMN stage_index INTEGER")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    # Enforces "at most one active arm request per (owner, drop, stage)" at
+    # the DB level — the real guard against the TOCTOU race in
+    # firing.arm_drop's own check-then-insert (that check is only an
+    # optimization/early-exit for a clear error message; this index is
+    # what actually prevents two concurrent requests from both creating a
+    # row and each independently firing a real, duplicate mint). Includes
+    # stage_label (not just owner_address, drop_id) so a drop's GTD, FCFS,
+    # and Public stages can be armed simultaneously — they're independent
+    # mint opportunities, not the same one. A partial index so terminal
+    # rows (succeeded/failed/cancelled/expired) never collide — re-arming
+    # after any of those must still be allowed. Dropped and recreated
+    # unconditionally (cheap, idempotent) since its column list changed
+    # from the original (owner_address, drop_id)-only version.
+    c.execute("DROP INDEX IF EXISTS idx_arm_requests_active_owner_drop")
+    c.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_arm_requests_active_owner_drop
+        ON arm_requests(owner_address, drop_id, stage_label)
+        WHERE status IN ('pending_schedule', 'scheduled', 'armed', 'fired')
+    """)
     c.commit()
 
 
@@ -170,6 +194,11 @@ class ArmRequestInput:
     quantity: int
     max_price_wei: str
     go_live_at: float | None
+    # '' means "the drop's public stage" (existing/default behavior).
+    # Anything else names a specific signed-presale stage (e.g. "GTD"),
+    # resolved and validated once at arm time — see firing.arm_drop.
+    stage_label: str = ""
+    stage_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -372,20 +401,21 @@ def _tracked_drop_row_to_dict(row: tuple) -> dict:
 
 def create_arm_request(arm: ArmRequestInput) -> int:
     """Record a new arm request in 'pending_schedule' status. Returns the new
-    row id. Raises sqlite3.IntegrityError if this (owner, drop) pair already
-    has a non-terminal arm request — enforced by idx_arm_requests_active_owner_drop,
-    not just an application-level check (see that index's comment in
-    _init_schema for why this must be a real DB constraint)."""
+    row id. Raises sqlite3.IntegrityError if this (owner, drop, stage_label)
+    combination already has a non-terminal arm request — enforced by
+    idx_arm_requests_active_owner_drop, not just an application-level check
+    (see that index's comment in _init_schema for why this must be a real
+    DB constraint)."""
     owner = arm.owner_address.lower()
     now = time.time()
     with _lock, closing(_conn()) as c:
         cur = c.execute("""
             INSERT INTO arm_requests (
                 owner_address, drop_id, session_grant_id, quantity, max_price_wei,
-                go_live_at, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'pending_schedule', ?, ?)
+                go_live_at, status, created_at, updated_at, stage_label, stage_index
+            ) VALUES (?, ?, ?, ?, ?, ?, 'pending_schedule', ?, ?, ?, ?)
         """, (owner, arm.drop_id, arm.session_grant_id, arm.quantity, arm.max_price_wei,
-              arm.go_live_at, now, now))
+              arm.go_live_at, now, now, arm.stage_label, arm.stage_index))
         c.commit()
         return cur.lastrowid
 
@@ -422,7 +452,7 @@ def get_arm_request(arm_id: int) -> dict | None:
     with _lock, closing(_conn()) as c:
         row = c.execute("""
             SELECT id, owner_address, drop_id, session_grant_id, quantity, max_price_wei,
-                   go_live_at, status, created_at, updated_at
+                   go_live_at, status, created_at, updated_at, stage_label, stage_index
             FROM arm_requests WHERE id=?
         """, (arm_id,)).fetchone()
     if not row:
@@ -437,7 +467,7 @@ def get_pending_arm_requests() -> list[dict]:
     with _lock, closing(_conn()) as c:
         rows = c.execute("""
             SELECT id, owner_address, drop_id, session_grant_id, quantity, max_price_wei,
-                   go_live_at, status, created_at, updated_at
+                   go_live_at, status, created_at, updated_at, stage_label, stage_index
             FROM arm_requests WHERE status IN ('pending_schedule', 'scheduled', 'armed')
             ORDER BY id
         """).fetchall()
@@ -469,23 +499,44 @@ def get_grant_commitment_totals(session_grant_id: int) -> tuple[int, int]:
     return total_quantity, total_spend_wei
 
 
-def get_active_arm_request_for_drop(owner_address: str, drop_id: int) -> dict | None:
+def get_active_arm_request_for_drop(owner_address: str, drop_id: int, stage_label: str = "") -> dict | None:
     """The owner's non-terminal (not yet succeeded/failed/cancelled/expired)
-    arm request for this drop, if any — used to stop a wallet from arming
-    the same drop twice, which would otherwise risk firing twice."""
+    arm request for this drop's given stage, if any — used to stop a
+    wallet from arming the SAME stage twice, which would otherwise risk
+    firing twice. Scoped by stage_label (default '' = the public stage) so
+    a drop's GTD/FCFS/Public stages can each be armed independently — see
+    idx_arm_requests_active_owner_drop's comment in _init_schema."""
     owner = owner_address.lower()
     with _lock, closing(_conn()) as c:
         row = c.execute("""
             SELECT id, owner_address, drop_id, session_grant_id, quantity, max_price_wei,
-                   go_live_at, status, created_at, updated_at
+                   go_live_at, status, created_at, updated_at, stage_label, stage_index
             FROM arm_requests
-            WHERE owner_address=? AND drop_id=?
+            WHERE owner_address=? AND drop_id=? AND stage_label=?
               AND status IN ('pending_schedule', 'scheduled', 'armed', 'fired')
             ORDER BY id DESC LIMIT 1
-        """, (owner, drop_id)).fetchone()
+        """, (owner, drop_id, stage_label)).fetchone()
     if not row:
         return None
     return _arm_request_row_to_dict(row)
+
+
+def get_active_arm_requests_for_drop_all_stages(owner_address: str, drop_id: int) -> list[dict]:
+    """Every non-terminal arm request the owner currently has active for
+    this drop, across ALL stages — used by the dashboard to show status
+    for however many of a drop's stages (GTD/FCFS/Public) are armed at
+    once, not just one."""
+    owner = owner_address.lower()
+    with _lock, closing(_conn()) as c:
+        rows = c.execute("""
+            SELECT id, owner_address, drop_id, session_grant_id, quantity, max_price_wei,
+                   go_live_at, status, created_at, updated_at, stage_label, stage_index
+            FROM arm_requests
+            WHERE owner_address=? AND drop_id=?
+              AND status IN ('pending_schedule', 'scheduled', 'armed', 'fired')
+            ORDER BY id
+        """, (owner, drop_id)).fetchall()
+    return [_arm_request_row_to_dict(r) for r in rows]
 
 
 def try_claim_arm_request(arm_id: int) -> bool:
@@ -510,6 +561,7 @@ def _arm_request_row_to_dict(row: tuple) -> dict:
         "id": row[0], "owner_address": row[1], "drop_id": row[2],
         "session_grant_id": row[3], "quantity": row[4], "max_price_wei": row[5],
         "go_live_at": row[6], "status": row[7], "created_at": row[8], "updated_at": row[9],
+        "stage_label": row[10], "stage_index": row[11],
     }
 
 

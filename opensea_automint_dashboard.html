@@ -782,6 +782,7 @@ function renderModalDetails(details, requestedForSlug, drop) {
 
   currentModalDrop = drop || null;
   currentModalContractAddress = (details && details.contract_address) || null;
+  currentModalMintSchedule = (details && details.mint_schedule) || [];
 
   slot.outerHTML =
     descriptionHtml + linksHtml + scheduleHtml + noContentHtml +
@@ -789,7 +790,7 @@ function renderModalDetails(details, requestedForSlug, drop) {
     '<div id="arm-section-container">' + renderArmSection(currentModalContractAddress) + '</div>';
 
   if (currentModalContractAddress && document.getElementById('arm-status') && drop && drop.collection_slug) {
-    initArmStatus(drop.collection_slug, currentModalContractAddress);
+    initArmStatus(drop.collection_slug, currentModalContractAddress, '');
   }
 
   // Only kick off the on-chain lookup when the grant form actually rendered
@@ -808,6 +809,7 @@ var GRANT_DEFAULT_VALUE_CAP_ETH = 0.05;
 var GRANT_MAX_QUANTITY = 10;
 var currentModalDrop = null;
 var currentModalContractAddress = null;
+var currentModalMintSchedule = [];
 // Fallback when the real on-chain mint end time isn't available (e.g. a
 // token-gated/allowlist-only stage with no public getPublicDrop data).
 var GRANT_DEFAULT_EXPIRES_IN_SECONDS = 86400; // 24 hours
@@ -927,7 +929,7 @@ function refreshGrantSectionIfOpen() {
   if (armContainer) {
     armContainer.innerHTML = renderArmSection(currentModalContractAddress);
     if (currentModalContractAddress && document.getElementById('arm-status') && currentModalDrop.collection_slug) {
-      initArmStatus(currentModalDrop.collection_slug, currentModalContractAddress);
+      initArmStatus(currentModalDrop.collection_slug, currentModalContractAddress, '');
     }
   }
 }
@@ -1121,8 +1123,30 @@ function renderArmSection(contractAddress) {
   );
 }
 
-function renderArmForm() {
+// '' (empty) means the drop's public stage — matches firing.arm_drop's
+// default. Any scraped stage whose stage_type contains "Public" is folded
+// into that same '' value (rather than its literal scraped name) so it
+// goes through the existing on-chain-window public-mint path instead of
+// signed-presale resolution, which only applies to allowlist-type stages.
+function stageOptionsHtml(mintSchedule, selectedLabel) {
+  var stages = (mintSchedule || []).filter(function (s) { return s && s.name; });
+  if (!stages.length) {
+    return '<option value="">Public</option>';
+  }
+  return stages.map(function (s) {
+    var isPublic = (s.stage_type || '').toLowerCase().indexOf('public') !== -1;
+    var value = isPublic ? '' : s.name;
+    var label = s.name + (s.starts ? ' — Starts ' + s.starts : '');
+    var selected = value === (selectedLabel || '') ? ' selected' : '';
+    return '<option value="' + esc(value) + '"' + selected + '>' + esc(label) + '</option>';
+  }).join('');
+}
+
+function renderArmForm(selectedStageLabel) {
   return (
+    '<label class="grant-expiry-label">Stage<select id="arm-stage-select">' +
+      stageOptionsHtml(currentModalMintSchedule, selectedStageLabel) +
+    '</select></label>' +
     '<div class="grant-row">' +
       '<label>Quantity<input type="number" id="arm-quantity" min="1" max="' + ARM_MAX_QUANTITY + '" value="1"></label>' +
       '<label>Max ETH (total)<input type="number" id="arm-max-price" min="0" step="0.01" value="' + ARM_DEFAULT_MAX_PRICE_ETH + '"></label>' +
@@ -1161,10 +1185,11 @@ function renderArmStatusDisplay(arm, attempts) {
   }
 
   if (ARM_CANCELABLE_STATUSES.indexOf(arm.status) !== -1) {
-    html += '<button id="arm-cancel-btn" type="button" class="modal-link-btn" data-arm-id="' + arm.id + '">Cancel</button>';
+    html += '<button id="arm-cancel-btn" type="button" class="modal-link-btn" data-arm-id="' + arm.id +
+      '" data-stage-label="' + esc(arm.stage_label || '') + '">Cancel</button>';
   } else if (ARM_TERMINAL_STATUSES.indexOf(arm.status) !== -1 && arm.status !== 'succeeded') {
     // Failed/cancelled/expired can be armed again — succeeded is left final.
-    html += renderArmForm();
+    html += renderArmForm(arm.stage_label);
   }
 
   return html;
@@ -1172,12 +1197,16 @@ function renderArmStatusDisplay(arm, attempts) {
 
 // Guards against a fast close-then-reopen-different-drop the same way
 // initGrantExpiry does: only apply the fetched result if #arm-status is
-// still actually in the DOM by the time it resolves.
-function initArmStatus(collectionSlug, contractAddress) {
+// still actually in the DOM by the time it resolves. stageLabel selects
+// WHICH stage's status to show — a drop can have several independently
+// armed stages (GTD/FCFS/Public) at once; this always reflects one at a
+// time, matching whichever is currently selected in the stage dropdown.
+function initArmStatus(collectionSlug, contractAddress, stageLabel) {
   var el = document.getElementById('arm-status');
   if (!el) return;
   fetch('/api/opensea/arm/for-drop?owner=' + encodeURIComponent(window.__ethOwnerAddress) +
-        '&collectionSlug=' + encodeURIComponent(collectionSlug))
+        '&collectionSlug=' + encodeURIComponent(collectionSlug) +
+        '&stageLabel=' + encodeURIComponent(stageLabel || ''))
     .then(function (res) {
       if (!res.ok) throw new Error('API ' + res.status);
       return res.json();
@@ -1185,11 +1214,11 @@ function initArmStatus(collectionSlug, contractAddress) {
     .then(function (data) {
       var current = document.getElementById('arm-status');
       if (!current) return; // modal closed (or moved to a different drop) while this was in flight
-      current.innerHTML = data.arm ? renderArmStatusDisplay(data.arm, data.attempts || []) : renderArmForm();
+      current.innerHTML = data.arm ? renderArmStatusDisplay(data.arm, data.attempts || []) : renderArmForm(stageLabel);
     })
     .catch(function () {
       var current = document.getElementById('arm-status');
-      if (current) current.innerHTML = renderArmForm();
+      if (current) current.innerHTML = renderArmForm(stageLabel);
     });
 }
 
@@ -1202,6 +1231,14 @@ document.addEventListener('click', function (e) {
   }
 });
 
+document.addEventListener('change', function (e) {
+  if (e.target && e.target.id === 'arm-stage-select') {
+    if (currentModalDrop && currentModalContractAddress) {
+      initArmStatus(currentModalDrop.collection_slug, currentModalContractAddress, e.target.value);
+    }
+  }
+});
+
 // Must build byte-for-byte the same message text as opensea_automint/
 // firing.py's build_arm_message/build_cancel_message — the backend
 // verifies the signature against a message it reconstructs independently
@@ -1210,12 +1247,13 @@ document.addEventListener('click', function (e) {
 // timestamp is always a plain integer (Math.floor(Date.now()/1000)),
 // deliberately never a float, so its text representation can never differ
 // between JS and Python.
-function buildArmMessage(collectionSlug, quantity, maxPriceWei, timestamp) {
+function buildArmMessage(collectionSlug, quantity, maxPriceWei, timestamp, stageLabel) {
   return 'Mantis Pro OpenSea Auto-Mint\n' +
     'action: arm\n' +
     'collectionSlug: ' + collectionSlug + '\n' +
     'quantity: ' + quantity + '\n' +
     'maxPriceWei: ' + maxPriceWei + '\n' +
+    'stageLabel: ' + (stageLabel || '') + '\n' +
     'timestamp: ' + timestamp;
 }
 
@@ -1231,7 +1269,9 @@ async function handleArmClick(btn) {
   var contractAddress = section ? section.getAttribute('data-contract') : null;
   var quantityInput = document.getElementById('arm-quantity');
   var maxPriceInput = document.getElementById('arm-max-price');
+  var stageSelect = document.getElementById('arm-stage-select');
   var formStatus = document.getElementById('arm-form-status');
+  var stageLabel = stageSelect ? stageSelect.value : '';
 
   if (!contractAddress || !currentModalDrop || !currentModalDrop.collection_slug) {
     if (formStatus) formStatus.textContent = 'Arm unavailable — drop details not loaded.';
@@ -1257,7 +1297,7 @@ async function handleArmClick(btn) {
     // behalf. See opensea_automint/routes.py's api_arm_drop docstring.
     formStatus && (formStatus.textContent = 'Confirm the signature request in your wallet…');
     var signature = await window.signOwnerMessage(
-      buildArmMessage(currentModalDrop.collection_slug, quantity, maxPriceWei, timestamp)
+      buildArmMessage(currentModalDrop.collection_slug, quantity, maxPriceWei, timestamp, stageLabel)
     );
     if (formStatus) formStatus.textContent = '';
 
@@ -1269,6 +1309,7 @@ async function handleArmClick(btn) {
         collectionSlug: currentModalDrop.collection_slug,
         quantity: quantity,
         maxPriceWei: maxPriceWei,
+        stageLabel: stageLabel,
         signature: signature,
         timestamp: timestamp,
       }),
@@ -1276,7 +1317,7 @@ async function handleArmClick(btn) {
     var body = await res.json().catch(function () { return {}; });
     if (!res.ok) throw new Error(body.error || ('API ' + res.status));
 
-    initArmStatus(currentModalDrop.collection_slug, contractAddress);
+    initArmStatus(currentModalDrop.collection_slug, contractAddress, stageLabel);
   } catch (err) {
     if (formStatus) formStatus.textContent = 'Arm failed: ' + (err && err.message ? err.message : String(err));
     btn.disabled = false;
@@ -1286,6 +1327,7 @@ async function handleArmClick(btn) {
 
 async function handleCancelArmClick(btn) {
   var armId = btn.getAttribute('data-arm-id');
+  var stageLabel = btn.getAttribute('data-stage-label') || '';
   if (!armId || !window.__ethOwnerAddress || !window.signOwnerMessage) return;
 
   var timestamp = Math.floor(Date.now() / 1000);
@@ -1309,7 +1351,7 @@ async function handleCancelArmClick(btn) {
     if (!res.ok) throw new Error(body.error || ('API ' + res.status));
 
     if (currentModalDrop && currentModalContractAddress) {
-      initArmStatus(currentModalDrop.collection_slug, currentModalContractAddress);
+      initArmStatus(currentModalDrop.collection_slug, currentModalContractAddress, stageLabel);
     }
   } catch (err) {
     btn.disabled = false;

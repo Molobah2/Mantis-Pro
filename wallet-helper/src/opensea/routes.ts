@@ -4,7 +4,9 @@ import {
   verifyOwnerSignature,
   verifySessionKeyMatchesAddress,
   fireMint,
+  fireSignedMint,
   getPublicDropWindow,
+  type SignedMintParamsInput,
 } from "./ethClient.js";
 
 export const openSeaRouter = Router();
@@ -142,6 +144,105 @@ openSeaRouter.post("/eth/fire-mint", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[opensea:fire-mint]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+const MINT_PARAMS_FIELDS = [
+  "mintPrice",
+  "maxTotalMintableByWallet",
+  "startTime",
+  "endTime",
+  "dropStageIndex",
+  "maxTokenSupplyForStage",
+  "feeBps",
+] as const;
+
+function parseMintParams(raw: unknown): SignedMintParamsInput | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.restrictFeeRecipients !== "boolean") return null;
+
+  const parsed: Partial<Record<(typeof MINT_PARAMS_FIELDS)[number], bigint>> = {};
+  for (const field of MINT_PARAMS_FIELDS) {
+    const value = obj[field];
+    if (typeof value !== "string" && typeof value !== "number") return null;
+    try {
+      parsed[field] = BigInt(value);
+    } catch {
+      return null;
+    }
+  }
+  return { ...(parsed as Record<(typeof MINT_PARAMS_FIELDS)[number], bigint>),
+    restrictFeeRecipients: obj.restrictFeeRecipients };
+}
+
+// POST /eth/fire-signed-mint — THE OTHER ROUTE IN THIS FILE THAT SPENDS
+// REAL ETH. Allowlist/presale counterpart to /eth/fire-mint — used when a
+// drop's active stage requires SeaDrop's mintSigned() rather than
+// mintPublic(). mintParams/salt/signature come from Flask's
+// opensea_session.py, which fetched them fresh from OpenSea's own backend
+// (using the connected owner's replayed OpenSea browser session) right
+// before this call — this route never derives or trusts any of that data
+// itself, only passes it through to the on-chain call.
+openSeaRouter.post("/eth/fire-signed-mint", async (req, res) => {
+  const { sessionPrivateKey, nftContract, quantity, valueCapWei, mintParams, salt, signature } =
+    req.body as {
+      sessionPrivateKey?: string;
+      nftContract?: string;
+      quantity?: number;
+      valueCapWei?: string;
+      mintParams?: unknown;
+      salt?: string;
+      signature?: string;
+    };
+
+  if (!sessionPrivateKey || !isHex(sessionPrivateKey) || sessionPrivateKey.length !== 66) {
+    return res.status(400).json({ error: "Valid sessionPrivateKey required" });
+  }
+  if (!nftContract || !isAddress(nftContract)) {
+    return res.status(400).json({ error: "Valid nftContract required" });
+  }
+  if (!Number.isInteger(quantity) || (quantity as number) <= 0) {
+    return res.status(400).json({ error: "quantity must be a positive integer" });
+  }
+  let valueCapWeiBig: bigint;
+  try {
+    valueCapWeiBig = BigInt(valueCapWei ?? "");
+  } catch {
+    return res.status(400).json({ error: "valueCapWei must be a numeric string" });
+  }
+  if (valueCapWeiBig < 0n) {
+    return res.status(400).json({ error: "valueCapWei must be non-negative" });
+  }
+  const parsedMintParams = parseMintParams(mintParams);
+  if (!parsedMintParams) {
+    return res.status(400).json({ error: "Valid mintParams required" });
+  }
+  let saltBig: bigint;
+  try {
+    saltBig = BigInt(salt ?? "");
+  } catch {
+    return res.status(400).json({ error: "salt must be a numeric string" });
+  }
+  if (!signature || !isHex(signature)) {
+    return res.status(400).json({ error: "Valid signature required" });
+  }
+
+  try {
+    const result = await fireSignedMint({
+      sessionPrivateKey: sessionPrivateKey as `0x${string}`,
+      nftContract: nftContract as Address,
+      quantity: quantity as number,
+      valueCapWei: valueCapWeiBig,
+      mintParams: parsedMintParams,
+      salt: saltBig,
+      signature: signature as `0x${string}`,
+    });
+    return res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[opensea:fire-signed-mint]", msg);
     return res.status(500).json({ error: msg });
   }
 });

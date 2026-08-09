@@ -282,8 +282,9 @@ def api_arm_drop() -> Response:
     if not firing.is_signature_timestamp_fresh(body["timestamp"]):
         return jsonify({"error": "Signature has expired — please try again"}), 401
 
+    stage_label = body.get("stageLabel") or ""
     message = messages.build_arm_message(
-        body["collectionSlug"], body["quantity"], body["maxPriceWei"], body["timestamp"],
+        body["collectionSlug"], body["quantity"], body["maxPriceWei"], body["timestamp"], stage_label,
     )
     try:
         signature_valid = node_client.verify_owner_signature(
@@ -296,6 +297,7 @@ def api_arm_drop() -> Response:
 
     result = firing.arm_drop(
         body["ownerAddress"], body["collectionSlug"], body["quantity"], body["maxPriceWei"],
+        stage_label=stage_label,
     )
     if "error" in result:
         # "already armed" still carries the existing armId — 409 Conflict
@@ -313,9 +315,11 @@ _ARM_FOR_DROP_RATE_KEY = "arm-for-drop"
 
 @opensea_automint_bp.route("/api/opensea/arm/for-drop")
 def api_get_arm_for_drop() -> Response:
-    """Whether the caller already has an active arm request for a given
-    drop, plus its mint attempts so far — lets the dashboard show live
-    status without needing to know an arm request's internal id.
+    """Whether the caller already has an active arm request for one stage
+    of a drop (?stageLabel=, default '' = the public stage), plus its mint
+    attempts so far — lets the dashboard show live status without needing
+    to know an arm request's internal id. See also
+    /api/opensea/arm/for-drop/all-stages for every stage at once.
 
     Deliberately NOT signature-gated like api_arm_drop/api_cancel_arm:
     this is polled repeatedly while a modal is open, and requiring a wallet
@@ -338,8 +342,34 @@ def api_get_arm_for_drop() -> Response:
     if not collection_details.SLUG_RE.match(collection_slug):
         return jsonify({"error": "Invalid collection slug"}), 400
 
-    result = firing.get_arm_status_for_drop(owner, collection_slug)
+    stage_label = request.args.get("stageLabel", "")
+
+    result = firing.get_arm_status_for_drop(owner, collection_slug, stage_label)
     return jsonify(result if result else {"arm": None, "attempts": []})
+
+
+@opensea_automint_bp.route("/api/opensea/arm/for-drop/all-stages")
+def api_get_all_arm_statuses_for_drop() -> Response:
+    """Every stage (public and/or any signed-presale stages, e.g.
+    GTD/FCFS/Public) the caller currently has actively armed for a given
+    drop at once — same auth/rate-limit posture as
+    /api/opensea/arm/for-drop."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _ARM_FOR_DROP_RATE_KEY, limit=_ARM_FOR_DROP_RATE_LIMIT, window=_ARM_FOR_DROP_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    owner = request.args.get("owner", "")
+    if not security.ETH_ADDR_RE.match(owner):
+        return jsonify({"error": "Invalid owner address"}), 400
+
+    collection_slug = request.args.get("collectionSlug", "")
+    if not collection_details.SLUG_RE.match(collection_slug):
+        return jsonify({"error": "Invalid collection slug"}), 400
+
+    results = firing.get_all_arm_statuses_for_drop(owner, collection_slug)
+    return jsonify({"arms": results})
 
 
 _MINT_HISTORY_RATE_LIMIT = 60

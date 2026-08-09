@@ -1,9 +1,16 @@
 import sys
+from datetime import datetime, timezone
 
 import pytest
 import requests
 
 from opensea_automint import collection_details
+
+# A fixed "now" (mid-2026) for schedule-datetime-parsing tests — keeps
+# expected epoch values deterministic and independent of when the test
+# suite actually runs, and sits comfortably before both August/September
+# dates used below so the year-rollover heuristic never kicks in.
+_FIXED_NOW = datetime(2026, 6, 1, tzinfo=timezone.utc).timestamp()
 
 
 class _FakeResponse:
@@ -425,13 +432,15 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
 def test_parse_schedule_stage_allowlist_with_no_end_time() -> None:
     text = "Team\nAllowlist\nStarts: August 14 at 1:00 PM GMT\nFree | Limit 20 per wallet"
 
-    result = collection_details._parse_schedule_stage(text)
+    result = collection_details._parse_schedule_stage(text, now=_FIXED_NOW)
 
     assert result == {
         "name": "Team",
         "stage_type": "Allowlist",
         "starts": "August 14 at 1:00 PM GMT",
         "ends": None,
+        "starts_epoch": datetime(2026, 8, 14, 13, 0, tzinfo=timezone.utc).timestamp(),
+        "ends_epoch": None,
         "detail": "Free | Limit 20 per wallet",
     }
 
@@ -442,13 +451,15 @@ def test_parse_schedule_stage_public_with_end_time_and_price() -> None:
         "Ends: September 13 at 3:00 PM GMT\n$21.09 | Limit 1,000 per wallet"
     )
 
-    result = collection_details._parse_schedule_stage(text)
+    result = collection_details._parse_schedule_stage(text, now=_FIXED_NOW)
 
     assert result == {
         "name": "Public stage",
         "stage_type": "Public",
         "starts": "August 14 at 3:00 PM GMT",
         "ends": "September 13 at 3:00 PM GMT",
+        "starts_epoch": datetime(2026, 8, 14, 15, 0, tzinfo=timezone.utc).timestamp(),
+        "ends_epoch": datetime(2026, 9, 13, 15, 0, tzinfo=timezone.utc).timestamp(),
         "detail": "$21.09 | Limit 1,000 per wallet",
     }
 
@@ -482,13 +493,15 @@ def test_parse_schedule_stage_preserves_multiple_detail_lines() -> None:
 def test_parse_schedule_stage_ignores_blank_lines() -> None:
     text = "Team\n\nAllowlist\n\nStarts: August 14 at 1:00 PM GMT\n\nFree | Limit 20 per wallet\n\n"
 
-    result = collection_details._parse_schedule_stage(text)
+    result = collection_details._parse_schedule_stage(text, now=_FIXED_NOW)
 
     assert result == {
         "name": "Team",
         "stage_type": "Allowlist",
         "starts": "August 14 at 1:00 PM GMT",
         "ends": None,
+        "starts_epoch": datetime(2026, 8, 14, 13, 0, tzinfo=timezone.utc).timestamp(),
+        "ends_epoch": None,
         "detail": "Free | Limit 20 per wallet",
     }
 
@@ -504,6 +517,60 @@ def test_parse_schedule_stage_truncates_overlong_fields() -> None:
     assert len(result["stage_type"]) == collection_details._MAX_SCHEDULE_FIELD_LENGTH
     assert len(result["starts"]) == collection_details._MAX_SCHEDULE_FIELD_LENGTH
     assert len(result["detail"]) == collection_details._MAX_SCHEDULE_FIELD_LENGTH
+
+
+# ── _parse_schedule_datetime_to_epoch ────────────────────────────────────
+
+def test_parse_schedule_datetime_to_epoch_parses_am() -> None:
+    result = collection_details._parse_schedule_datetime_to_epoch(
+        "August 10 at 9:05 AM GMT", now=_FIXED_NOW
+    )
+    assert result == datetime(2026, 8, 10, 9, 5, tzinfo=timezone.utc).timestamp()
+
+
+def test_parse_schedule_datetime_to_epoch_parses_pm() -> None:
+    result = collection_details._parse_schedule_datetime_to_epoch(
+        "August 10 at 3:00 PM GMT", now=_FIXED_NOW
+    )
+    assert result == datetime(2026, 8, 10, 15, 0, tzinfo=timezone.utc).timestamp()
+
+
+def test_parse_schedule_datetime_to_epoch_handles_12_am_and_pm() -> None:
+    midnight = collection_details._parse_schedule_datetime_to_epoch(
+        "August 10 at 12:00 AM GMT", now=_FIXED_NOW
+    )
+    noon = collection_details._parse_schedule_datetime_to_epoch(
+        "August 10 at 12:00 PM GMT", now=_FIXED_NOW
+    )
+    assert midnight == datetime(2026, 8, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    assert noon == datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc).timestamp()
+
+
+def test_parse_schedule_datetime_to_epoch_rolls_forward_a_past_date_to_next_year() -> None:
+    # "now" is late December; a January date must resolve to NEXT January,
+    # not one that already passed 11 months ago.
+    late_december = datetime(2026, 12, 28, tzinfo=timezone.utc).timestamp()
+
+    result = collection_details._parse_schedule_datetime_to_epoch(
+        "January 5 at 3:00 PM GMT", now=late_december
+    )
+
+    assert result == datetime(2027, 1, 5, 15, 0, tzinfo=timezone.utc).timestamp()
+
+
+def test_parse_schedule_datetime_to_epoch_returns_none_for_none_input() -> None:
+    assert collection_details._parse_schedule_datetime_to_epoch(None) is None
+
+
+@pytest.mark.parametrize("bad_text", [
+    "",
+    "not a date at all",
+    "August 10 3:00 PM GMT",  # missing "at"
+    "August 10 at 3:00 PM EST",  # non-GMT timezone not supported
+    "Augustus 10 at 3:00 PM GMT",  # not a real month
+])
+def test_parse_schedule_datetime_to_epoch_returns_none_for_malformed_text(bad_text: str) -> None:
+    assert collection_details._parse_schedule_datetime_to_epoch(bad_text, now=_FIXED_NOW) is None
 
 
 class _FakeLocator:

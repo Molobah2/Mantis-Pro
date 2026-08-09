@@ -36,15 +36,27 @@ def build_grant_message(
     )
 
 
-def build_arm_message(collection_slug: str, quantity: int, max_price_wei: str, timestamp: int) -> str:
-    """The message an owner's wallet signs to authorize arming a drop for
-    auto-firing."""
+def build_arm_message(
+    collection_slug: str, quantity: int, max_price_wei: str, timestamp: int, stage_label: str = "",
+) -> str:
+    """The message an owner's wallet signs to authorize arming a drop (or,
+    when stage_label is given, one specific named stage of it — e.g.
+    "GTD" — see firing.arm_drop) for auto-firing.
+
+    stage_label is part of the signed text, not just a request-body field
+    the server trusts unauthenticated — without that, a captured
+    signature+timestamp legitimately signed for one stage could be
+    replayed (within SIGNATURE_MAX_AGE_SECONDS) against a DIFFERENT stage
+    just by changing the request body, since the server only verifies the
+    signature against whatever text it reconstructs from the request's
+    other fields."""
     return (
         "Mantis Pro OpenSea Auto-Mint\n"
         "action: arm\n"
         f"collectionSlug: {collection_slug}\n"
         f"quantity: {quantity}\n"
         f"maxPriceWei: {max_price_wei}\n"
+        f"stageLabel: {stage_label}\n"
         f"timestamp: {timestamp}"
     )
 

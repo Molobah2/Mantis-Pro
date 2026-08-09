@@ -96,6 +96,37 @@ const SEADROP_ABI = [
     ],
     outputs: [],
   },
+  // Verified against ProjectOpenSea/seadrop's canonical ISeaDrop.sol +
+  // SeaDropStructs.sol on GitHub (2026-08-09) — MintParams field order
+  // matters for correct ABI encoding and must match the struct exactly.
+  {
+    name: "mintSigned",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      { name: "nftContract", type: "address" },
+      { name: "feeRecipient", type: "address" },
+      { name: "minterIfNotPayer", type: "address" },
+      { name: "quantity", type: "uint256" },
+      {
+        name: "mintParams",
+        type: "tuple",
+        components: [
+          { name: "mintPrice", type: "uint256" },
+          { name: "maxTotalMintableByWallet", type: "uint256" },
+          { name: "startTime", type: "uint256" },
+          { name: "endTime", type: "uint256" },
+          { name: "dropStageIndex", type: "uint256" },
+          { name: "maxTokenSupplyForStage", type: "uint256" },
+          { name: "feeBps", type: "uint256" },
+          { name: "restrictFeeRecipients", type: "bool" },
+        ],
+      },
+      { name: "salt", type: "uint256" },
+      { name: "signature", type: "bytes" },
+    ],
+    outputs: [],
+  },
   {
     name: "getAllowedFeeRecipients",
     type: "function",
@@ -225,6 +256,94 @@ export interface FireMintResult {
  * would-revert mint attempt is returned as {success: false, error}, not
  * thrown, so callers can log it as a real (non-exceptional) outcome.
  */
+/**
+ * Shared tail end of both fireMint and fireSignedMint: estimate gas (the
+ * one and only pre-flight safety check — see fireMint's docstring for why
+ * this replaces the ERC-4337 bundler's simulation), sign, broadcast, and
+ * wait for a receipt. Everything before this point (reading fee
+ * recipients/price, building callData, checking the spend cap) differs by
+ * mint path; everything from here on is identical.
+ */
+async function estimateSignAndSend(
+  account: ReturnType<typeof privateKeyToAccount>,
+  callData: `0x${string}`,
+  valueWei: bigint,
+  nonce: number,
+  maxFeePerGas: bigint,
+  maxPriorityFeePerGas: bigint
+): Promise<FireMintResult> {
+  let gas: bigint;
+  try {
+    const estimated = await publicClient.estimateGas({
+      account: account.address,
+      to: SEADROP_ADDRESS,
+      data: callData,
+      value: valueWei,
+    });
+    gas = (estimated * (100n + GAS_ESTIMATE_BUFFER_PERCENT)) / 100n;
+  } catch (err: unknown) {
+    // The call would revert — sold out, quantity limit hit, price changed
+    // underneath us, drop genuinely isn't open yet, or (for a signed mint)
+    // the signature/salt/mintParams don't match what the signer actually
+    // authorized. Nothing was ever sent; this is a safe, definite
+    // (non-ambiguous) failure.
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      txHash: null,
+      blockNumber: null,
+      gasUsed: null,
+      error: `Gas estimation failed (would revert), nothing sent: ${msg}`,
+    };
+  }
+
+  const walletClient = createWalletClient({ account, chain: mainnet, transport: http(ETH_RPC) });
+
+  let txHash: `0x${string}`;
+  try {
+    txHash = await walletClient.sendTransaction({
+      to: SEADROP_ADDRESS,
+      data: callData,
+      value: valueWei,
+      nonce,
+      gas,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, txHash: null, blockNumber: null, gasUsed: null, error: msg };
+  }
+
+  try {
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      timeout: RECEIPT_TIMEOUT_MS,
+    });
+    return {
+      success: receipt.status === "success",
+      txHash,
+      blockNumber: receipt.blockNumber.toString(),
+      gasUsed: receipt.gasUsed.toString(),
+      error: receipt.status === "success" ? undefined : "Transaction included on-chain but reverted",
+    };
+  } catch (err: unknown) {
+    // The transaction was broadcast (we have a real hash) but we couldn't
+    // confirm its outcome within the timeout — NOT the same as "it
+    // failed". Callers must treat this as unknown/pending, not a hard
+    // failure, and can look the hash up later.
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      ambiguous: true,
+      txHash,
+      blockNumber: null,
+      gasUsed: null,
+      error: `Submitted but receipt not confirmed within timeout: ${msg}`,
+    };
+  }
+}
+
 export async function fireMint(params: FireMintParams): Promise<FireMintResult> {
   const account = privateKeyToAccount(params.sessionPrivateKey);
 
@@ -269,75 +388,112 @@ export async function fireMint(params: FireMintParams): Promise<FireMintResult> 
     args: [params.nftContract, feeRecipient, account.address, BigInt(params.quantity)],
   });
 
-  let gas: bigint;
-  try {
-    const estimated = await publicClient.estimateGas({
-      account: account.address,
-      to: SEADROP_ADDRESS,
-      data: callData,
-      value: totalCostWei,
-    });
-    gas = (estimated * (100n + GAS_ESTIMATE_BUFFER_PERCENT)) / 100n;
-  } catch (err: unknown) {
-    // The call would revert — sold out, quantity limit hit, price changed
-    // underneath us, or the drop genuinely isn't open yet. Nothing was
-    // ever sent; this is a safe, definite (non-ambiguous) failure.
-    const msg = err instanceof Error ? err.message : String(err);
+  return estimateSignAndSend(
+    account, callData, totalCostWei, nonce,
+    feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER,
+    feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER
+  );
+}
+
+// The 8 MintParams fields exactly as OpenSea's backend signed them — these
+// come from wherever the signature itself came from (opensea_session.py's
+// authenticated GraphQL replay), NOT reconstructed here. Any mismatch
+// (even a single field, even field ORDER) makes ecrecover on-chain resolve
+// to the wrong address and the mint revert — see SeaDropStructs.sol's
+// MintParams, verified against ProjectOpenSea/seadrop on GitHub.
+export interface SignedMintParamsInput {
+  mintPrice: bigint;
+  maxTotalMintableByWallet: bigint;
+  startTime: bigint;
+  endTime: bigint;
+  dropStageIndex: bigint;
+  maxTokenSupplyForStage: bigint;
+  feeBps: bigint;
+  restrictFeeRecipients: boolean;
+}
+
+export interface FireSignedMintParams {
+  sessionPrivateKey: `0x${string}`;
+  nftContract: Address;
+  quantity: number;
+  valueCapWei: bigint;
+  mintParams: SignedMintParamsInput;
+  salt: bigint;
+  signature: `0x${string}`;
+}
+
+/**
+ * Submits a REAL, directly-signed mintSigned() transaction — the allowlist/
+ * presale counterpart to fireMint's mintPublic(). Same safety properties
+ * (price-cap check before ever building the call, gas-estimation as the
+ * pre-flight revert check, no on-chain enforcement beyond what this
+ * function and firing.py check) — the only structural difference is that
+ * mintParams/salt/signature are caller-supplied (fetched fresh from
+ * OpenSea's own backend right before this is called, per
+ * opensea_session.py), not read from an on-chain getter the way
+ * getPublicDrop is. A stale or mismatched signature simply fails gas
+ * estimation like any other would-revert call — nothing is spent chasing
+ * bad signed-mint data.
+ *
+ * Per SeaDrop's own interface docs: "a signature can only be used once" —
+ * once consumed by ANY successful mintSigned call (this one or otherwise),
+ * retrying with the same signature will fail gas estimation and return a
+ * safe, definite failure, not an ambiguous one.
+ */
+export async function fireSignedMint(params: FireSignedMintParams): Promise<FireMintResult> {
+  const account = privateKeyToAccount(params.sessionPrivateKey);
+
+  const [allowedFeeRecipients, nonce, feesPerGas] = await Promise.all([
+    publicClient.readContract({
+      address: SEADROP_ADDRESS,
+      abi: SEADROP_ABI,
+      functionName: "getAllowedFeeRecipients",
+      args: [params.nftContract],
+    }),
+    publicClient.getTransactionCount({ address: account.address, blockTag: "pending" }),
+    publicClient.estimateFeesPerGas(),
+  ]);
+
+  const feeRecipient: Address =
+    allowedFeeRecipients.length > 0 ? allowedFeeRecipients[0] : account.address;
+
+  const totalCostWei = params.mintParams.mintPrice * BigInt(params.quantity);
+  if (totalCostWei > params.valueCapWei) {
     return {
       success: false,
       txHash: null,
       blockNumber: null,
       gasUsed: null,
-      error: `Gas estimation failed (would revert), nothing sent: ${msg}`,
+      error: `Real mint price (${totalCostWei} wei total) exceeds the granted spend cap (${params.valueCapWei} wei) — aborted before submitting, nothing spent`,
     };
   }
 
-  const maxFeePerGas = feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER;
-  const maxPriorityFeePerGas = feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER;
+  const callData = encodeFunctionData({
+    abi: SEADROP_ABI,
+    functionName: "mintSigned",
+    args: [
+      params.nftContract,
+      feeRecipient,
+      account.address,
+      BigInt(params.quantity),
+      {
+        mintPrice: params.mintParams.mintPrice,
+        maxTotalMintableByWallet: params.mintParams.maxTotalMintableByWallet,
+        startTime: params.mintParams.startTime,
+        endTime: params.mintParams.endTime,
+        dropStageIndex: params.mintParams.dropStageIndex,
+        maxTokenSupplyForStage: params.mintParams.maxTokenSupplyForStage,
+        feeBps: params.mintParams.feeBps,
+        restrictFeeRecipients: params.mintParams.restrictFeeRecipients,
+      },
+      params.salt,
+      params.signature,
+    ],
+  });
 
-  const walletClient = createWalletClient({ account, chain: mainnet, transport: http(ETH_RPC) });
-
-  let txHash: `0x${string}`;
-  try {
-    txHash = await walletClient.sendTransaction({
-      to: SEADROP_ADDRESS,
-      data: callData,
-      value: totalCostWei,
-      nonce,
-      gas,
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { success: false, txHash: null, blockNumber: null, gasUsed: null, error: msg };
-  }
-
-  try {
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: txHash,
-      timeout: RECEIPT_TIMEOUT_MS,
-    });
-    return {
-      success: receipt.status === "success",
-      txHash,
-      blockNumber: receipt.blockNumber.toString(),
-      gasUsed: receipt.gasUsed.toString(),
-      error: receipt.status === "success" ? undefined : "Transaction included on-chain but reverted",
-    };
-  } catch (err: unknown) {
-    // The transaction was broadcast (we have a real hash) but we couldn't
-    // confirm its outcome within the timeout — NOT the same as "it
-    // failed". Callers must treat this as unknown/pending, not a hard
-    // failure, and can look the hash up later.
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      success: false,
-      ambiguous: true,
-      txHash,
-      blockNumber: null,
-      gasUsed: null,
-      error: `Submitted but receipt not confirmed within timeout: ${msg}`,
-    };
-  }
+  return estimateSignAndSend(
+    account, callData, totalCostWei, nonce,
+    feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER,
+    feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER
+  );
 }

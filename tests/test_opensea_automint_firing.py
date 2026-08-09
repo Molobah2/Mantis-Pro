@@ -113,6 +113,24 @@ def test_build_arm_message_changes_with_any_field() -> None:
     assert messages.build_arm_message("cool-drop", 3, "1000", 1700000000) != base
     assert messages.build_arm_message("cool-drop", 2, "2000", 1700000000) != base
     assert messages.build_arm_message("cool-drop", 2, "1000", 1700000001) != base
+    assert messages.build_arm_message("cool-drop", 2, "1000", 1700000000, "GTD") != base
+
+
+def test_build_arm_message_default_stage_label_matches_explicit_empty_string() -> None:
+    # A signature for the public stage must verify the same way whether
+    # the caller omits stageLabel entirely or sends it as "" explicitly —
+    # both mean the same thing (see arm_drop's docstring).
+    assert (
+        messages.build_arm_message("cool-drop", 2, "1000", 1700000000)
+        == messages.build_arm_message("cool-drop", 2, "1000", 1700000000, "")
+    )
+
+
+def test_build_arm_message_different_stage_labels_produce_different_messages() -> None:
+    gtd = messages.build_arm_message("cool-drop", 2, "1000", 1700000000, "GTD")
+    fcfs = messages.build_arm_message("cool-drop", 2, "1000", 1700000000, "FCFS")
+
+    assert gtd != fcfs
 
 
 def test_build_cancel_message_is_deterministic() -> None:
@@ -329,11 +347,11 @@ def test_arm_drop_db_constraint_prevents_duplicate_active_arm_even_if_precheck_i
     # function, so it can find and report the row that actually won.
     calls = {"n": 0}
 
-    def bypassed_for_the_race(owner, drop_id):
+    def bypassed_for_the_race(owner, drop_id, stage_label=""):
         calls["n"] += 1
         if calls["n"] <= 2:
             return None
-        return real_lookup(owner, drop_id)
+        return real_lookup(owner, drop_id, stage_label)
 
     monkeypatch.setattr(store, "get_active_arm_request_for_drop", bypassed_for_the_race)
 
@@ -371,6 +389,158 @@ def test_arm_drop_lowercases_owner_address() -> None:
     result = firing.arm_drop(OWNER.upper().replace("0X", "0x"), slug, quantity=1, max_price_wei="0")
 
     assert "armId" in result
+
+
+# ── arm_drop with stage_label (signed-presale stages) ──────────────────────
+
+GTD_GO_LIVE = 1786100000.0
+
+
+def _mock_gtd_schedule(monkeypatch: pytest.MonkeyPatch, slug: str) -> None:
+    monkeypatch.setattr(
+        firing.collection_details, "get_collection_details",
+        lambda s: {"mint_schedule": [
+            {"name": "GTD", "stage_type": "Allowlist", "starts_epoch": GTD_GO_LIVE},
+            {"name": "Public", "stage_type": "Public", "starts_epoch": GTD_GO_LIVE + 3600},
+        ]},
+    )
+
+
+def _mock_eligibility(monkeypatch: pytest.MonkeyPatch, stages: list) -> None:
+    monkeypatch.setattr(firing.opensea_session, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_drop_eligibility", lambda slug, owner: stages,
+    )
+
+
+def _eligible_gtd_stages() -> list:
+    return [
+        {"stageType": "SIGNED_PRESALE", "stageIndex": 1, "isEligible": True},
+        {"stageType": "PUBLIC_SALE", "stageIndex": 0, "isEligible": True},
+    ]
+
+
+def test_arm_drop_with_stage_label_resolves_and_stores_stage_index_and_go_live(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    _make_grant()
+    _mock_gtd_schedule(monkeypatch, slug)
+    _mock_eligibility(monkeypatch, _eligible_gtd_stages())
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+
+    assert "armId" in result
+    arm = store.get_arm_request(result["armId"])
+    assert arm["stage_label"] == "GTD"
+    assert arm["stage_index"] == 1
+    assert arm["go_live_at"] == GTD_GO_LIVE
+
+
+def test_arm_drop_stage_label_fails_when_opensea_session_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    _make_grant()
+    _mock_gtd_schedule(monkeypatch, slug)
+    monkeypatch.setattr(firing.opensea_session, "is_configured", lambda: False)
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+
+    assert "error" in result
+    assert "session" in result["error"].lower()
+
+
+def test_arm_drop_stage_label_fails_when_stage_name_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    _make_grant()
+    _mock_gtd_schedule(monkeypatch, slug)
+    _mock_eligibility(monkeypatch, _eligible_gtd_stages())
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="FCFS")
+
+    assert "error" in result
+
+
+def test_arm_drop_stage_label_fails_when_eligibility_fetch_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    _make_grant()
+    _mock_gtd_schedule(monkeypatch, slug)
+    monkeypatch.setattr(firing.opensea_session, "is_configured", lambda: True)
+    monkeypatch.setattr(firing.opensea_session, "fetch_drop_eligibility", lambda slug, owner: None)
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+
+    assert "error" in result
+
+
+def test_arm_drop_stage_label_fails_when_not_eligible(monkeypatch: pytest.MonkeyPatch) -> None:
+    slug = _make_drop()
+    _make_grant()
+    _mock_gtd_schedule(monkeypatch, slug)
+    _mock_eligibility(monkeypatch, [
+        {"stageType": "SIGNED_PRESALE", "stageIndex": 1, "isEligible": False},
+        {"stageType": "PUBLIC_SALE", "stageIndex": 0, "isEligible": True},
+    ])
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+
+    assert "error" in result
+    assert "eligible" in result["error"].lower()
+
+
+def test_arm_drop_stage_label_fails_when_position_is_actually_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Defends against a scraped-order/eligibility-order mismatch: if the
+    # stage at the correlated position isn't actually SIGNED_PRESALE,
+    # refuse rather than silently arming the wrong stage.
+    slug = _make_drop()
+    _make_grant()
+    _mock_gtd_schedule(monkeypatch, slug)
+    _mock_eligibility(monkeypatch, [
+        {"stageType": "PUBLIC_SALE", "stageIndex": 0, "isEligible": True},
+        {"stageType": "SIGNED_PRESALE", "stageIndex": 1, "isEligible": True},
+    ])
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+
+    assert "error" in result
+    assert "not a signed-presale stage" in result["error"]
+
+
+def test_arm_drop_two_different_stages_can_both_be_armed_simultaneously(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    _make_grant(max_quantity=10, value_cap_wei="1000000000000000000")
+    _mock_gtd_schedule(monkeypatch, slug)
+    _mock_eligibility(monkeypatch, _eligible_gtd_stages())
+
+    gtd_result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+    public_result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="")
+
+    assert "armId" in gtd_result
+    assert "armId" in public_result
+    assert gtd_result["armId"] != public_result["armId"]
+
+
+def test_arm_drop_same_stage_twice_returns_already_armed(monkeypatch: pytest.MonkeyPatch) -> None:
+    slug = _make_drop()
+    _make_grant(max_quantity=10, value_cap_wei="1000000000000000000")
+    _mock_gtd_schedule(monkeypatch, slug)
+    _mock_eligibility(monkeypatch, _eligible_gtd_stages())
+
+    first = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+    second = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+
+    assert "armId" in first
+    assert "error" in second
+    assert second.get("armId") == first["armId"]
 
 
 # ── revoke_grant ─────────────────────────────────────────────────────────
@@ -426,6 +596,192 @@ def test_revoked_grant_can_no_longer_be_armed() -> None:
     result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0")
 
     assert "error" in result
+
+
+# ── _fire_signed_presale ─────────────────────────────────────────────────
+
+_AUTH = {
+    "mintPrice": "1000000000000000", "maxTotalMintableByWallet": "2",
+    "startTime": "1786100000", "endTime": "1786200000", "dropStageIndex": "1",
+    "maxTokenSupplyForStage": "4696", "feeBps": "0", "restrictFeeRecipients": True,
+    "salt": "12345", "signature": "0x" + "cd" * 65,
+}
+
+
+def test_fire_signed_presale_returns_failure_when_stage_index_missing() -> None:
+    arm = {"owner_address": OWNER, "stage_index": None}
+    drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
+
+    result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
+
+    assert result["success"] is False
+    assert "No on-chain stage index" in result["error"]
+
+
+def test_fire_signed_presale_returns_failure_when_authorization_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_signed_mint_authorization", lambda slug, owner, idx: None,
+    )
+    arm = {"owner_address": OWNER, "stage_index": 1}
+    drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
+
+    result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
+
+    assert result["success"] is False
+    assert "unavailable" in result["error"]
+
+
+def test_fire_signed_presale_calls_fire_signed_mint_with_resolved_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_signed_mint_authorization",
+        lambda slug, owner, idx: _AUTH,
+    )
+    calls = []
+
+    def fake_fire_signed_mint(approval, contract, quantity, value_cap_wei, mint_params, salt, signature):
+        calls.append((approval, contract, quantity, value_cap_wei, mint_params, salt, signature))
+        return {"success": True, "txHash": "0x1", "blockNumber": "1", "gasUsed": "1"}
+
+    monkeypatch.setattr(firing.node_client, "fire_signed_mint", fake_fire_signed_mint)
+
+    arm = {"owner_address": OWNER, "stage_index": 1, "quantity": 2, "max_price_wei": "2000000000000000"}
+    drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
+
+    result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
+
+    assert result["success"] is True
+    assert len(calls) == 1
+    approval, contract, quantity, value_cap_wei, mint_params, salt, signature = calls[0]
+    assert approval == "decrypted-key"
+    assert contract == CONTRACT
+    assert quantity == 2
+    assert value_cap_wei == "2000000000000000"
+    assert mint_params["mintPrice"] == _AUTH["mintPrice"]
+    assert mint_params["restrictFeeRecipients"] is True
+    assert salt == _AUTH["salt"]
+    assert signature == _AUTH["signature"]
+
+
+def test_fire_signed_presale_treats_node_helper_timeout_as_ambiguous(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_signed_mint_authorization",
+        lambda slug, owner, idx: _AUTH,
+    )
+
+    def raise_timeout(*a, **k):
+        raise RuntimeError("Node wallet-helper timed out")
+
+    monkeypatch.setattr(firing.node_client, "fire_signed_mint", raise_timeout)
+
+    arm = {"owner_address": OWNER, "stage_index": 1, "quantity": 1, "max_price_wei": "1000000000000000"}
+    drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
+
+    result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
+
+    assert result["success"] is False
+    assert result["ambiguous"] is True
+
+
+# ── end-to-end: signed-presale stage firing via the countdown thread ──────
+
+def test_watcher_fires_signed_presale_stage_when_go_live_passes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    go_live = time.time() + 0.3
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=go_live,
+        stage_label="GTD", stage_index=1,
+    ))
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_signed_mint_authorization",
+        lambda slug, owner, idx: _AUTH,
+    )
+    fire_calls = []
+    monkeypatch.setattr(
+        firing.node_client, "fire_signed_mint",
+        lambda *a, **k: fire_calls.append(1) or {
+            "success": True, "txHash": "0x1", "blockNumber": "1", "gasUsed": "1",
+        },
+    )
+
+    firing.check_and_fire_armed_requests()
+
+    arm = _wait_for_arm_status(arm_id, "succeeded", timeout=3.0)
+    assert arm["status"] == "succeeded"
+    assert len(fire_calls) == 1
+
+
+def test_watcher_never_calls_public_fire_mint_for_a_presale_arm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    go_live = time.time() - 100  # already live
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=go_live,
+        stage_label="GTD", stage_index=1,
+    ))
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_signed_mint_authorization",
+        lambda slug, owner, idx: _AUTH,
+    )
+    monkeypatch.setattr(
+        firing.node_client, "fire_signed_mint",
+        lambda *a, **k: {"success": True, "txHash": "0x1", "blockNumber": "1", "gasUsed": "1"},
+    )
+    public_fire_calls = []
+    monkeypatch.setattr(
+        firing.node_client, "fire_mint",
+        lambda *a, **k: public_fire_calls.append(1) or {"success": True, "txHash": "0x2"},
+    )
+
+    firing.check_and_fire_armed_requests()
+    _wait_for_arm_status(arm_id, "succeeded", timeout=3.0)
+
+    assert public_fire_calls == []  # never touched the mintPublic path
+    # get_public_drop_window is on-chain-only and irrelevant to a presale
+    # stage's timing — confirm it's never even consulted.
+
+
+def test_watcher_expires_a_presale_arm_after_the_fire_window_with_no_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    go_live = time.time() - firing.SIGNED_PRESALE_FIRE_WINDOW_SECONDS - 10
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=go_live,
+        stage_label="GTD", stage_index=1,
+    ))
+
+    firing.check_and_fire_armed_requests()
+
+    assert store.get_arm_request(arm_id)["status"] == "expired"
+
+
+def test_watcher_fails_presale_arm_with_no_go_live_at_resolved() -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+        stage_label="GTD", stage_index=1,
+    ))
+
+    firing.check_and_fire_armed_requests()
+
+    assert store.get_arm_request(arm_id)["status"] == "failed"
 
 
 # ── cancel_arm ───────────────────────────────────────────────────────────

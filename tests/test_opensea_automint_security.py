@@ -206,6 +206,42 @@ def test_valid_arm_payload_returns_none() -> None:
     assert security.validate_arm_input(_valid_arm_payload()) is None
 
 
+def test_valid_arm_payload_with_stage_label_returns_none() -> None:
+    body = _valid_arm_payload()
+    body["stageLabel"] = "GTD"
+
+    assert security.validate_arm_input(body) is None
+
+
+def test_arm_missing_stage_label_is_valid_defaults_to_public() -> None:
+    body = _valid_arm_payload()
+    assert "stageLabel" not in body
+
+    assert security.validate_arm_input(body) is None
+
+
+def test_arm_empty_string_stage_label_is_valid() -> None:
+    body = _valid_arm_payload()
+    body["stageLabel"] = ""
+
+    assert security.validate_arm_input(body) is None
+
+
+@pytest.mark.parametrize("bad_stage_label", [123, True, ["GTD"], {"name": "GTD"}])
+def test_arm_non_string_stage_label_returns_error(bad_stage_label: object) -> None:
+    body = _valid_arm_payload()
+    body["stageLabel"] = bad_stage_label
+
+    assert security.validate_arm_input(body) is not None
+
+
+def test_arm_overlong_stage_label_returns_error() -> None:
+    body = _valid_arm_payload()
+    body["stageLabel"] = "x" * 201
+
+    assert security.validate_arm_input(body) is not None
+
+
 def test_arm_bad_owner_address_format_returns_error() -> None:
     body = _valid_arm_payload()
     body["ownerAddress"] = "not-an-address"

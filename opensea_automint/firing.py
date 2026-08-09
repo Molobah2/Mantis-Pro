@@ -33,7 +33,7 @@ import time
 
 from wallet_crypto import decrypt_secret
 
-from . import node_client, store
+from . import collection_details, node_client, opensea_session, store
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,14 @@ _countdowns_lock = threading.Lock()
 # already exhausted) would otherwise retry forever.
 MAX_FIRE_ATTEMPTS = 3
 
+# How long after a signed-presale stage's (scraped, not on-chain) go-live
+# time this module keeps trying to fire before giving up and marking the
+# arm request expired. There's no on-chain endTime getter for a presale
+# stage the way there is for the public stage (getPublicDrop) — this is a
+# generous, fixed bound instead, since most allowlist windows run at least
+# this long before yielding to the next stage.
+SIGNED_PRESALE_FIRE_WINDOW_SECONDS = 3600
+
 # How stale a signed arm/cancel message is allowed to be before it's
 # rejected — bounds the replay window for a captured signature (e.g. from a
 # logged request, a browser history entry, or a compromised proxy) rather
@@ -88,15 +96,78 @@ def is_signature_timestamp_fresh(timestamp: float, now: float | None = None) -> 
     return abs(now - timestamp) <= SIGNATURE_MAX_AGE_SECONDS
 
 
-def arm_drop(owner_address: str, collection_slug: str, quantity: int, max_price_wei: str) -> dict:
+def _resolve_signed_presale_stage(collection_slug: str, owner_address: str, stage_label: str) -> dict:
+    """Resolves a human-chosen stage name (e.g. "GTD", matching what the
+    dashboard shows from the scraped mint schedule) to its on-chain SeaDrop
+    stageIndex and go-live timestamp. Returns {"stage_index": int,
+    "go_live_at": float} on success, or {"error": str}.
+
+    Correlates the (cached) scraped mint-schedule list with a fresh
+    OpenSea eligibility fetch BY POSITION — both are returned by OpenSea in
+    the same chronological/tier display order (empirically confirmed
+    against a real drop), which is the only correlation available: the
+    eligibility response doesn't carry the stage's display name, and the
+    scraped schedule doesn't carry the on-chain stageIndex.
+
+    Resolved ONCE here, at arm time, rather than re-derived at fire time —
+    the stage-name-to-index mapping is fixed by the collection's own
+    configuration and isn't expected to change; it's contract
+    address/grant validity that genuinely need re-checking close to firing
+    (see _grant_and_target_still_valid)."""
+    if not opensea_session.is_configured():
+        return {"error": "OpenSea session not configured — signed-mint stages are unavailable"}
+
+    try:
+        details = collection_details.get_collection_details(collection_slug)
+    except ValueError:
+        return {"error": "Unknown collection"}
+    schedule = details.get("mint_schedule") or []
+
+    position = next((i for i, s in enumerate(schedule) if s.get("name") == stage_label), None)
+    if position is None:
+        return {"error": f"Unknown stage {stage_label!r} for this drop"}
+
+    go_live_at = schedule[position].get("starts_epoch")
+    if not go_live_at:
+        return {"error": f"Could not determine a start time for stage {stage_label!r}"}
+
+    eligibility_stages = opensea_session.fetch_drop_eligibility(collection_slug, owner_address)
+    if not eligibility_stages or position >= len(eligibility_stages):
+        return {"error": "Could not fetch stage eligibility from OpenSea — try again shortly"}
+
+    stage = eligibility_stages[position]
+    if stage.get("stageType") != "SIGNED_PRESALE":
+        return {"error": f"Stage {stage_label!r} is not a signed-presale stage"}
+    if not stage.get("isEligible"):
+        return {"error": f"This wallet is not eligible for stage {stage_label!r}"}
+
+    stage_index = stage.get("stageIndex")
+    if not isinstance(stage_index, int):
+        return {"error": f"Could not resolve an on-chain index for stage {stage_label!r}"}
+
+    return {"stage_index": stage_index, "go_live_at": go_live_at}
+
+
+def arm_drop(
+    owner_address: str, collection_slug: str, quantity: int, max_price_wei: str,
+    stage_label: str = "",
+) -> dict:
     """
-    Arms a drop for auto-firing. Validates that the owner has an active
-    session grant that actually covers this drop's contract, and that the
-    requested quantity/total price stay within what that grant authorizes
-    — arming can never request more than the already-granted on-chain
-    permission itself allows (the permission's own CallPolicy enforces this
-    independently on-chain regardless, but rejecting it here up front gives
-    a clear error instead of a guaranteed-to-revert arm).
+    Arms a drop (or, when stage_label is given, one SPECIFIC named stage of
+    it — e.g. "GTD" — resolved via _resolve_signed_presale_stage) for
+    auto-firing. Validates that the owner has an active session grant that
+    actually covers this drop's contract, and that the requested
+    quantity/total price stay within what that grant authorizes — arming
+    can never request more than the already-granted permission itself
+    allows.
+
+    stage_label='' (the default) means the drop's public stage — unchanged
+    from before signed-presale support existed. A drop's GTD/FCFS/Public
+    stages can each be armed independently and simultaneously (see
+    idx_arm_requests_active_owner_drop in store.py) — arming one doesn't
+    consume or block the others, though the grant's overall
+    quantity/spend caps are still shared and enforced cumulatively across
+    all of them (see get_grant_commitment_totals below).
 
     Takes collection_slug rather than the drop's internal DB id — that's
     what the frontend actually has (drops.py's to_display_dict deliberately
@@ -162,17 +233,26 @@ def arm_drop(owner_address: str, collection_slug: str, quantity: int, max_price_
     if committed_spend_wei + requested_total_wei > grant_cap_wei:
         return {"error": "Requested total price exceeds your permission's remaining spend cap"}
 
-    # Only one active (non-terminal) arm request per (owner, drop) — arming
-    # twice for the same drop would otherwise risk two independent watcher
-    # ticks each firing their own real, duplicate mint. This upfront check
-    # is just an early-exit for a clean error message; it is NOT the actual
-    # safety guarantee (two concurrent calls could both pass it before
-    # either inserts — a real TOCTOU race). The actual guarantee is
-    # idx_arm_requests_active_owner_drop, a partial unique index enforced
-    # by SQLite itself — see store.create_arm_request / _init_schema.
-    existing = store.get_active_arm_request_for_drop(owner, drop["id"])
+    go_live_at = None
+    stage_index = None
+    if stage_label:
+        resolution = _resolve_signed_presale_stage(collection_slug, owner, stage_label)
+        if "error" in resolution:
+            return resolution
+        stage_index = resolution["stage_index"]
+        go_live_at = resolution["go_live_at"]
+
+    # Only one active (non-terminal) arm request per (owner, drop, stage) —
+    # arming the SAME stage twice would otherwise risk two independent
+    # watcher ticks each firing their own real, duplicate mint. This
+    # upfront check is just an early-exit for a clean error message; it is
+    # NOT the actual safety guarantee (two concurrent calls could both pass
+    # it before either inserts — a real TOCTOU race). The actual guarantee
+    # is idx_arm_requests_active_owner_drop, a partial unique index
+    # enforced by SQLite itself — see store.create_arm_request / _init_schema.
+    existing = store.get_active_arm_request_for_drop(owner, drop["id"], stage_label)
     if existing:
-        return {"error": "This drop is already armed", "armId": existing["id"]}
+        return {"error": "This stage is already armed", "armId": existing["id"]}
 
     try:
         arm_id = store.create_arm_request(store.ArmRequestInput(
@@ -181,14 +261,16 @@ def arm_drop(owner_address: str, collection_slug: str, quantity: int, max_price_
             session_grant_id=grant["id"],
             quantity=quantity,
             max_price_wei=max_price_wei,
-            go_live_at=None,  # discovered by the watcher via the real on-chain window, not guessed here
+            go_live_at=go_live_at,  # None for public — discovered live via the on-chain window instead
+            stage_label=stage_label,
+            stage_index=stage_index,
         ))
     except sqlite3.IntegrityError:
         # Lost the race against a concurrent arm_drop call for the same
-        # (owner, drop) — the other call's row is now the real one.
-        existing = store.get_active_arm_request_for_drop(owner, drop["id"])
+        # (owner, drop, stage) — the other call's row is now the real one.
+        existing = store.get_active_arm_request_for_drop(owner, drop["id"], stage_label)
         return {
-            "error": "This drop is already armed",
+            "error": "This stage is already armed",
             "armId": existing["id"] if existing else None,
         }
 
@@ -231,17 +313,30 @@ def cancel_arm(arm_id: int, owner_address: str) -> dict:
     return {"cancelled": True}
 
 
-def get_arm_status_for_drop(owner_address: str, collection_slug: str) -> dict | None:
-    """The owner's active (non-terminal) arm request for a drop plus its
-    mint attempts, looked up by collection_slug — or None if this owner
-    has no active arm request for it."""
+def get_arm_status_for_drop(owner_address: str, collection_slug: str, stage_label: str = "") -> dict | None:
+    """The owner's active (non-terminal) arm request for one stage of a
+    drop (default '' = the public stage), plus its mint attempts, looked
+    up by collection_slug — or None if this owner has no active arm
+    request for that stage."""
     drop = store.get_tracked_drop_by_slug(collection_slug)
     if not drop:
         return None
-    arm = store.get_active_arm_request_for_drop(owner_address.lower(), drop["id"])
+    arm = store.get_active_arm_request_for_drop(owner_address.lower(), drop["id"], stage_label)
     if not arm:
         return None
     return {"arm": arm, "attempts": store.get_mint_attempts(arm["id"])}
+
+
+def get_all_arm_statuses_for_drop(owner_address: str, collection_slug: str) -> list[dict]:
+    """Every stage (public and/or any signed-presale stages) the owner
+    currently has actively armed for this drop, each with its mint
+    attempts — lets the dashboard show status for GTD/FCFS/Public
+    simultaneously rather than assuming only one stage is ever armed."""
+    drop = store.get_tracked_drop_by_slug(collection_slug)
+    if not drop:
+        return []
+    arms = store.get_active_arm_requests_for_drop_all_stages(owner_address.lower(), drop["id"])
+    return [{"arm": arm, "attempts": store.get_mint_attempts(arm["id"])} for arm in arms]
 
 
 def check_and_fire_armed_requests() -> None:
@@ -282,6 +377,45 @@ def _grant_and_target_still_valid(drop: dict | None, grant: dict | None, now: fl
     return drop["contract_address"] in allowed_targets
 
 
+def _schedule_or_fire(
+    arm: dict, drop: dict, grant: dict, now: float, start_time: float, end_time: float | None,
+) -> None:
+    """Shared state-transition logic once a go-live (and optional end)
+    time is known, regardless of where that timing came from — the public
+    stage's real on-chain window (getPublicDrop) or a signed-presale
+    stage's scraped go-live time (resolved once at arm time, see
+    _resolve_signed_presale_stage). Decides whether to mark 'scheduled',
+    hand off to a countdown thread, or expire."""
+    if end_time is not None and now >= end_time:
+        logger.info("[firing] arm request %d: mint window has ended, expiring", arm["id"])
+        store.update_arm_request_status(arm["id"], "expired")
+        return
+
+    if now >= start_time + GO_LIVE_SAFETY_MARGIN_SECONDS:
+        # Already live by the time a regular tick caught this (e.g. the
+        # process just restarted, or this arm request only just got past
+        # validation) — fire via the same background-thread path as the
+        # countdown case below (deadline in the past means it fires on the
+        # very first clock check), rather than blocking this tick: a slow
+        # fire_mint call (up to ~90s worst case) must never delay every
+        # OTHER pending arm request this same tick is about to check.
+        _start_countdown_if_not_already_running(arm, drop, grant, start_time)
+        return
+
+    if now >= start_time - CRITICAL_WINDOW_SECONDS:
+        # Close enough to go-live that waiting for the next regular tick
+        # (every ~5s, see agent.py) would cost real, avoidable latency —
+        # hand off to a dedicated thread that busy-waits on the local
+        # clock and fires the instant go-live actually passes.
+        if arm["status"] != "scheduled":
+            store.update_arm_request_status(arm["id"], "scheduled")
+        _start_countdown_if_not_already_running(arm, drop, grant, start_time)
+        return
+
+    if arm["status"] != "scheduled":
+        store.update_arm_request_status(arm["id"], "scheduled")
+
+
 def _check_and_fire_one(arm: dict, now: float) -> None:
     drop = store.get_tracked_drop(arm["drop_id"])
     if not drop or not drop.get("contract_address"):
@@ -310,6 +444,23 @@ def _check_and_fire_one(arm: dict, now: float) -> None:
         store.update_arm_request_status(arm["id"], "failed")
         return
 
+    if arm.get("stage_label"):
+        # Signed-presale stage: go-live was resolved once, at arm time
+        # (see _resolve_signed_presale_stage) — there's no on-chain getter
+        # to poll live the way there is for the public stage.
+        go_live_at = arm.get("go_live_at")
+        if not go_live_at:
+            logger.warning(
+                "[firing] arm request %d: no go-live time resolved for stage %r, failing",
+                arm["id"], arm.get("stage_label"),
+            )
+            store.update_arm_request_status(arm["id"], "failed")
+            return
+        _schedule_or_fire(
+            arm, drop, grant, now, go_live_at, go_live_at + SIGNED_PRESALE_FIRE_WINDOW_SECONDS,
+        )
+        return
+
     try:
         window = node_client.get_public_drop_window(drop["contract_address"])
     except RuntimeError as e:
@@ -319,34 +470,7 @@ def _check_and_fire_one(arm: dict, now: float) -> None:
     if not window:
         return  # no public stage configured on-chain yet — wait
 
-    if now >= window["endTime"]:
-        logger.info("[firing] arm request %d: drop's public window has ended, expiring", arm["id"])
-        store.update_arm_request_status(arm["id"], "expired")
-        return
-
-    if now >= window["startTime"] + GO_LIVE_SAFETY_MARGIN_SECONDS:
-        # Already live by the time a regular tick caught this (e.g. the
-        # process just restarted, or this arm request only just got past
-        # validation) — fire via the same background-thread path as the
-        # countdown case below (deadline in the past means it fires on the
-        # very first clock check), rather than blocking this tick: a slow
-        # fire_mint call (up to ~90s worst case) must never delay every
-        # OTHER pending arm request this same tick is about to check.
-        _start_countdown_if_not_already_running(arm, drop, grant, window["startTime"])
-        return
-
-    if now >= window["startTime"] - CRITICAL_WINDOW_SECONDS:
-        # Close enough to go-live that waiting for the next regular tick
-        # (every ~5s, see agent.py) would cost real, avoidable latency —
-        # hand off to a dedicated thread that busy-waits on the local
-        # clock and fires the instant go-live actually passes.
-        if arm["status"] != "scheduled":
-            store.update_arm_request_status(arm["id"], "scheduled")
-        _start_countdown_if_not_already_running(arm, drop, grant, window["startTime"])
-        return
-
-    if arm["status"] != "scheduled":
-        store.update_arm_request_status(arm["id"], "scheduled")
+    _schedule_or_fire(arm, drop, grant, now, window["startTime"], window["endTime"])
 
 
 def _start_countdown_if_not_already_running(
@@ -445,25 +569,30 @@ def _fire_one(arm: dict, drop: dict, grant: dict, go_live_at: float | None = Non
         round((fire_started_at - go_live_at) * 1000) if go_live_at is not None else None
     )
 
-    try:
-        result = node_client.fire_mint(
-            decrypted_approval, drop["contract_address"],
-            arm["quantity"], arm["max_price_wei"],
-        )
-    except RuntimeError as e:
-        # A "timed out" RuntimeError at this layer means the Node helper's
-        # own internal receipt-wait (up to 60s) plus the HTTP round-trip may
-        # have still been mid-flight when this call's own 90s timeout fired
-        # — a real transaction could genuinely have been broadcast, same as
-        # the "ambiguous" case node_client.fire_mint itself can return. Any
-        # OTHER RuntimeError (connection refused, an immediate error
-        # response) happens before Node ever calls sendTransaction, so it's
-        # a safe, definite failure — nothing was ever broadcast.
-        is_ambiguous = "timed out" in str(e).lower()
-        result = {
-            "success": False, "ambiguous": is_ambiguous, "txHash": None,
-            "blockNumber": None, "gasUsed": None, "error": str(e),
-        }
+    stage_label = arm.get("stage_label") or ""
+    if stage_label:
+        result = _fire_signed_presale(arm, drop, decrypted_approval, stage_label)
+    else:
+        try:
+            result = node_client.fire_mint(
+                decrypted_approval, drop["contract_address"],
+                arm["quantity"], arm["max_price_wei"],
+            )
+        except RuntimeError as e:
+            # A "timed out" RuntimeError at this layer means the Node
+            # helper's own internal receipt-wait (up to 60s) plus the HTTP
+            # round-trip may have still been mid-flight when this call's
+            # own 90s timeout fired — a real transaction could genuinely
+            # have been broadcast, same as the "ambiguous" case
+            # node_client.fire_mint itself can return. Any OTHER
+            # RuntimeError (connection refused, an immediate error
+            # response) happens before Node ever calls sendTransaction, so
+            # it's a safe, definite failure — nothing was ever broadcast.
+            is_ambiguous = "timed out" in str(e).lower()
+            result = {
+                "success": False, "ambiguous": is_ambiguous, "txHash": None,
+                "blockNumber": None, "gasUsed": None, "error": str(e),
+            }
 
     block_number = result.get("blockNumber")
     store.record_mint_attempt(store.MintAttemptInput(
@@ -506,3 +635,57 @@ def _fire_one(arm: dict, drop: dict, grant: dict, go_live_at: float | None = Non
         # window, checked by _check_and_fire_one before ever reaching here)
         # gets another attempt.
         store.update_arm_request_status(arm["id"], "armed")
+
+
+def _fire_signed_presale(arm: dict, drop: dict, decrypted_approval: str, stage_label: str) -> dict:
+    """Fetches a FRESH mint authorization from OpenSea (never cached or
+    reused across attempts — a SeaDrop mintSigned() signature is single-use
+    per its own docs, and mintParams must be exactly what was signed) and,
+    if available, fires it via node_client.fire_signed_mint. Returns the
+    same result shape node_client.fire_mint/fire_signed_mint do.
+
+    If the authorization can't be fetched for ANY reason (OpenSea session
+    not configured, request failed, feature not yet wired — see
+    opensea_session.fetch_signed_mint_authorization), returns a normal,
+    non-exceptional, retryable failure result — this never fires blind
+    with fabricated or stale signed-mint data."""
+    stage_index = arm.get("stage_index")
+    if stage_index is None:
+        return {
+            "success": False, "txHash": None, "blockNumber": None, "gasUsed": None,
+            "error": f"No on-chain stage index resolved for stage {stage_label!r}",
+        }
+
+    auth = opensea_session.fetch_signed_mint_authorization(
+        drop["collection_slug"], arm["owner_address"], stage_index,
+    )
+    if not auth:
+        return {
+            "success": False, "txHash": None, "blockNumber": None, "gasUsed": None,
+            "error": f"Signed-mint authorization unavailable for stage {stage_label!r} on this attempt",
+        }
+
+    mint_params = {
+        "mintPrice": auth.get("mintPrice"),
+        "maxTotalMintableByWallet": auth.get("maxTotalMintableByWallet"),
+        "startTime": auth.get("startTime"),
+        "endTime": auth.get("endTime"),
+        "dropStageIndex": auth.get("dropStageIndex"),
+        "maxTokenSupplyForStage": auth.get("maxTokenSupplyForStage"),
+        "feeBps": auth.get("feeBps"),
+        "restrictFeeRecipients": auth.get("restrictFeeRecipients"),
+    }
+
+    try:
+        return node_client.fire_signed_mint(
+            decrypted_approval, drop["contract_address"], arm["quantity"], arm["max_price_wei"],
+            mint_params, auth.get("salt"), auth.get("signature"),
+        )
+    except RuntimeError as e:
+        # Same ambiguous-vs-definite distinction as the public-mint path —
+        # see _fire_one's comment on this.
+        is_ambiguous = "timed out" in str(e).lower()
+        return {
+            "success": False, "ambiguous": is_ambiguous, "txHash": None,
+            "blockNumber": None, "gasUsed": None, "error": str(e),
+        }
