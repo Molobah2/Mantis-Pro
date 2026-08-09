@@ -10,9 +10,9 @@ import { openSeaRouter } from "./opensea/routes.js";
 const app = express();
 app.use(express.json({ limit: "64kb" }));
 
-// OpenSea Auto-Mint: Ethereum-mainnet ZeroDev routes, kept in their own
-// module (see src/opensea/) since they're a separate chain/account-
-// abstraction stack from the Abstract/AGW routes below.
+// OpenSea Auto-Mint: Ethereum-mainnet direct-transaction routes, kept in
+// their own module (see src/opensea/) since they're a separate chain/stack
+// from the Abstract/AGW routes below.
 app.use(openSeaRouter);
 
 const UPVOTE_CONTRACT = "0x3b50de27506f0a8c1f4122a1e6f470009a76ce2a" as `0x${string}`;

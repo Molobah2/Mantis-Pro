@@ -15,7 +15,7 @@ from flask import Blueprint, Response, jsonify, request, send_file
 from portal_upvote import security as _sec
 from wallet_crypto import encrypt_secret
 
-from . import collection_details, drops, firing, node_client, security, store
+from . import collection_details, drops, firing, messages, node_client, security, store
 
 opensea_automint_bp = Blueprint("opensea_automint", __name__)
 
@@ -94,54 +94,6 @@ def api_collection_details(slug: str) -> Response:
     return jsonify(details)
 
 
-_SMART_ACCOUNT_ADDRESS_RATE_LIMIT = 30
-_SMART_ACCOUNT_ADDRESS_RATE_WINDOW_SECONDS = 3600
-_SMART_ACCOUNT_ADDRESS_RATE_KEY = "smart-account-address"
-
-
-@opensea_automint_bp.route("/api/opensea/eth/smart-account-address")
-def api_smart_account_address() -> Response:
-    """Given ?owner=0x..., returns {"ownerAddress": ..., "smartAccountAddress": ...}.
-
-    Derivation is deterministic (same owner always yields the same smart
-    account address), so store.get_smart_account is checked FIRST — a cache
-    hit never needs to be recomputed and never touches the rate limiter
-    below, which only ever gates genuinely NEW owners.
-
-    On a cache miss: rate-limited per-IP (this triggers a real outbound RPC
-    call chain through the Node helper), then calls
-    node_client.get_smart_account_address, persists the result via
-    store.upsert_smart_account, and returns it.
-    """
-    owner = request.args.get("owner", "")
-    if not _sec.ETH_ADDR_RE.match(owner):
-        return jsonify({"error": "Invalid owner address"}), 400
-    owner = owner.lower()  # keep the response shape identical on cache hit vs. miss
-
-    cached = store.get_smart_account(owner)
-    if cached:
-        return jsonify({
-            "ownerAddress": cached["owner_address"],
-            "smartAccountAddress": cached["smart_account_address"],
-        })
-
-    ip = _sec.get_client_ip(request)
-    if not _sec.rate_limit(
-        ip, _SMART_ACCOUNT_ADDRESS_RATE_KEY,
-        limit=_SMART_ACCOUNT_ADDRESS_RATE_LIMIT,
-        window=_SMART_ACCOUNT_ADDRESS_RATE_WINDOW_SECONDS,
-    ):
-        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
-
-    try:
-        smart_account_address = node_client.get_smart_account_address(owner)
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 502
-
-    store.upsert_smart_account(owner, smart_account_address)
-    return jsonify({"ownerAddress": owner, "smartAccountAddress": smart_account_address})
-
-
 _SESSION_GRANT_RATE_LIMIT = 10
 _SESSION_GRANT_RATE_WINDOW_SECONDS = 3600
 _SESSION_GRANT_RATE_KEY = "session-grant"
@@ -149,11 +101,15 @@ _SESSION_GRANT_RATE_KEY = "session-grant"
 
 @opensea_automint_bp.route("/api/opensea/session-grant", methods=["POST"])
 def api_session_grant() -> Response:
-    """Stores a browser-approved, already-scoped session-key permission.
-    The backend never sees an unscoped private key — only this already-
-    approved, already-encrypted-on-arrival blob. Rate-limited per IP (this
-    writes to the DB and does real encryption work, and each grant is a
-    real cryptographic commitment even though nothing can fire yet)."""
+    """Stores an owner-authorized session key for auto-firing a specific
+    collection. The session key is a plain, fundable EOA — this project
+    fires a direct signed transaction from it (not through a sponsored
+    smart account), so it needs to hold real ETH of its own. There is NO
+    on-chain enforcement of quantity/price/target-contract limits in this
+    model; this grant record (and firing.py's pre-fire checks) is the only
+    safety net. Rate-limited per IP (this writes to the DB and does real
+    encryption work, and each grant is a real cryptographic commitment even
+    though nothing can fire yet)."""
     ip = _sec.get_client_ip(request)
     if not _sec.rate_limit(
         ip, _SESSION_GRANT_RATE_KEY,
@@ -171,33 +127,49 @@ def api_session_grant() -> Response:
         return jsonify({"error": validation_error}), 400
 
     owner_address = body["ownerAddress"].lower()
-    smart_account_address = body["smartAccountAddress"].lower()
+    session_address = body["sessionAddress"].lower()
+    nft_contract = body["nftContract"].lower()
 
-    # Cross-checks that the serializedApproval blob genuinely resolves to
-    # the claimed owner/smart-account addresses, via the Node helper
-    # (deserializes the blob against the real chain). Format validation
-    # above only proves the JSON is well-shaped — it can't catch a client
-    # POSTing a real, validly-signed approval for their OWN wallet labeled
-    # with someone ELSE's address. See node_client.verify_session_grant's
-    # docstring and wallet-helper/src/opensea/zerodevClient.ts's
-    # verifySessionGrantOwnership for why this closes that gap.
+    if not firing.is_signature_timestamp_fresh(body["timestamp"]):
+        return jsonify({"error": "Signature has expired — please try again"}), 401
+
+    # Proves the OWNER actually authorized this specific grant (address is
+    # public, so format validation alone can't catch a spoofed claim).
+    message = messages.build_grant_message(
+        session_address, nft_contract, body["maxQuantity"], body["valueCapWei"],
+        body["expiresAt"], body["timestamp"],
+    )
     try:
-        verified, verify_error = node_client.verify_session_grant(
-            body["serializedApproval"], owner_address, smart_account_address
+        owner_signature_valid = node_client.verify_owner_signature(
+            owner_address, message, body["signature"],
         )
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 502
-    if not verified:
-        return jsonify({"error": verify_error or "Session grant verification failed"}), 400
+    if not owner_signature_valid:
+        return jsonify({"error": "Invalid signature — could not verify wallet ownership"}), 401
+
+    # Proves the submitted sessionPrivateKey actually corresponds to the
+    # claimed sessionAddress — without this, a malformed/mismatched client
+    # could store a key that can never mint as the address the owner just
+    # authorized (a functional bug, not an authorization bypass, but one
+    # this check catches before it ever reaches encryption/DB either way).
+    try:
+        session_key_valid = node_client.verify_session_key(
+            body["sessionPrivateKey"], session_address,
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    if not session_key_valid:
+        return jsonify({"error": "sessionPrivateKey does not correspond to sessionAddress"}), 400
 
     permission_config = json.dumps({
-        "functionName": body["functionName"],
+        "functionName": "mintPublic",
         "maxQuantity": body["maxQuantity"],
     })
-    allowed_targets = json.dumps(body["targets"])
+    allowed_targets = json.dumps([nft_contract])
 
     try:
-        encrypted_session_key = encrypt_secret(body["serializedApproval"])
+        encrypted_session_key = encrypt_secret(body["sessionPrivateKey"])
     except ValueError:
         # encrypt_secret's ValueError is raised when SESSION_KEY_ENCRYPTION_KEY
         # is unset/malformed in this environment — an operator misconfiguration,
@@ -215,7 +187,7 @@ def api_session_grant() -> Response:
 
     grant_id = store.insert_session_grant(store.SessionGrantInput(
         owner_address=owner_address,
-        smart_account_address=smart_account_address,
+        session_address=session_address,
         encrypted_session_key=encrypted_session_key,
         permission_config=permission_config,
         allowed_targets=allowed_targets,
@@ -223,7 +195,7 @@ def api_session_grant() -> Response:
         expires_at=float(body["expiresAt"]),
     ))
 
-    return jsonify({"grantId": grant_id}), 200
+    return jsonify({"grantId": grant_id, "sessionAddress": session_address}), 200
 
 
 _ARM_RATE_LIMIT = 10
@@ -243,7 +215,7 @@ def api_arm_drop() -> Response:
 
     ownerAddress alone is NOT proof of identity — Ethereum addresses are
     public — so this requires a real EOA signature over the exact arm
-    parameters (see firing.build_arm_message), verified against the chain
+    parameters (see messages.build_arm_message), verified against the chain
     via node_client.verify_owner_signature, before ever touching
     firing.arm_drop. Without this, anyone who knew a victim's address could
     arm a drop on their behalf using the victim's already-granted permission."""
@@ -262,7 +234,7 @@ def api_arm_drop() -> Response:
     if not firing.is_signature_timestamp_fresh(body["timestamp"]):
         return jsonify({"error": "Signature has expired — please try again"}), 401
 
-    message = firing.build_arm_message(
+    message = messages.build_arm_message(
         body["collectionSlug"], body["quantity"], body["maxPriceWei"], body["timestamp"],
     )
     try:
@@ -352,7 +324,7 @@ def api_cancel_arm(arm_id: int) -> Response:
     if not firing.is_signature_timestamp_fresh(body["timestamp"]):
         return jsonify({"error": "Signature has expired — please try again"}), 401
 
-    message = firing.build_cancel_message(arm_id, body["timestamp"])
+    message = messages.build_cancel_message(arm_id, body["timestamp"])
     try:
         signature_valid = node_client.verify_owner_signature(
             body["ownerAddress"], message, body["signature"],

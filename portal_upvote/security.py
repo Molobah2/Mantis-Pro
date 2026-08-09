@@ -50,10 +50,18 @@ def rate_limit(ip: str, key: str, limit: int, window: int) -> bool:
         return b["count"] <= limit
 
 def get_client_ip(request) -> str:
-    """Extract real client IP, honouring Railway's X-Forwarded-For header."""
+    """Extract real client IP, honouring Railway's X-Forwarded-For header.
+
+    Takes the LAST entry, not the first: Railway's edge proxy is the only
+    hop between the internet and this app, and it appends the real
+    connecting client's IP to the end of X-Forwarded-For. Everything before
+    that last entry (including the first one) is client-supplied and
+    trivially spoofable — a request can set its own `X-Forwarded-For: 1.2.3.4`
+    header to get bucketed under an attacker-chosen rate-limit key,
+    defeating every limiter built on this function."""
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
-        return xff.split(",")[0].strip()
+        return xff.split(",")[-1].strip()
     return request.remote_addr or "unknown"
 
 # ── Admin auth ────────────────────────────────────────────────────────────────

@@ -1,10 +1,14 @@
 """
-Security primitives for the OpenSea Auto-Mint session-grant flow.
+Security primitives for the OpenSea Auto-Mint tool's grant/arm/cancel flows.
 
-validate_session_grant_input mirrors portal_upvote/security.py's
+Each validate_*_input function mirrors portal_upvote/security.py's
 validate_session_input style exactly: strict format/bounds checks BEFORE
 any crypto/DB touch, returning an error string on failure or None on
-success, failing fast on the first violation found.
+success, failing fast on the first violation found. Signature/timestamp
+freshness (which needs a real RPC call and the current clock) is
+deliberately NOT checked here — see firing.is_signature_timestamp_fresh and
+node_client.verify_owner_signature, called by the route layer after these
+format checks pass.
 """
 
 import re
@@ -16,20 +20,16 @@ from typing import Optional
 # warrant a cross-module dependency between otherwise-independent features.
 ETH_ADDR_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 
+# A raw secp256k1 private key: 0x + 32 bytes = 64 hex chars.
+PRIVATE_KEY_RE = re.compile(r"^0x[0-9a-fA-F]{64}$")
+
+# ECDSA signature format: 0x + r(32 bytes) + s(32 bytes) + v(1 byte) = 65
+# bytes = 130 hex chars — the standard personal_sign/eth_sign output shape.
+SIGNATURE_RE = re.compile(r"^0x[0-9a-fA-F]{130}$")
+
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,100}$")
+
 # ── Bounds ────────────────────────────────────────────────────────────────────
-# The frontend's serialized ZeroDev approval blob (embedded session private
-# key + permission config) has been observed at ~3300 chars in practice.
-# 20,000 is generously above that so a legitimate approval never gets
-# rejected, while still catching an absurdly oversized payload (buggy
-# client, abuse attempt) before it reaches encryption/DB.
-_MAX_SERIALIZED_APPROVAL_LEN = 20_000
-
-# Real grants use exactly 2 targets (the SeaDrop contract + the specific NFT
-# contract). 5 is a sane upper bound above that, not a hard product rule.
-_MAX_TARGETS = 5
-
-_MAX_FUNCTION_NAME_LEN = 100
-
 _MIN_MAX_QUANTITY = 1
 _MAX_MAX_QUANTITY = 1000
 
@@ -38,20 +38,9 @@ _MAX_MAX_QUANTITY = 1000
 _MAX_VALUE_CAP_WEI = 10 * 10**18
 
 # Mirrors portal_upvote/security.py's validate_session_input 32-day-max
-# pattern; 30 days chosen here since session-key grants are meant to be
-# short-lived, narrowly-scoped permissions, not long-standing approvals.
+# pattern; 30 days chosen here since session grants are meant to be
+# short-lived, narrowly-scoped authorizations, not long-standing approvals.
 _MAX_EXPIRES_AT_SECONDS_FROM_NOW = 30 * 86400
-
-
-def _validate_targets(targets: object) -> Optional[str]:
-    if not isinstance(targets, list) or len(targets) == 0:
-        return "targets must be a non-empty list"
-    if len(targets) > _MAX_TARGETS:
-        return f"targets exceeds maximum allowed ({_MAX_TARGETS})"
-    for target in targets:
-        if not isinstance(target, str) or not ETH_ADDR_RE.match(target):
-            return "Invalid target address format"
-    return None
 
 
 def _validate_max_quantity(max_quantity: object) -> Optional[str]:
@@ -88,66 +77,10 @@ def _validate_expires_at(expires_at: object) -> Optional[str]:
     return None
 
 
-def validate_session_grant_input(body: dict) -> Optional[str]:
-    """Validate a session-grant POST body BEFORE any crypto/DB touch. Returns
-    an error message string on failure, None on success. Mirrors
-    portal_upvote/security.py's validate_session_input style exactly."""
-    owner_address = body.get("ownerAddress", "")
-    if not isinstance(owner_address, str) or not ETH_ADDR_RE.match(owner_address):
-        return "Invalid ownerAddress format"
-
-    smart_account_address = body.get("smartAccountAddress", "")
-    if not isinstance(smart_account_address, str) or not ETH_ADDR_RE.match(smart_account_address):
-        return "Invalid smartAccountAddress format"
-
-    serialized_approval = body.get("serializedApproval", "")
-    if not isinstance(serialized_approval, str) or not serialized_approval:
-        return "Missing serializedApproval"
-    if len(serialized_approval) > _MAX_SERIALIZED_APPROVAL_LEN:
-        return "serializedApproval payload too large"
-
-    targets_error = _validate_targets(body.get("targets"))
-    if targets_error:
-        return targets_error
-
-    function_name = body.get("functionName", "")
-    if not isinstance(function_name, str) or not function_name:
-        return "Missing functionName"
-    if len(function_name) > _MAX_FUNCTION_NAME_LEN:
-        return "functionName too long"
-
-    max_quantity_error = _validate_max_quantity(body.get("maxQuantity"))
-    if max_quantity_error:
-        return max_quantity_error
-
-    value_cap_error = _validate_value_cap_wei(body.get("valueCapWei"))
-    if value_cap_error:
-        return value_cap_error
-
-    expires_at_error = _validate_expires_at(body.get("expiresAt"))
-    if expires_at_error:
-        return expires_at_error
-
-    return None
-
-
-# Self-contained (matches this module's existing style of not importing a
-# one-line regex from collection_details for a single cross-module use) —
-# same pattern collection_details.SLUG_RE uses.
-SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,100}$")
-
-
 def _validate_collection_slug(collection_slug: object) -> Optional[str]:
     if not isinstance(collection_slug, str) or not SLUG_RE.match(collection_slug):
         return "Invalid collectionSlug format"
     return None
-
-
-# ECDSA signature format: 0x + r(32 bytes) + s(32 bytes) + v(1 byte) = 65
-# bytes = 130 hex chars — the standard personal_sign/eth_sign output shape.
-SIGNATURE_RE = re.compile(r"^0x[0-9a-fA-F]{130}$")
-
-_MAX_MESSAGE_LEN = 500  # generous over the actual built message length; catches abuse, not legitimate use
 
 
 def _validate_signature(signature: object) -> Optional[str]:
@@ -165,6 +98,59 @@ def _validate_timestamp(timestamp: object) -> Optional[str]:
     return None
 
 
+def validate_session_grant_input(body: dict) -> Optional[str]:
+    """Validate a session-grant POST body ({ownerAddress, sessionAddress,
+    sessionPrivateKey, nftContract, maxQuantity, valueCapWei, expiresAt,
+    signature, timestamp}) BEFORE any crypto/DB touch. Returns an error
+    message string on failure, None on success.
+
+    There is no on-chain enforcement of maxQuantity/valueCapWei/nftContract
+    in this project's firing model (a direct signed transaction from the
+    session key, not an ERC-4337 CallPolicy) — this validation, plus
+    firing.py's pre-fire checks, are the only safety net. signature/
+    timestamp authorize the grant itself: the caller must prove control of
+    ownerAddress by signing a message built from these exact fields (see
+    messages.build_grant_message) — format-checked here, actually verified
+    against the chain (and checked for staleness) by the route layer."""
+    owner_address = body.get("ownerAddress", "")
+    if not isinstance(owner_address, str) or not ETH_ADDR_RE.match(owner_address):
+        return "Invalid ownerAddress format"
+
+    session_address = body.get("sessionAddress", "")
+    if not isinstance(session_address, str) or not ETH_ADDR_RE.match(session_address):
+        return "Invalid sessionAddress format"
+
+    session_private_key = body.get("sessionPrivateKey", "")
+    if not isinstance(session_private_key, str) or not PRIVATE_KEY_RE.match(session_private_key):
+        return "Invalid sessionPrivateKey format"
+
+    nft_contract = body.get("nftContract", "")
+    if not isinstance(nft_contract, str) or not ETH_ADDR_RE.match(nft_contract):
+        return "Invalid nftContract format"
+
+    max_quantity_error = _validate_max_quantity(body.get("maxQuantity"))
+    if max_quantity_error:
+        return max_quantity_error
+
+    value_cap_error = _validate_value_cap_wei(body.get("valueCapWei"))
+    if value_cap_error:
+        return value_cap_error
+
+    expires_at_error = _validate_expires_at(body.get("expiresAt"))
+    if expires_at_error:
+        return expires_at_error
+
+    signature_error = _validate_signature(body.get("signature"))
+    if signature_error:
+        return signature_error
+
+    timestamp_error = _validate_timestamp(body.get("timestamp"))
+    if timestamp_error:
+        return timestamp_error
+
+    return None
+
+
 def validate_arm_input(body: dict) -> Optional[str]:
     """Validate an arm-request POST body ({ownerAddress, collectionSlug,
     quantity, maxPriceWei, signature, timestamp}) BEFORE any DB touch.
@@ -179,7 +165,7 @@ def validate_arm_input(body: dict) -> Optional[str]:
 
     signature/timestamp together authorize the action: the caller must
     prove control of ownerAddress by signing a message built from these
-    exact fields (see firing.build_arm_message) — format-checked here,
+    exact fields (see messages.build_arm_message) — format-checked here,
     actually verified against the chain (and checked for staleness) by the
     route layer, since that requires a real RPC call this module
     deliberately never makes (see this module's docstring)."""
@@ -213,7 +199,7 @@ def validate_arm_input(body: dict) -> Optional[str]:
 def validate_cancel_input(body: dict) -> Optional[str]:
     """Validate a cancel-request POST body ({ownerAddress, signature,
     timestamp}) BEFORE any DB touch. The arm request id itself comes from
-    the URL path, not the body — see firing.build_cancel_message."""
+    the URL path, not the body — see messages.build_cancel_message."""
     owner_address = body.get("ownerAddress", "")
     if not isinstance(owner_address, str) or not ETH_ADDR_RE.match(owner_address):
         return "Invalid ownerAddress format"

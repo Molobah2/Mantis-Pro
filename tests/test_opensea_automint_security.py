@@ -5,21 +5,23 @@ import pytest
 from opensea_automint import security
 
 OWNER_ADDRESS = "0x" + "a1" * 20
-SMART_ACCOUNT_ADDRESS = "0x" + "b2" * 20
-TARGET_1 = "0x" + "d4" * 20
-TARGET_2 = "0x" + "c3" * 20
+SESSION_ADDRESS = "0x" + "b2" * 20
+NFT_CONTRACT = "0x" + "d4" * 20
+VALID_SIGNATURE = "0x" + "ab" * 65
+SESSION_PRIVATE_KEY = "0x" + "cd" * 32
 
 
 def _valid_payload() -> dict:
     return {
         "ownerAddress": OWNER_ADDRESS,
-        "smartAccountAddress": SMART_ACCOUNT_ADDRESS,
-        "serializedApproval": "a" * 3300,
-        "targets": [TARGET_1, TARGET_2],
-        "functionName": "mintPublic",
+        "sessionAddress": SESSION_ADDRESS,
+        "sessionPrivateKey": SESSION_PRIVATE_KEY,
+        "nftContract": NFT_CONTRACT,
         "maxQuantity": 3,
         "valueCapWei": "50000000000000000",
         "expiresAt": time.time() + 3600,
+        "signature": VALID_SIGNATURE,
+        "timestamp": time.time(),
     }
 
 
@@ -38,80 +40,57 @@ def test_bad_owner_address_format_returns_error() -> None:
     assert security.validate_session_grant_input(body) is not None
 
 
-# ── smartAccountAddress ──────────────────────────────────────────────────
+# ── sessionAddress ────────────────────────────────────────────────────────
 
-def test_bad_smart_account_address_format_returns_error() -> None:
+def test_bad_session_address_format_returns_error() -> None:
     body = _valid_payload()
-    body["smartAccountAddress"] = "not-an-address"
+    body["sessionAddress"] = "not-an-address"
 
     assert security.validate_session_grant_input(body) is not None
 
 
-# ── serializedApproval ───────────────────────────────────────────────────
+# ── sessionPrivateKey ─────────────────────────────────────────────────────
 
-def test_missing_serialized_approval_returns_error() -> None:
+def test_missing_session_private_key_returns_error() -> None:
     body = _valid_payload()
-    del body["serializedApproval"]
+    del body["sessionPrivateKey"]
 
     assert security.validate_session_grant_input(body) is not None
 
 
-def test_empty_serialized_approval_returns_error() -> None:
+def test_empty_session_private_key_returns_error() -> None:
     body = _valid_payload()
-    body["serializedApproval"] = ""
+    body["sessionPrivateKey"] = ""
 
     assert security.validate_session_grant_input(body) is not None
 
 
-def test_oversized_serialized_approval_returns_error() -> None:
+def test_session_private_key_wrong_length_returns_error() -> None:
     body = _valid_payload()
-    body["serializedApproval"] = "a" * 20_001
+    body["sessionPrivateKey"] = "0x" + "cd" * 31
 
     assert security.validate_session_grant_input(body) is not None
 
 
-# ── targets ───────────────────────────────────────────────────────────────
-
-def test_empty_targets_list_returns_error() -> None:
+def test_session_private_key_missing_0x_prefix_returns_error() -> None:
     body = _valid_payload()
-    body["targets"] = []
+    body["sessionPrivateKey"] = "cd" * 32
 
     assert security.validate_session_grant_input(body) is not None
 
 
-def test_too_many_targets_returns_error() -> None:
+# ── nftContract ───────────────────────────────────────────────────────────
+
+def test_missing_nft_contract_returns_error() -> None:
     body = _valid_payload()
-    body["targets"] = ["0x" + f"{i:02x}" * 20 for i in range(6)]
+    del body["nftContract"]
 
     assert security.validate_session_grant_input(body) is not None
 
 
-def test_target_not_valid_address_returns_error() -> None:
+def test_bad_nft_contract_format_returns_error() -> None:
     body = _valid_payload()
-    body["targets"] = [TARGET_1, "not-an-address"]
-
-    assert security.validate_session_grant_input(body) is not None
-
-
-# ── functionName ─────────────────────────────────────────────────────────
-
-def test_missing_function_name_returns_error() -> None:
-    body = _valid_payload()
-    del body["functionName"]
-
-    assert security.validate_session_grant_input(body) is not None
-
-
-def test_empty_function_name_returns_error() -> None:
-    body = _valid_payload()
-    body["functionName"] = ""
-
-    assert security.validate_session_grant_input(body) is not None
-
-
-def test_oversized_function_name_returns_error() -> None:
-    body = _valid_payload()
-    body["functionName"] = "a" * 101
+    body["nftContract"] = "not-an-address"
 
     assert security.validate_session_grant_input(body) is not None
 
@@ -192,10 +171,25 @@ def test_expires_at_more_than_30_days_out_returns_error() -> None:
     assert security.validate_session_grant_input(body) is not None
 
 
+# ── grant signature/timestamp ───────────────────────────────────────────────
+
+@pytest.mark.parametrize("bad_sig", ["", "not-hex", "0x" + "ab" * 64, "0x" + "zz" * 65, None, 12345])
+def test_grant_invalid_signature_returns_error(bad_sig: object) -> None:
+    body = _valid_payload()
+    body["signature"] = bad_sig
+
+    assert security.validate_session_grant_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_ts", [0, -1, "not-a-number", None, True])
+def test_grant_invalid_timestamp_returns_error(bad_ts: object) -> None:
+    body = _valid_payload()
+    body["timestamp"] = bad_ts
+
+    assert security.validate_session_grant_input(body) is not None
+
+
 # ── validate_arm_input ────────────────────────────────────────────────────
-
-VALID_SIGNATURE = "0x" + "ab" * 65
-
 
 def _valid_arm_payload() -> dict:
     return {

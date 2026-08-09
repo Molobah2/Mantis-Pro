@@ -1,81 +1,19 @@
 import { Router } from "express";
-import { isAddress, type Address } from "viem";
+import { isAddress, isHex, type Address } from "viem";
 import {
-  deriveSmartAccountAddress,
-  verifySessionGrantOwnership,
   verifyOwnerSignature,
+  verifySessionKeyMatchesAddress,
   fireMint,
   getPublicDropWindow,
-} from "./zerodevClient.js";
+} from "./ethClient.js";
 
 export const openSeaRouter = Router();
 
-// POST /eth/smart-account-address — non-firing, read-only. Given an owner's
-// EOA address, returns the counterfactual Ethereum-mainnet ZeroDev smart
-// account address for it. No signing, no transaction, no session key.
-openSeaRouter.post("/eth/smart-account-address", async (req, res) => {
-  const { ownerAddress } = req.body as { ownerAddress?: string };
-
-  if (!ownerAddress || !isAddress(ownerAddress)) {
-    return res.status(400).json({ error: "Valid ownerAddress required" });
-  }
-
-  try {
-    const smartAccountAddress = await deriveSmartAccountAddress(
-      ownerAddress as Address
-    );
-    return res.json({ ownerAddress, smartAccountAddress });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[opensea:smart-account-address]", msg);
-    return res.status(500).json({ error: msg });
-  }
-});
-
-// POST /eth/verify-session-grant — non-firing. Confirms a browser-produced
-// serialized session-key approval genuinely resolves to the claimed owner
-// and smart-account addresses before Flask ever persists it. Never touches
-// a private key; the approval itself was already fully constructed and
-// signed in the browser — this only deserializes and cross-checks it.
-openSeaRouter.post("/eth/verify-session-grant", async (req, res) => {
-  const { serializedApproval, ownerAddress, smartAccountAddress } = req.body as {
-    serializedApproval?: string;
-    ownerAddress?: string;
-    smartAccountAddress?: string;
-  };
-
-  if (!serializedApproval || typeof serializedApproval !== "string") {
-    return res.status(400).json({ error: "serializedApproval required" });
-  }
-  if (!ownerAddress || !isAddress(ownerAddress)) {
-    return res.status(400).json({ error: "Valid ownerAddress required" });
-  }
-  if (!smartAccountAddress || !isAddress(smartAccountAddress)) {
-    return res.status(400).json({ error: "Valid smartAccountAddress required" });
-  }
-
-  try {
-    const result = await verifySessionGrantOwnership(
-      serializedApproval,
-      ownerAddress as Address,
-      smartAccountAddress as Address
-    );
-    if (!result.valid) {
-      return res.status(400).json({ error: result.error ?? "Verification failed" });
-    }
-    return res.json({ valid: true });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[opensea:verify-session-grant]", msg);
-    return res.status(500).json({ error: msg });
-  }
-});
-
-// POST /eth/verify-owner-signature — authorizes arm/cancel actions.
+// POST /eth/verify-owner-signature — authorizes grant/arm/cancel actions.
 // Confirms the caller actually controls ownerAddress before Flask acts on
-// it — without this, arm/cancel would trust a bare, self-reported address
-// (public knowledge for any wallet), letting anyone act on someone else's
-// behalf.
+// it — without this, those routes would trust a bare, self-reported
+// address (public knowledge for any wallet), letting anyone act on someone
+// else's behalf.
 openSeaRouter.post("/eth/verify-owner-signature", async (req, res) => {
   const { ownerAddress, message, signature } = req.body as {
     ownerAddress?: string;
@@ -107,6 +45,37 @@ openSeaRouter.post("/eth/verify-owner-signature", async (req, res) => {
   }
 });
 
+// POST /eth/verify-session-key — non-firing. Confirms a browser-produced
+// session private key actually corresponds to the sessionAddress a grant
+// request claims for it, before Flask ever persists the (encrypted) key.
+// Never touches the key beyond this one derivation — it's discarded
+// immediately after the response.
+openSeaRouter.post("/eth/verify-session-key", (req, res) => {
+  const { sessionPrivateKey, sessionAddress } = req.body as {
+    sessionPrivateKey?: string;
+    sessionAddress?: string;
+  };
+
+  if (!sessionPrivateKey || !isHex(sessionPrivateKey) || sessionPrivateKey.length !== 66) {
+    return res.status(400).json({ error: "Valid sessionPrivateKey required" });
+  }
+  if (!sessionAddress || !isAddress(sessionAddress)) {
+    return res.status(400).json({ error: "Valid sessionAddress required" });
+  }
+
+  try {
+    const valid = verifySessionKeyMatchesAddress(
+      sessionPrivateKey as `0x${string}`,
+      sessionAddress as Address
+    );
+    return res.json({ valid });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[opensea:verify-session-key]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
 // POST /eth/public-drop-window — read-only, no wallet needed. Used by the
 // Python firing watcher to know a drop's real on-chain start/end time.
 openSeaRouter.post("/eth/public-drop-window", async (req, res) => {
@@ -133,25 +102,21 @@ openSeaRouter.post("/eth/public-drop-window", async (req, res) => {
 // Only ever called from Flask's own server-side watcher (opensea_automint's
 // firing module) over loopback — this process only listens on 127.0.0.1
 // (see server.ts), so it's unreachable from the public internet regardless.
-// The serializedApproval here is the DECRYPTED session-key blob — Flask
-// decrypts it just before this call and never persists the plaintext.
+// sessionPrivateKey here is the DECRYPTED session key — Flask decrypts it
+// just before this call and never persists the plaintext.
 openSeaRouter.post("/eth/fire-mint", async (req, res) => {
-  const { serializedApproval, nftContract, smartAccountAddress, quantity, valueCapWei } = req.body as {
-    serializedApproval?: string;
+  const { sessionPrivateKey, nftContract, quantity, valueCapWei } = req.body as {
+    sessionPrivateKey?: string;
     nftContract?: string;
-    smartAccountAddress?: string;
     quantity?: number;
     valueCapWei?: string;
   };
 
-  if (!serializedApproval || typeof serializedApproval !== "string") {
-    return res.status(400).json({ error: "serializedApproval required" });
+  if (!sessionPrivateKey || !isHex(sessionPrivateKey) || sessionPrivateKey.length !== 66) {
+    return res.status(400).json({ error: "Valid sessionPrivateKey required" });
   }
   if (!nftContract || !isAddress(nftContract)) {
     return res.status(400).json({ error: "Valid nftContract required" });
-  }
-  if (!smartAccountAddress || !isAddress(smartAccountAddress)) {
-    return res.status(400).json({ error: "Valid smartAccountAddress required" });
   }
   if (!Number.isInteger(quantity) || (quantity as number) <= 0) {
     return res.status(400).json({ error: "quantity must be a positive integer" });
@@ -168,9 +133,8 @@ openSeaRouter.post("/eth/fire-mint", async (req, res) => {
 
   try {
     const result = await fireMint({
-      serializedApproval,
+      sessionPrivateKey: sessionPrivateKey as `0x${string}`,
       nftContract: nftContract as Address,
-      smartAccountAddress: smartAccountAddress as Address,
       quantity: quantity as number,
       valueCapWei: valueCapWeiBig,
     });

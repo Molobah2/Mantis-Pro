@@ -17,15 +17,18 @@ _initialized_dbs: set[str] = set()
 
 
 def _init_schema(c: sqlite3.Connection) -> None:
-    c.execute("""CREATE TABLE IF NOT EXISTS smart_accounts (
-        owner_address          TEXT PRIMARY KEY,
-        smart_account_address  TEXT,
-        created_at              REAL
-    )""")
+    # Note: an earlier design used ERC-4337 smart accounts (ZeroDev) for
+    # firing, with a separate `smart_accounts` cache table for their
+    # counterfactual addresses. Replaced with direct-signed-transaction
+    # firing from a plain session EOA for speed — session_grants now stores
+    # that key's own `session_address` directly, and no smart-account
+    # derivation happens anywhere in this codebase anymore. The old table
+    # is no longer created (a pre-existing one on a live DB is simply
+    # unused, not actively dropped — nothing reads it either way).
     c.execute("""CREATE TABLE IF NOT EXISTS session_grants (
         id                      INTEGER PRIMARY KEY AUTOINCREMENT,
         owner_address           TEXT,
-        smart_account_address   TEXT,
+        session_address         TEXT,
         encrypted_session_key   TEXT,
         permission_config       TEXT,
         allowed_targets         TEXT,
@@ -96,6 +99,14 @@ def _init_schema(c: sqlite3.Connection) -> None:
         c.execute("ALTER TABLE tracked_drops ADD COLUMN chain TEXT DEFAULT 'ethereum'")
     except sqlite3.OperationalError:
         pass  # column already exists
+    try:
+        # A DB created before the ERC-4337-to-direct-transaction rewrite
+        # still has the old column name — rename it in place rather than
+        # requiring a fresh DB (no real user funds/grants existed under the
+        # old model yet, but this keeps the migration honest regardless).
+        c.execute("ALTER TABLE session_grants RENAME COLUMN smart_account_address TO session_address")
+    except sqlite3.OperationalError:
+        pass  # already renamed, or table was created fresh with the new name
     c.commit()
 
 
@@ -119,7 +130,7 @@ def _conn() -> sqlite3.Connection:
 @dataclass(frozen=True)
 class SessionGrantInput:
     owner_address: str
-    smart_account_address: str
+    session_address: str
     encrypted_session_key: str
     permission_config: str
     allowed_targets: str
@@ -168,35 +179,6 @@ class EligibilityInput:
     source: str
 
 
-# ── Smart accounts ───────────────────────────────────────────────────
-
-def upsert_smart_account(owner_address: str, smart_account_address: str) -> None:
-    """Create or update the ZeroDev smart-account address derived for one owner wallet."""
-    now = time.time()
-    owner = owner_address.lower()
-    with _lock, closing(_conn()) as c:
-        c.execute("""
-            INSERT INTO smart_accounts (owner_address, smart_account_address, created_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(owner_address) DO UPDATE SET
-                smart_account_address=excluded.smart_account_address
-        """, (owner, smart_account_address, now))
-        c.commit()
-
-
-def get_smart_account(owner_address: str) -> dict | None:
-    """Look up the smart-account row for one owner wallet, or None if never derived."""
-    owner = owner_address.lower()
-    with _lock, closing(_conn()) as c:
-        row = c.execute(
-            "SELECT owner_address, smart_account_address, created_at FROM smart_accounts WHERE owner_address=?",
-            (owner,)
-        ).fetchone()
-    if not row:
-        return None
-    return {"owner_address": row[0], "smart_account_address": row[1], "created_at": row[2]}
-
-
 # ── Session grants ───────────────────────────────────────────────────
 
 def insert_session_grant(grant: SessionGrantInput) -> int:
@@ -206,11 +188,11 @@ def insert_session_grant(grant: SessionGrantInput) -> int:
     with _lock, closing(_conn()) as c:
         cur = c.execute("""
             INSERT INTO session_grants (
-                owner_address, smart_account_address, encrypted_session_key,
+                owner_address, session_address, encrypted_session_key,
                 permission_config, allowed_targets, value_cap_wei, expires_at,
                 revoked, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
-        """, (owner, grant.smart_account_address, grant.encrypted_session_key,
+        """, (owner, grant.session_address, grant.encrypted_session_key,
               grant.permission_config, grant.allowed_targets, grant.value_cap_wei,
               grant.expires_at, now))
         c.commit()
@@ -223,7 +205,7 @@ def get_active_session_grant(owner_address: str) -> dict | None:
     now = time.time()
     with _lock, closing(_conn()) as c:
         row = c.execute("""
-            SELECT id, owner_address, smart_account_address, encrypted_session_key,
+            SELECT id, owner_address, session_address, encrypted_session_key,
                    permission_config, allowed_targets, value_cap_wei, expires_at,
                    revoked, created_at
             FROM session_grants
@@ -242,7 +224,7 @@ def get_session_grant(grant_id: int) -> dict | None:
     would."""
     with _lock, closing(_conn()) as c:
         row = c.execute("""
-            SELECT id, owner_address, smart_account_address, encrypted_session_key,
+            SELECT id, owner_address, session_address, encrypted_session_key,
                    permission_config, allowed_targets, value_cap_wei, expires_at,
                    revoked, created_at
             FROM session_grants WHERE id=?
@@ -261,7 +243,7 @@ def revoke_session_grant(grant_id: int) -> None:
 
 def _session_grant_row_to_dict(row: tuple) -> dict:
     return {
-        "id": row[0], "owner_address": row[1], "smart_account_address": row[2],
+        "id": row[0], "owner_address": row[1], "session_address": row[2],
         "encrypted_session_key": row[3], "permission_config": row[4],
         "allowed_targets": row[5], "value_cap_wei": row[6], "expires_at": row[7],
         "revoked": row[8], "created_at": row[9],
@@ -419,6 +401,31 @@ def get_pending_arm_requests() -> list[dict]:
             ORDER BY id
         """).fetchall()
     return [_arm_request_row_to_dict(r) for r in rows]
+
+
+def get_grant_commitment_totals(session_grant_id: int) -> tuple[int, int]:
+    """Sum of quantity and total spend (max_price_wei, already a per-arm
+    TOTAL — see firing.arm_drop) across every arm request tied to this
+    grant that still counts against its maxQuantity/valueCapWei cap: every
+    non-terminal status, plus 'succeeded' (a completed mint really did
+    spend that ETH). 'cancelled'/'failed'/'expired' requests never
+    consumed the grant's allowance, so they're excluded.
+
+    This is what lets arm_drop enforce a grant's caps CUMULATIVELY across
+    however many arm requests get created against it over its lifetime —
+    checking only the single request being validated would let a grant be
+    re-armed after each success and spend past what the owner actually
+    signed for (there's no on-chain CallPolicy backstopping this anymore;
+    see this project's direct-transaction firing model)."""
+    with _lock, closing(_conn()) as c:
+        rows = c.execute("""
+            SELECT quantity, max_price_wei FROM arm_requests
+            WHERE session_grant_id=?
+              AND status IN ('pending_schedule','scheduled','armed','fired','succeeded')
+        """, (session_grant_id,)).fetchall()
+    total_quantity = sum(r[0] for r in rows)
+    total_spend_wei = sum(int(r[1]) for r in rows)
+    return total_quantity, total_spend_wei
 
 
 def get_active_arm_request_for_drop(owner_address: str, drop_id: int) -> dict | None:

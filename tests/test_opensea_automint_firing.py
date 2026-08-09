@@ -4,11 +4,11 @@ import time
 
 import pytest
 
-from opensea_automint import firing, store
+from opensea_automint import firing, messages, store
 from wallet_crypto import encrypt_secret
 
 OWNER = "0xowner1234567890123456789012345678901234"
-SMART_ACCOUNT = "0xsmartaccount1234567890123456789012345678"
+SESSION_ADDRESS = "0xsessionaddress123456789012345678901234"
 CONTRACT = "0xcontract123456789012345678901234567890ab"
 
 
@@ -88,7 +88,7 @@ def _make_grant(
     targets = targets if targets is not None else [CONTRACT]
     return store.insert_session_grant(store.SessionGrantInput(
         owner_address=owner,
-        smart_account_address=SMART_ACCOUNT,
+        session_address=SESSION_ADDRESS,
         encrypted_session_key=encrypted_session_key,
         permission_config=json.dumps({"functionName": "mintPublic", "maxQuantity": max_quantity}),
         allowed_targets=json.dumps(targets),
@@ -100,33 +100,33 @@ def _make_grant(
 # ── message building / signature freshness ─────────────────────────────
 
 def test_build_arm_message_is_deterministic() -> None:
-    m1 = firing.build_arm_message("cool-drop", 2, "1000", 1700000000)
-    m2 = firing.build_arm_message("cool-drop", 2, "1000", 1700000000)
+    m1 = messages.build_arm_message("cool-drop", 2, "1000", 1700000000)
+    m2 = messages.build_arm_message("cool-drop", 2, "1000", 1700000000)
 
     assert m1 == m2
 
 
 def test_build_arm_message_changes_with_any_field() -> None:
-    base = firing.build_arm_message("cool-drop", 2, "1000", 1700000000)
+    base = messages.build_arm_message("cool-drop", 2, "1000", 1700000000)
 
-    assert firing.build_arm_message("other-drop", 2, "1000", 1700000000) != base
-    assert firing.build_arm_message("cool-drop", 3, "1000", 1700000000) != base
-    assert firing.build_arm_message("cool-drop", 2, "2000", 1700000000) != base
-    assert firing.build_arm_message("cool-drop", 2, "1000", 1700000001) != base
+    assert messages.build_arm_message("other-drop", 2, "1000", 1700000000) != base
+    assert messages.build_arm_message("cool-drop", 3, "1000", 1700000000) != base
+    assert messages.build_arm_message("cool-drop", 2, "2000", 1700000000) != base
+    assert messages.build_arm_message("cool-drop", 2, "1000", 1700000001) != base
 
 
 def test_build_cancel_message_is_deterministic() -> None:
-    m1 = firing.build_cancel_message(5, 1700000000)
-    m2 = firing.build_cancel_message(5, 1700000000)
+    m1 = messages.build_cancel_message(5, 1700000000)
+    m2 = messages.build_cancel_message(5, 1700000000)
 
     assert m1 == m2
 
 
 def test_build_cancel_message_changes_with_any_field() -> None:
-    base = firing.build_cancel_message(5, 1700000000)
+    base = messages.build_cancel_message(5, 1700000000)
 
-    assert firing.build_cancel_message(6, 1700000000) != base
-    assert firing.build_cancel_message(5, 1700000001) != base
+    assert messages.build_cancel_message(6, 1700000000) != base
+    assert messages.build_cancel_message(5, 1700000001) != base
 
 
 def test_is_signature_timestamp_fresh_accepts_current_timestamp() -> None:
@@ -213,13 +213,74 @@ def test_arm_drop_quantity_exceeding_grant_max_returns_error() -> None:
 
 
 def test_arm_drop_total_price_exceeding_cap_returns_error() -> None:
+    # max_price_wei is already a TOTAL for the whole arm request (matches
+    # what ethClient.fireMint actually compares against — see
+    # firing.arm_drop's own comment) — not multiplied by quantity again.
     slug = _make_drop()
     _make_grant(value_cap_wei="1000")
 
-    result = firing.arm_drop(OWNER, slug, quantity=2, max_price_wei="600")  # 1200 > 1000
+    result = firing.arm_drop(OWNER, slug, quantity=2, max_price_wei="1200")
 
     assert "error" in result
     assert "spend cap" in result["error"]
+
+
+def test_arm_drop_max_price_wei_is_not_multiplied_by_quantity() -> None:
+    # Regression test: max_price_wei=600 with quantity=2 must NOT be
+    # treated as 1200 — it's already the total for this arm request, so it
+    # fits comfortably under a 1000-wei cap.
+    slug = _make_drop()
+    _make_grant(value_cap_wei="1000")
+
+    result = firing.arm_drop(OWNER, slug, quantity=2, max_price_wei="600")
+
+    assert "armId" in result
+
+
+def test_arm_drop_enforces_cumulative_quantity_across_prior_succeeded_arms() -> None:
+    # Regression test for re-arming past a grant's authorized total: a
+    # grant permits maxQuantity=3 total, not 3 per arm request. After one
+    # arm request already consumed 2 of that 3 (whether pending or
+    # succeeded), a second request for 2 more must be rejected even though
+    # 2 alone is within the grant's raw maxQuantity.
+    slug = _make_drop()
+    grant_id = _make_grant(max_quantity=3)
+    first = firing.arm_drop(OWNER, slug, quantity=2, max_price_wei="0")
+    assert "armId" in first
+    store.update_arm_request_status(first["armId"], "succeeded")
+
+    result = firing.arm_drop(OWNER, slug, quantity=2, max_price_wei="0")
+
+    assert "error" in result
+    assert "remaining allowance" in result["error"]
+
+
+def test_arm_drop_enforces_cumulative_spend_across_prior_succeeded_arms() -> None:
+    slug = _make_drop()
+    grant_id = _make_grant(value_cap_wei="1000")
+    first = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="700")
+    assert "armId" in first
+    store.update_arm_request_status(first["armId"], "succeeded")
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="400")
+
+    assert "error" in result
+    assert "spend cap" in result["error"]
+
+
+def test_arm_drop_allows_new_arm_after_cancelled_one_did_not_consume_allowance() -> None:
+    # A cancelled/failed/expired arm never actually spent anything, so it
+    # must NOT count against the grant's remaining allowance the way a
+    # succeeded one does.
+    slug = _make_drop()
+    _make_grant(max_quantity=2)
+    first = firing.arm_drop(OWNER, slug, quantity=2, max_price_wei="0")
+    assert "armId" in first
+    store.update_arm_request_status(first["armId"], "cancelled")
+
+    result = firing.arm_drop(OWNER, slug, quantity=2, max_price_wei="0")
+
+    assert "armId" in result
 
 
 def test_arm_drop_second_arm_for_same_drop_returns_existing_arm_id() -> None:
@@ -278,7 +339,7 @@ def test_arm_drop_db_constraint_prevents_duplicate_active_arm_even_if_precheck_i
 def test_arm_drop_malformed_permission_config_returns_error() -> None:
     slug = _make_drop()
     store.insert_session_grant(store.SessionGrantInput(
-        owner_address=OWNER, smart_account_address=SMART_ACCOUNT,
+        owner_address=OWNER, session_address=SESSION_ADDRESS,
         encrypted_session_key="key", permission_config="not-json",
         allowed_targets=json.dumps([CONTRACT]), value_cap_wei="0",
         expires_at=time.time() + 3600,
@@ -419,6 +480,83 @@ def test_watcher_fires_via_countdown_thread_within_critical_window(
     arm = _wait_for_arm_status(arm_id, "succeeded", timeout=3.0)
     assert arm["status"] == "succeeded"
     assert len(fire_mint_calls) == 1
+
+
+def test_countdown_thread_refuses_to_fire_if_drop_contract_changes_during_the_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression test: the countdown thread is spawned with a drop/grant
+    # SNAPSHOT and can then sleep for a while before actually firing. If the
+    # drop's contract address changes underneath it during that wait (e.g. a
+    # re-scrape), it must re-validate against the CURRENT contract right
+    # before firing, not trust the stale snapshot it was spawned with.
+    slug = _make_drop()
+    grant_id = _make_grant()  # allowed_targets=[CONTRACT]
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+    ))
+    start_time = time.time() + 0.3  # inside the critical window
+    monkeypatch.setattr(
+        firing.node_client, "get_public_drop_window",
+        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+    )
+    fire_mint_calls = []
+    monkeypatch.setattr(
+        firing.node_client, "fire_mint",
+        lambda *a, **k: fire_mint_calls.append(1) or {
+            "success": True, "txHash": "0x2", "blockNumber": "1", "gasUsed": "1",
+        },
+    )
+
+    firing.check_and_fire_armed_requests()  # spawns the countdown thread
+
+    # Mutate the drop's contract address WHILE the countdown thread is still
+    # waiting for start_time to pass.
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug=slug, name="Some Drop",
+        contract_address="0xadifferentcontract0000000000000000000000",
+        mint_page_url="https://opensea.io/collection/" + slug,
+        source="playwright", stage_data="{}",
+    ))
+
+    arm = _wait_for_arm_status(arm_id, "failed", timeout=3.0)
+    assert arm["status"] == "failed"
+    assert fire_mint_calls == []  # never fired against the stale contract
+
+
+def test_countdown_thread_refuses_to_fire_if_grant_is_revoked_during_the_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Same TOCTOU concern as the contract-change test above, but for grant
+    # revocation — the owner's one "kill switch" for a compromised session
+    # key must actually stop an in-flight countdown, not just future ticks.
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+    ))
+    start_time = time.time() + 0.3
+    monkeypatch.setattr(
+        firing.node_client, "get_public_drop_window",
+        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+    )
+    fire_mint_calls = []
+    monkeypatch.setattr(
+        firing.node_client, "fire_mint",
+        lambda *a, **k: fire_mint_calls.append(1) or {
+            "success": True, "txHash": "0x2", "blockNumber": "1", "gasUsed": "1",
+        },
+    )
+
+    firing.check_and_fire_armed_requests()  # spawns the countdown thread
+
+    store.revoke_session_grant(grant_id)  # the owner's kill switch, mid-wait
+
+    arm = _wait_for_arm_status(arm_id, "failed", timeout=3.0)
+    assert arm["status"] == "failed"
+    assert fire_mint_calls == []
 
 
 def test_watcher_does_not_spawn_duplicate_countdown_on_repeated_ticks(
@@ -597,10 +735,10 @@ def test_watcher_fires_and_records_success_when_window_open(monkeypatch: pytest.
     )
     fire_mint_calls = []
 
-    def fake_fire_mint(approval, contract, smart_account, quantity, value_cap_wei):
-        fire_mint_calls.append((approval, contract, smart_account, quantity, value_cap_wei))
+    def fake_fire_mint(approval, contract, quantity, value_cap_wei):
+        fire_mint_calls.append((approval, contract, quantity, value_cap_wei))
         return {
-            "success": True, "userOpHash": "0xuserop", "txHash": "0xtxhash",
+            "success": True, "txHash": "0xtxhash",
             "blockNumber": "123", "gasUsed": "50000",
         }
 
@@ -611,9 +749,8 @@ def test_watcher_fires_and_records_success_when_window_open(monkeypatch: pytest.
     arm = _wait_for_arm_status(arm_id, "succeeded")
     assert arm["status"] == "succeeded"
     assert len(fire_mint_calls) == 1
-    _, contract, smart_account, quantity, value_cap_wei = fire_mint_calls[0]
+    _, contract, quantity, value_cap_wei = fire_mint_calls[0]
     assert contract == CONTRACT
-    assert smart_account == SMART_ACCOUNT
     assert quantity == 2
     assert value_cap_wei == "100"
 
@@ -637,9 +774,9 @@ def test_watcher_decrypts_the_stored_session_key_before_firing(monkeypatch: pyte
     )
     seen_approvals = []
 
-    def fake_fire_mint(approval, contract, smart_account, quantity, value_cap_wei):
+    def fake_fire_mint(approval, contract, quantity, value_cap_wei):
         seen_approvals.append(approval)
-        return {"success": True, "userOpHash": "0x1", "txHash": "0x2", "blockNumber": "1", "gasUsed": "1"}
+        return {"success": True, "txHash": "0x2", "blockNumber": "1", "gasUsed": "1"}
 
     monkeypatch.setattr(firing.node_client, "fire_mint", fake_fire_mint)
 
@@ -801,8 +938,8 @@ def test_watcher_never_retries_an_ambiguous_outcome(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(
         firing.node_client, "fire_mint",
         lambda *a, **k: {
-            "success": False, "ambiguous": True, "userOpHash": "0xrealuserophash",
-            "txHash": None, "blockNumber": None, "gasUsed": None,
+            "success": False, "ambiguous": True,
+            "txHash": "0xrealtxhash", "blockNumber": None, "gasUsed": None,
             "error": "Submitted but receipt not confirmed within timeout",
         },
     )
@@ -813,7 +950,7 @@ def test_watcher_never_retries_an_ambiguous_outcome(monkeypatch: pytest.MonkeyPa
     assert arm["status"] == "failed"  # NOT "armed" — must not be retry-eligible
     attempts = store.get_mint_attempts(arm_id)
     assert len(attempts) == 1
-    assert attempts[0]["user_op_hash"] == "0xrealuserophash"
+    assert attempts[0]["tx_hash"] == "0xrealtxhash"
 
 
 def test_watcher_never_retries_after_a_node_helper_timeout(monkeypatch: pytest.MonkeyPatch) -> None:

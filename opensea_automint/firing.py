@@ -1,14 +1,22 @@
 """
-The OpenSea Auto-Mint tool's firing pipeline: arms a granted session-key
-permission against a specific drop, then a periodic watcher tick fires a
-real mintPublic() UserOperation the moment the drop's real on-chain public
-stage goes live.
+The OpenSea Auto-Mint tool's firing pipeline: arms a granted session key
+against a specific drop, then fires a real, directly-signed mintPublic()
+transaction from that session key the moment the drop's real on-chain
+public stage goes live.
+
+A session key here is a plain, fundable EOA — NOT an ERC-4337 smart-account
+session (that was this project's original design; replaced for raw firing
+speed, at the user's explicit, informed choice: no bundler hop, but also no
+on-chain CallPolicy backstop). That means there is no on-chain enforcement
+of quantity/price/target-contract limits anymore — the checks in arm_drop
+and _check_and_fire_one/node_client.fire_mint (which re-verifies price
+against the live chain immediately before signing) ARE the only safety net.
+Fund a session key with only what you're willing to have it spend.
 
 THIS IS THE MODULE THAT DECIDES WHEN TO SPEND REAL ETH. It doesn't build
-the transaction itself (node_client.fire_mint / wallet-helper's
-zerodevClient.ts does that, re-verifying price/fee-recipient against the
-live chain immediately before submitting) — this module's job is making
-sure a given arm request fires at the right time and fires EXACTLY ONCE.
+the transaction itself (node_client.fire_mint / wallet-helper's Node
+process does that) — this module's job is making sure a given arm request
+fires at the right time and fires EXACTLY ONCE.
 
 Status lifecycle for an arm_requests row (see store.py):
     pending_schedule -> scheduled -> armed -> fired -> succeeded
@@ -72,34 +80,6 @@ MAX_FIRE_ATTEMPTS = 3
 SIGNATURE_MAX_AGE_SECONDS = 300
 
 
-def build_arm_message(collection_slug: str, quantity: int, max_price_wei: str, timestamp: int) -> str:
-    """The exact message an owner's wallet must sign to authorize arming a
-    drop — both the frontend (to produce the signature) and this function
-    (to verify it) must build this identically, since verification recovers
-    the signer address from the message text itself. Changing this format
-    is a breaking change for any in-flight signed request."""
-    return (
-        "Mantis Pro OpenSea Auto-Mint\n"
-        "action: arm\n"
-        f"collectionSlug: {collection_slug}\n"
-        f"quantity: {quantity}\n"
-        f"maxPriceWei: {max_price_wei}\n"
-        f"timestamp: {timestamp}"
-    )
-
-
-def build_cancel_message(arm_id: int, timestamp: int) -> str:
-    """The exact message an owner's wallet must sign to authorize
-    cancelling an arm request — see build_arm_message's docstring for why
-    the frontend and backend must construct this identically."""
-    return (
-        "Mantis Pro OpenSea Auto-Mint\n"
-        "action: cancel\n"
-        f"armId: {arm_id}\n"
-        f"timestamp: {timestamp}"
-    )
-
-
 def is_signature_timestamp_fresh(timestamp: float, now: float | None = None) -> bool:
     """Bounds the replay window for a signed arm/cancel message. Rejects
     both stale timestamps AND ones too far in the future (a clock-skew
@@ -149,16 +129,38 @@ def arm_drop(owner_address: str, collection_slug: str, quantity: int, max_price_
         return {"error": "Your active permission does not cover this drop's contract"}
 
     granted_max_quantity = permission_config.get("maxQuantity")
-    if not isinstance(granted_max_quantity, int) or quantity > granted_max_quantity:
-        return {"error": f"Quantity exceeds what your permission allows (max {granted_max_quantity})"}
+    if not isinstance(granted_max_quantity, int):
+        return {"error": "Stored permission is malformed"}
 
     try:
-        requested_total_wei = int(max_price_wei) * quantity
+        # max_price_wei is already a TOTAL for this whole arm request (the
+        # dashboard labels it "Max ETH (total)", and node_client.fire_mint /
+        # ethClient.fireMint compare it directly against mintPrice*quantity
+        # with no further multiplication) — must NOT be multiplied by
+        # quantity again here.
+        requested_total_wei = int(max_price_wei)
         grant_cap_wei = int(grant["value_cap_wei"])
     except (TypeError, ValueError):
         return {"error": "Invalid price"}
-    if requested_total_wei > grant_cap_wei:
-        return {"error": "Requested total price exceeds your permission's spend cap"}
+
+    # Enforced CUMULATIVELY across every arm request this grant has ever
+    # produced (including already-succeeded ones), not just this single
+    # request in isolation — a grant's maxQuantity/valueCapWei is a
+    # one-time authorization from the owner's signature, not a per-arm
+    # limit that resets on every new arm. Without this, a grant could be
+    # re-armed after each success and spend past what was actually
+    # authorized, since there's no on-chain CallPolicy to catch it anymore.
+    committed_quantity, committed_spend_wei = store.get_grant_commitment_totals(grant["id"])
+
+    if committed_quantity + quantity > granted_max_quantity:
+        remaining = max(0, granted_max_quantity - committed_quantity)
+        return {
+            "error": f"Quantity exceeds your permission's remaining allowance "
+                     f"({remaining} left of {granted_max_quantity})"
+        }
+
+    if committed_spend_wei + requested_total_wei > grant_cap_wei:
+        return {"error": "Requested total price exceeds your permission's remaining spend cap"}
 
     # Only one active (non-terminal) arm request per (owner, drop) — arming
     # twice for the same drop would otherwise risk two independent watcher
@@ -237,6 +239,27 @@ def check_and_fire_armed_requests() -> None:
             logger.warning("[firing] arm request %d: unexpected error: %s", arm["id"], e)
 
 
+def _grant_and_target_still_valid(drop: dict | None, grant: dict | None, now: float) -> bool:
+    """True iff drop/grant are both present, the grant isn't revoked/expired,
+    and the drop's CURRENT contract address is still covered by the grant's
+    allowed_targets. Shared by _check_and_fire_one (the regular tick) and
+    _countdown_and_fire (the precision-firing thread) — a countdown thread
+    can sleep for up to CRITICAL_WINDOW_SECONDS before actually firing, and
+    the drop/grant it was spawned with are a snapshot from BEFORE that wait,
+    not guaranteed still true at the moment it's about to sign+broadcast (a
+    re-scrape can overwrite tracked_drops.contract_address, or the owner can
+    revoke the grant, at any point during that wait)."""
+    if not drop or not drop.get("contract_address"):
+        return False
+    if not grant or grant["revoked"] or grant["expires_at"] <= now:
+        return False
+    try:
+        allowed_targets = json.loads(grant["allowed_targets"])
+    except (TypeError, ValueError):
+        allowed_targets = []
+    return drop["contract_address"] in allowed_targets
+
+
 def _check_and_fire_one(arm: dict, now: float) -> None:
     drop = store.get_tracked_drop(arm["drop_id"])
     if not drop or not drop.get("contract_address"):
@@ -254,15 +277,13 @@ def _check_and_fire_one(arm: dict, now: float) -> None:
     # only validated this once, when the arm request was first created. The
     # on-chain CallPolicy would also reject a mismatched contract, but that
     # surfaces as a wasted on-chain revert (consuming a retry + real gas)
-    # instead of a clean, immediate, off-chain failure.
-    try:
-        allowed_targets = json.loads(grant["allowed_targets"])
-    except (TypeError, ValueError):
-        allowed_targets = []
-    if drop["contract_address"] not in allowed_targets:
+    # instead of a clean, immediate, off-chain failure. This same check runs
+    # AGAIN, against freshly-fetched rows, immediately before actually
+    # firing (see _countdown_and_fire) — this earlier check is just a fast
+    # path to fail obviously-stale requests without ever starting a thread.
+    if not _grant_and_target_still_valid(drop, grant, now):
         logger.warning(
-            "[firing] arm request %d: drop contract %s no longer covered by grant %d, failing",
-            arm["id"], drop["contract_address"], grant["id"],
+            "[firing] arm request %d: grant/target no longer valid at tick time, failing", arm["id"],
         )
         store.update_arm_request_status(arm["id"], "failed")
         return
@@ -330,7 +351,16 @@ def _countdown_and_fire(arm: dict, drop: dict, grant: dict, start_time: float) -
     (and from every OTHER pending arm request's tick processing) entirely:
     busy-waits (in small increments) on the local wall clock until
     start_time passes, then fires immediately — this is what actually
-    delivers sub-second firing precision, not the tick interval."""
+    delivers sub-second firing precision, not the tick interval.
+
+    drop/grant are the snapshot from whichever tick spawned this thread —
+    up to CRITICAL_WINDOW_SECONDS stale by the time the wait ends. Re-fetches
+    both fresh and re-validates immediately before firing (same check as
+    _check_and_fire_one) rather than trusting that snapshot: a re-scrape can
+    overwrite the drop's contract address, or the owner can revoke the
+    grant, at any point during the wait — without this, firing would use
+    stale data for the one decision (which key, which contract) that this
+    entire off-chain safety net exists to get right."""
     try:
         deadline = start_time + GO_LIVE_SAFETY_MARGIN_SECONDS
         while True:
@@ -339,8 +369,17 @@ def _countdown_and_fire(arm: dict, drop: dict, grant: dict, start_time: float) -
                 break
             time.sleep(min(remaining, COUNTDOWN_POLL_INTERVAL_SECONDS))
 
+        fresh_drop = store.get_tracked_drop(arm["drop_id"])
+        fresh_grant = store.get_session_grant(arm["session_grant_id"])
+        if not _grant_and_target_still_valid(fresh_drop, fresh_grant, time.time()):
+            logger.warning(
+                "[firing] arm request %d: grant/target no longer valid at fire time, failing", arm["id"],
+            )
+            store.update_arm_request_status(arm["id"], "failed")
+            return
+
         store.update_arm_request_status(arm["id"], "armed")
-        _fire_one(arm, drop, grant)
+        _fire_one(arm, fresh_drop, fresh_grant)
     except Exception as e:
         logger.warning("[firing] arm request %d: countdown thread error: %s", arm["id"], e)
     finally:
@@ -370,21 +409,21 @@ def _fire_one(arm: dict, drop: dict, grant: dict) -> None:
 
     try:
         result = node_client.fire_mint(
-            decrypted_approval, drop["contract_address"], grant["smart_account_address"],
+            decrypted_approval, drop["contract_address"],
             arm["quantity"], arm["max_price_wei"],
         )
     except RuntimeError as e:
         # A "timed out" RuntimeError at this layer means the Node helper's
         # own internal receipt-wait (up to 60s) plus the HTTP round-trip may
         # have still been mid-flight when this call's own 90s timeout fired
-        # — a real UserOperation could genuinely have been submitted, same
-        # as the "ambiguous" case node_client.fire_mint itself can return.
-        # Any OTHER RuntimeError (connection refused, an immediate error
-        # response) happens before Node ever calls sendUserOperation, so
-        # it's a safe, definite failure — nothing was ever broadcast.
+        # — a real transaction could genuinely have been broadcast, same as
+        # the "ambiguous" case node_client.fire_mint itself can return. Any
+        # OTHER RuntimeError (connection refused, an immediate error
+        # response) happens before Node ever calls sendTransaction, so it's
+        # a safe, definite failure — nothing was ever broadcast.
         is_ambiguous = "timed out" in str(e).lower()
         result = {
-            "success": False, "ambiguous": is_ambiguous, "userOpHash": "", "txHash": None,
+            "success": False, "ambiguous": is_ambiguous, "txHash": None,
             "blockNumber": None, "gasUsed": None, "error": str(e),
         }
 
@@ -392,7 +431,7 @@ def _fire_one(arm: dict, drop: dict, grant: dict) -> None:
     store.record_mint_attempt(store.MintAttemptInput(
         arm_request_id=arm["id"],
         tx_hash=result.get("txHash"),
-        user_op_hash=result.get("userOpHash") or None,
+        user_op_hash=None,  # not applicable — this model fires direct signed transactions, no ERC-4337 UserOperation
         status="success" if result.get("success") else "failed",
         error_message=None if result.get("success") else result.get("error"),
         gas_used=result.get("gasUsed"),
@@ -408,12 +447,12 @@ def _fire_one(arm: dict, drop: dict, grant: dict) -> None:
         # NEVER retry an ambiguous outcome — a prior attempt may already
         # have landed on-chain, and resubmitting risks a genuine duplicate
         # spend/mint. Fail immediately regardless of MAX_FIRE_ATTEMPTS; the
-        # recorded userOpHash (see mint_attempts above) is what a human
-        # would use to check the real outcome manually.
+        # recorded tx_hash (see mint_attempts above) is what a human would
+        # use to check the real outcome manually.
         logger.error(
-            "[firing] arm request %d: AMBIGUOUS outcome (userOpHash=%s) — a mint may already "
+            "[firing] arm request %d: AMBIGUOUS outcome (txHash=%s) — a mint may already "
             "have gone through. Failing without retry to avoid a duplicate submission.",
-            arm["id"], result.get("userOpHash"),
+            arm["id"], result.get("txHash"),
         )
         store.update_arm_request_status(arm["id"], "failed")
         return

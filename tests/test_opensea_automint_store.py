@@ -24,37 +24,16 @@ def test_conn_table_creation_is_idempotent() -> None:
     c2.close()
 
 
-# ── Smart accounts ───────────────────────────────────────────────────
-
-def test_smart_account_upsert_and_get_round_trips() -> None:
-    store.upsert_smart_account("0xOwner1", "0xSmartAcct1")
-
-    result = store.get_smart_account("0xOwner1")
-
-    assert result is not None
-    assert result["owner_address"] == "0xowner1"
-    assert result["smart_account_address"] == "0xSmartAcct1"
-
-
-def test_smart_account_upsert_updates_on_conflict() -> None:
-    store.upsert_smart_account("0xOwner1", "0xSmartAcctOld")
-    store.upsert_smart_account("0xOwner1", "0xSmartAcctNew")
-
-    result = store.get_smart_account("0xOwner1")
-
-    assert result["smart_account_address"] == "0xSmartAcctNew"
-
-
-def test_get_smart_account_returns_none_when_not_found() -> None:
-    assert store.get_smart_account("0xNoSuchOwner") is None
-
-
 # ── Session grants ───────────────────────────────────────────────────
+# Note: this project originally used a `smart_accounts` cache table (ERC-4337
+# ZeroDev smart-account address derivation). Replaced by direct-signed-
+# transaction firing from a plain session EOA — session_grants.session_address
+# IS that key's own address; no separate smart-account concept exists anymore.
 
 def test_session_grant_insert_and_get_active_round_trips() -> None:
     grant_id = store.insert_session_grant(store.SessionGrantInput(
         owner_address="0xOwner2",
-        smart_account_address="0xSmartAcct2",
+        session_address="0xSession2",
         encrypted_session_key="encrypted-blob",
         permission_config='{"scope":"mint"}',
         allowed_targets='["0xCollection"]',
@@ -67,6 +46,7 @@ def test_session_grant_insert_and_get_active_round_trips() -> None:
     assert isinstance(grant_id, int)
     assert active is not None
     assert active["id"] == grant_id
+    assert active["session_address"] == "0xSession2"
     assert active["encrypted_session_key"] == "encrypted-blob"
     assert active["revoked"] == 0
 
@@ -74,7 +54,7 @@ def test_session_grant_insert_and_get_active_round_trips() -> None:
 def test_get_active_session_grant_excludes_revoked_grants() -> None:
     grant_id = store.insert_session_grant(store.SessionGrantInput(
         owner_address="0xOwner3",
-        smart_account_address="0xSmartAcct3",
+        session_address="0xSession3",
         encrypted_session_key="key",
         permission_config="{}",
         allowed_targets="[]",
@@ -91,7 +71,7 @@ def test_get_active_session_grant_excludes_revoked_grants() -> None:
 def test_get_active_session_grant_excludes_expired_grants() -> None:
     store.insert_session_grant(store.SessionGrantInput(
         owner_address="0xOwner4",
-        smart_account_address="0xSmartAcct4",
+        session_address="0xSession4",
         encrypted_session_key="key",
         permission_config="{}",
         allowed_targets="[]",
@@ -325,7 +305,7 @@ def test_try_cancel_arm_request_fails_once_already_fired() -> None:
 def test_get_session_grant_round_trips_regardless_of_revoked_status() -> None:
     grant_id = store.insert_session_grant(store.SessionGrantInput(
         owner_address="0xOwner14",
-        smart_account_address="0xSmartAcct14",
+        session_address="0xSession14",
         encrypted_session_key="key",
         permission_config="{}",
         allowed_targets="[]",
