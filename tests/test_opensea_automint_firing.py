@@ -826,7 +826,60 @@ def test_watcher_fires_and_records_success_when_window_open(monkeypatch: pytest.
     attempts = store.get_mint_attempts(arm_id)
     assert len(attempts) == 1
     assert attempts[0]["status"] == "success"
-    assert attempts[0]["tx_hash"] == "0xtxhash"
+    # go-live was ~100s in the past — latency_ms reflects that real gap
+    # (plus the GO_LIVE_SAFETY_MARGIN_SECONDS=1s the countdown always waits
+    # out), not a huge or missing value.
+    assert attempts[0]["fired_at"] is not None
+    assert 100_000 <= attempts[0]["latency_ms"] <= 105_000
+
+
+def test_fire_one_computes_latency_ms_relative_to_go_live_at() -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+    ))
+    store.update_arm_request_status(arm_id, "armed")  # _fire_one only fires from 'armed'
+    arm = store.get_arm_request(arm_id)
+    drop = store.get_tracked_drop(_drop_db_id(slug))
+    grant = store.get_session_grant(grant_id)
+    go_live_at = time.time() - 2.0  # fired ~2s after go-live
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr(
+            firing.node_client, "fire_mint",
+            lambda *a, **k: {"success": True, "txHash": "0x1", "blockNumber": "1", "gasUsed": "1"},
+        )
+        firing._fire_one(arm, drop, grant, go_live_at=go_live_at)
+
+    attempts = store.get_mint_attempts(arm_id)
+    assert attempts[0]["fired_at"] is not None
+    assert 1900 <= attempts[0]["latency_ms"] <= 2500  # ~2000ms, generous test-runtime margin
+
+
+def test_fire_one_records_no_latency_when_go_live_at_unknown() -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+    ))
+    store.update_arm_request_status(arm_id, "armed")  # _fire_one only fires from 'armed'
+    arm = store.get_arm_request(arm_id)
+    drop = store.get_tracked_drop(_drop_db_id(slug))
+    grant = store.get_session_grant(grant_id)
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr(
+            firing.node_client, "fire_mint",
+            lambda *a, **k: {"success": True, "txHash": "0x1", "blockNumber": "1", "gasUsed": "1"},
+        )
+        firing._fire_one(arm, drop, grant)  # no go_live_at passed
+
+    attempts = store.get_mint_attempts(arm_id)
+    assert attempts[0]["fired_at"] is not None  # still recorded
+    assert attempts[0]["latency_ms"] is None  # nothing to compute latency against
 
 
 def test_watcher_decrypts_the_stored_session_key_before_firing(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -82,7 +82,9 @@ def _init_schema(c: sqlite3.Connection) -> None:
         status          TEXT,
         error_message   TEXT,
         gas_used        TEXT,
-        block_number    INTEGER
+        block_number    INTEGER,
+        fired_at        REAL,
+        latency_ms      INTEGER
     )""")
     c.execute("""CREATE TABLE IF NOT EXISTS eligibility_cache (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,6 +109,18 @@ def _init_schema(c: sqlite3.Connection) -> None:
         c.execute("ALTER TABLE session_grants RENAME COLUMN smart_account_address TO session_address")
     except sqlite3.OperationalError:
         pass  # already renamed, or table was created fresh with the new name
+    try:
+        # fired_at/latency_ms let the dashboard show real firing speed —
+        # exactly when a transaction was sent, in milliseconds, relative to
+        # the drop's real on-chain go-live moment. Added after the fact, so
+        # existing DBs need this backfilled onto the table.
+        c.execute("ALTER TABLE mint_attempts ADD COLUMN fired_at REAL")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    try:
+        c.execute("ALTER TABLE mint_attempts ADD COLUMN latency_ms INTEGER")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     c.commit()
 
 
@@ -167,6 +181,16 @@ class MintAttemptInput:
     error_message: str | None
     gas_used: str | None
     block_number: int | None
+    # High-precision local timestamp (epoch seconds, sub-millisecond in
+    # practice) captured immediately before calling node_client.fire_mint —
+    # the actual "we fired at this instant" moment, not when the HTTP round
+    # trip/receipt wait finished. None for attempts that never got that far
+    # (e.g. a session-key decryption failure). latency_ms is fired_at minus
+    # the drop's real on-chain go-live time, in milliseconds — how fast this
+    # tool actually reacted, the number that matters for a speed-critical
+    # mint. Also None when there's no go-live reference (same case as above).
+    fired_at: float | None = None
+    latency_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -497,10 +521,11 @@ def record_mint_attempt(attempt: MintAttemptInput) -> None:
         c.execute("""
             INSERT INTO mint_attempts (
                 arm_request_id, attempted_at, tx_hash, user_op_hash, status,
-                error_message, gas_used, block_number
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                error_message, gas_used, block_number, fired_at, latency_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (attempt.arm_request_id, time.time(), attempt.tx_hash, attempt.user_op_hash,
-              attempt.status, attempt.error_message, attempt.gas_used, attempt.block_number))
+              attempt.status, attempt.error_message, attempt.gas_used, attempt.block_number,
+              attempt.fired_at, attempt.latency_ms))
         c.commit()
 
 
@@ -509,17 +534,61 @@ def get_mint_attempts(arm_request_id: int) -> list[dict]:
     with _lock, closing(_conn()) as c:
         rows = c.execute("""
             SELECT id, arm_request_id, attempted_at, tx_hash, user_op_hash, status,
-                   error_message, gas_used, block_number
+                   error_message, gas_used, block_number, fired_at, latency_ms
             FROM mint_attempts WHERE arm_request_id=? ORDER BY attempted_at
         """, (arm_request_id,)).fetchall()
     return [_mint_attempt_row_to_dict(r) for r in rows]
+
+
+def get_mint_history(owner_address: str | None = None, limit: int = 200) -> list[dict]:
+    """Every SUCCESSFUL mint this tool has ever fired, newest first — the
+    permanent record of "what has this tool actually minted," independent
+    of any single drop's per-arm status view (which only shows the current
+    arm request for one owner+drop at a time). Joins through arm_requests
+    and tracked_drops so each row is self-contained (collection name/slug,
+    contract, quantity, tx hash, firing speed) without extra round trips.
+    Nothing is ever deleted from mint_attempts/arm_requests/tracked_drops,
+    so this history is permanent for the life of the database.
+
+    owner_address=None returns history across every owner (this is a
+    single-operator tool in practice) — pass an address to scope to one
+    wallet. limit bounds an unbounded owner's history from growing the
+    response without end; still ordered newest-first so nothing recent is
+    ever truncated."""
+    where = "WHERE ma.status='success'"
+    params: list = []
+    if owner_address:
+        where += " AND ar.owner_address=?"
+        params.append(owner_address.lower())
+    params.append(limit)
+
+    with _lock, closing(_conn()) as c:
+        rows = c.execute(f"""
+            SELECT ma.id, ar.owner_address, td.collection_slug, td.name, td.contract_address,
+                   ar.quantity, ma.tx_hash, ma.block_number, ma.fired_at, ma.latency_ms,
+                   ma.attempted_at
+            FROM mint_attempts ma
+            JOIN arm_requests ar ON ar.id = ma.arm_request_id
+            JOIN tracked_drops td ON td.id = ar.drop_id
+            {where}
+            ORDER BY ma.attempted_at DESC
+            LIMIT ?
+        """, params).fetchall()
+    return [
+        {
+            "id": r[0], "owner_address": r[1], "collection_slug": r[2], "name": r[3],
+            "contract_address": r[4], "quantity": r[5], "tx_hash": r[6], "block_number": r[7],
+            "fired_at": r[8], "latency_ms": r[9], "attempted_at": r[10],
+        }
+        for r in rows
+    ]
 
 
 def _mint_attempt_row_to_dict(row: tuple) -> dict:
     return {
         "id": row[0], "arm_request_id": row[1], "attempted_at": row[2], "tx_hash": row[3],
         "user_op_hash": row[4], "status": row[5], "error_message": row[6],
-        "gas_used": row[7], "block_number": row[8],
+        "gas_used": row[7], "block_number": row[8], "fired_at": row[9], "latency_ms": row[10],
     }
 
 

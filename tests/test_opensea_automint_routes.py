@@ -894,6 +894,59 @@ def test_arm_for_drop_rejects_invalid_slug(client) -> None:
     assert resp.status_code == 400
 
 
+# ── GET /api/opensea/mint-history ────────────────────────────────────────
+
+def test_mint_history_returns_shaped_list(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_mints = [{"collection_slug": "cool-drop", "name": "Cool Drop", "quantity": 2}]
+    calls = []
+    monkeypatch.setattr(
+        store, "get_mint_history",
+        lambda owner_address=None, limit=200: calls.append((owner_address, limit)) or fake_mints,
+    )
+
+    resp = client.get("/api/opensea/mint-history")
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"mints": fake_mints}
+    assert calls == [(None, 200)]
+
+
+def test_mint_history_passes_through_owner_filter(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        store, "get_mint_history",
+        lambda owner_address=None, limit=200: calls.append((owner_address, limit)) or [],
+    )
+
+    resp = client.get(f"/api/opensea/mint-history?owner={ARM_OWNER}")
+
+    assert resp.status_code == 200
+    assert calls == [(ARM_OWNER, 200)]
+
+
+def test_mint_history_rejects_invalid_owner(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        store, "get_mint_history",
+        lambda owner_address=None, limit=200: calls.append(1) or [],
+    )
+
+    resp = client.get("/api/opensea/mint-history?owner=not-an-address")
+
+    assert resp.status_code == 400
+    assert calls == []
+
+
+def test_mint_history_rate_limits_after_threshold(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(store, "get_mint_history", lambda owner_address=None, limit=200: [])
+
+    last_resp = None
+    for _ in range(61):
+        last_resp = client.get("/api/opensea/mint-history")
+
+    assert last_resp.status_code == 429
+
+
 # ── POST /api/opensea/arm/<id>/cancel ────────────────────────────────────
 
 def _valid_cancel_payload() -> dict:

@@ -392,6 +392,132 @@ def test_get_mint_attempts_returns_empty_list_when_none_recorded() -> None:
     assert store.get_mint_attempts(999999) == []
 
 
+def test_record_mint_attempt_round_trips_fired_at_and_latency_ms() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner7b", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    fired_at = time.time()
+
+    store.record_mint_attempt(store.MintAttemptInput(
+        arm_request_id=arm_id, tx_hash="0xTx1", user_op_hash=None,
+        status="success", error_message=None, gas_used="21000", block_number=12345,
+        fired_at=fired_at, latency_ms=842,
+    ))
+
+    attempts = store.get_mint_attempts(arm_id)
+
+    assert len(attempts) == 1
+    assert attempts[0]["fired_at"] == fired_at
+    assert attempts[0]["latency_ms"] == 842
+
+
+def test_record_mint_attempt_fired_at_and_latency_ms_default_to_none() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner7c", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+
+    store.record_mint_attempt(store.MintAttemptInput(
+        arm_request_id=arm_id, tx_hash=None, user_op_hash=None,
+        status="error", error_message="could not decrypt session key",
+        gas_used=None, block_number=None,
+    ))
+
+    attempts = store.get_mint_attempts(arm_id)
+
+    assert attempts[0]["fired_at"] is None
+    assert attempts[0]["latency_ms"] is None
+
+
+# ── Mint history ──────────────────────────────────────────────────────
+
+def _make_history_fixture(
+    owner: str = "0xHistoryOwner1", slug: str = "history-drop-1", quantity: int = 2,
+    status: str = "success", fired_at: float | None = None, latency_ms: int | None = None,
+) -> int:
+    """Sets up one full drop -> grant -> arm -> mint_attempt chain, as
+    get_mint_history's join expects, and returns the arm_request id."""
+    drop_id = store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug=slug, name="History Drop", contract_address="0xHistoryContract",
+        mint_page_url="https://opensea.io/collection/" + slug,
+        source="playwright", stage_data="{}",
+    ))
+    grant_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address=owner, session_address="0xHistorySession",
+        encrypted_session_key="key", permission_config="{}",
+        allowed_targets="[]", value_cap_wei="0", expires_at=time.time() + 3600,
+    ))
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=owner, drop_id=drop_id, session_grant_id=grant_id,
+        quantity=quantity, max_price_wei="0", go_live_at=None,
+    ))
+    store.record_mint_attempt(store.MintAttemptInput(
+        arm_request_id=arm_id, tx_hash="0xHistoryTx", user_op_hash=None,
+        status=status, error_message=None, gas_used="21000", block_number=1,
+        fired_at=fired_at, latency_ms=latency_ms,
+    ))
+    return arm_id
+
+
+def test_get_mint_history_returns_a_successful_mint_with_joined_fields() -> None:
+    _make_history_fixture(
+        owner="0xHistoryOwnerA", slug="history-drop-a", quantity=3,
+        fired_at=1700000000.123, latency_ms=500,
+    )
+
+    history = store.get_mint_history()
+    row = next(r for r in history if r["collection_slug"] == "history-drop-a")
+
+    assert row["name"] == "History Drop"
+    assert row["owner_address"] == "0xhistoryownera"
+    assert row["quantity"] == 3
+    assert row["tx_hash"] == "0xHistoryTx"
+    assert row["fired_at"] == 1700000000.123
+    assert row["latency_ms"] == 500
+
+
+def test_get_mint_history_excludes_failed_attempts() -> None:
+    _make_history_fixture(slug="history-drop-failed", status="failed")
+
+    history = store.get_mint_history()
+
+    assert all(r["collection_slug"] != "history-drop-failed" for r in history)
+
+
+def test_get_mint_history_filters_by_owner() -> None:
+    _make_history_fixture(owner="0xHistoryOwnerB1", slug="history-drop-b1")
+    _make_history_fixture(owner="0xHistoryOwnerB2", slug="history-drop-b2")
+
+    history = store.get_mint_history(owner_address="0xHistoryOwnerB1")
+
+    slugs = {r["collection_slug"] for r in history}
+    assert "history-drop-b1" in slugs
+    assert "history-drop-b2" not in slugs
+
+
+def test_get_mint_history_is_newest_first() -> None:
+    _make_history_fixture(owner="0xHistoryOwnerC", slug="history-drop-c1")
+    _make_history_fixture(owner="0xHistoryOwnerC", slug="history-drop-c2")
+
+    history = store.get_mint_history(owner_address="0xHistoryOwnerC")
+
+    assert [r["collection_slug"] for r in history][:2] == ["history-drop-c2", "history-drop-c1"]
+
+
+def test_get_mint_history_respects_limit() -> None:
+    for i in range(5):
+        _make_history_fixture(owner="0xHistoryOwnerD", slug=f"history-drop-d{i}")
+
+    history = store.get_mint_history(owner_address="0xHistoryOwnerD", limit=2)
+
+    assert len(history) == 2
+
+
+def test_get_mint_history_returns_empty_list_when_none_recorded() -> None:
+    assert store.get_mint_history(owner_address="0xNoHistoryOwner") == []
+
+
 # ── Eligibility cache ─────────────────────────────────────────────────
 
 def test_eligibility_upsert_and_get_round_trips() -> None:

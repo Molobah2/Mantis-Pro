@@ -342,6 +342,38 @@ def api_get_arm_for_drop() -> Response:
     return jsonify(result if result else {"arm": None, "attempts": []})
 
 
+_MINT_HISTORY_RATE_LIMIT = 60
+_MINT_HISTORY_RATE_WINDOW_SECONDS = 3600
+_MINT_HISTORY_RATE_KEY = "mint-history"
+_MINT_HISTORY_MAX_LIMIT = 200
+
+
+@opensea_automint_bp.route("/api/opensea/mint-history")
+def api_mint_history() -> Response:
+    """Every successful mint this tool has ever fired, newest first — the
+    permanent record referenced elsewhere as "what has this tool actually
+    minted." Optional ?owner= scopes to one wallet; omitted returns
+    everything (this is a single-operator tool in practice, so a global
+    history is the useful default, not per-wallet siloing).
+
+    Deliberately NOT signature-gated, same reasoning as api_get_arm_for_drop:
+    this is read-only, and everything it exposes (which collection, how
+    much, the tx hash) is independently visible on-chain/on Etherscan the
+    moment a mint succeeds anyway — bounded by rate limiting, not auth."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _MINT_HISTORY_RATE_KEY, limit=_MINT_HISTORY_RATE_LIMIT, window=_MINT_HISTORY_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    owner = request.args.get("owner", "").strip() or None
+    if owner and not security.ETH_ADDR_RE.match(owner):
+        return jsonify({"error": "Invalid owner address"}), 400
+
+    mints = store.get_mint_history(owner_address=owner, limit=_MINT_HISTORY_MAX_LIMIT)
+    return jsonify({"mints": mints})
+
+
 _CANCEL_ARM_RATE_LIMIT = 20
 _CANCEL_ARM_RATE_WINDOW_SECONDS = 3600
 _CANCEL_ARM_RATE_KEY = "cancel-arm"

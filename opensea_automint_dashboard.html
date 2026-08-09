@@ -76,8 +76,7 @@
     flex-shrink: 0;
   }
 
-  #refresh-btn {
-    margin-left: auto;
+  #history-btn, #refresh-btn {
     padding: 7px 16px;
     background: var(--surface-hi);
     border: 1px solid var(--border-hi);
@@ -89,7 +88,8 @@
     cursor: pointer;
     transition: background 0.18s, border-color 0.18s;
   }
-  #refresh-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(200,208,235,0.28); }
+  #history-btn { margin-left: auto; }
+  #history-btn:hover, #refresh-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(200,208,235,0.28); }
   #refresh-btn:disabled { opacity: 0.5; cursor: default; }
 
   /* ── MAIN ── */
@@ -507,6 +507,37 @@
     color: var(--t2);
   }
 
+  .history-item {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .history-item-name {
+    color: var(--t0);
+    font-size: 13.5px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .history-item-name:hover { text-decoration: underline; }
+  .history-item-qty {
+    color: var(--t2);
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .history-item-meta {
+    font-size: 11.5px;
+    color: var(--t2);
+  }
+
   @media (max-width: 600px) {
     header { padding: 0 16px; gap: 12px; }
     main { padding: 32px 16px 60px; }
@@ -519,6 +550,7 @@
 <header>
   <div class="logo-box">M</div>
   <span class="logo-name">Mantis Pro</span>
+  <button id="history-btn" type="button">Mint History</button>
   <button id="refresh-btn" class="hidden" type="button">Refresh</button>
 </header>
 
@@ -542,6 +574,13 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <button id="modal-close" class="modal-close" type="button" aria-label="Close">&times;</button>
     <div id="modal-content"></div>
+  </div>
+</div>
+
+<div id="history-overlay" class="modal-overlay hidden">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="history-title">
+    <button id="history-close" class="modal-close" type="button" aria-label="Close">&times;</button>
+    <div id="history-content"></div>
   </div>
 </div>
 
@@ -1093,11 +1132,27 @@ function renderArmForm() {
   );
 }
 
+// fired_at is a fractional-seconds epoch timestamp (Python time.time()) —
+// millisecond precision matters here since the whole point of showing it
+// is verifying firing speed, not just "roughly when".
+function formatFiredAtHtml(firedAtSeconds) {
+  var d = new Date(firedAtSeconds * 1000);
+  var ms = String(Math.round((firedAtSeconds % 1) * 1000)).padStart(3, '0');
+  return d.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
+  }) + '.' + ms;
+}
+
 function renderArmStatusDisplay(arm, attempts) {
   var label = ARM_STATUS_LABELS[arm.status] || arm.status;
   var html = '<div class="schedule-detail">Status: <strong>' + esc(label) + '</strong></div>';
 
   var lastAttempt = attempts && attempts.length ? attempts[attempts.length - 1] : null;
+  if (lastAttempt && lastAttempt.fired_at) {
+    html += '<div class="schedule-detail">Fired: ' + esc(formatFiredAtHtml(lastAttempt.fired_at)) +
+      (lastAttempt.latency_ms != null ? ' (' + esc(lastAttempt.latency_ms) + 'ms after go-live)' : '') +
+      '</div>';
+  }
   if (lastAttempt && lastAttempt.tx_hash) {
     html += '<div class="schedule-detail"><a class="modal-link-btn" href="https://etherscan.io/tx/' +
       encodeURIComponent(lastAttempt.tx_hash) + '" target="_blank" rel="noopener noreferrer">View transaction &rarr;</a></div>';
@@ -1334,6 +1389,65 @@ async function refreshDrops() {
   }
 }
 
+// ── Mint History ─────────────────────────────────────────────────────────
+// The permanent record of every mint this tool has ever actually fired —
+// separate from the per-drop arm status shown inside a drop's modal (which
+// only ever reflects the CURRENT arm request for one drop). Uses its own
+// overlay rather than reusing #modal-overlay, since that one carries state
+// (currentModalDrop, activeModalSlug) tied to a specific drop's details
+// that has nothing to do with a cross-drop history list.
+
+function renderHistoryItemHtml(mint) {
+  var openseaUrl = 'https://opensea.io/collection/' + encodeURIComponent(mint.collection_slug || '');
+  var etherscanUrl = mint.tx_hash ? 'https://etherscan.io/tx/' + encodeURIComponent(mint.tx_hash) : null;
+  return (
+    '<div class="history-item">' +
+      '<div class="history-item-row">' +
+        '<a class="history-item-name" href="' + esc(openseaUrl) + '" target="_blank" rel="noopener noreferrer">' +
+          esc(mint.name || mint.collection_slug) +
+        '</a>' +
+        '<span class="history-item-qty">&times;' + esc(mint.quantity) + '</span>' +
+      '</div>' +
+      (mint.fired_at ? '<div class="history-item-meta">Fired: ' + esc(formatFiredAtHtml(mint.fired_at)) +
+        (mint.latency_ms != null ? ' (' + esc(mint.latency_ms) + 'ms after go-live)' : '') + '</div>' : '') +
+      (etherscanUrl ? '<a class="modal-link-btn" href="' + esc(etherscanUrl) +
+        '" target="_blank" rel="noopener noreferrer">View transaction &rarr;</a>' : '') +
+    '</div>'
+  );
+}
+
+async function openHistoryModal() {
+  var overlay = document.getElementById('history-overlay');
+  var content = document.getElementById('history-content');
+  content.innerHTML =
+    '<div class="modal-title" id="history-title">Mint History</div>' +
+    '<div id="history-list" class="modal-details-state">Loading…</div>';
+  overlay.classList.remove('hidden');
+
+  try {
+    var url = '/api/opensea/mint-history' +
+      (window.__ethOwnerAddress ? '?owner=' + encodeURIComponent(window.__ethOwnerAddress) : '');
+    var res = await fetch(url);
+    if (!res.ok) throw new Error('API ' + res.status);
+    var data = await res.json();
+    var mints = data.mints || [];
+    var list = document.getElementById('history-list');
+    if (!list) return; // closed while this was in flight
+    list.className = '';
+    list.innerHTML = mints.length
+      ? mints.map(renderHistoryItemHtml).join('')
+      : '<div class="modal-details-state">No successful mints recorded yet.</div>';
+  } catch (err) {
+    var list = document.getElementById('history-list');
+    if (list) list.textContent = 'Could not load mint history: ' + (err && err.message ? err.message : String(err));
+  }
+}
+
+function closeHistoryModal() {
+  document.getElementById('history-overlay').classList.add('hidden');
+  document.getElementById('history-content').innerHTML = '';
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   if (window.__IS_ADMIN__) {
     var btn = document.getElementById('refresh-btn');
@@ -1346,8 +1460,18 @@ document.addEventListener('DOMContentLoaded', function () {
   overlay.addEventListener('click', function (e) {
     if (e.target === overlay) closeModal(); // click on backdrop, not the panel itself
   });
+
+  var historyOverlay = document.getElementById('history-overlay');
+  document.getElementById('history-btn').addEventListener('click', openHistoryModal);
+  document.getElementById('history-close').addEventListener('click', closeHistoryModal);
+  historyOverlay.addEventListener('click', function (e) {
+    if (e.target === historyOverlay) closeHistoryModal();
+  });
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeModal();
+    if (e.key !== 'Escape') return;
+    if (!overlay.classList.contains('hidden')) closeModal();
+    if (!historyOverlay.classList.contains('hidden')) closeHistoryModal();
   });
 
   loadDrops();

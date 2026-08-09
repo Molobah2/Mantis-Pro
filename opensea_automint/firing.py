@@ -401,7 +401,7 @@ def _countdown_and_fire(arm: dict, drop: dict, grant: dict, start_time: float) -
             return
 
         store.update_arm_request_status(arm["id"], "armed")
-        _fire_one(arm, fresh_drop, fresh_grant)
+        _fire_one(arm, fresh_drop, fresh_grant, go_live_at=start_time)
     except Exception as e:
         logger.warning("[firing] arm request %d: countdown thread error: %s", arm["id"], e)
     finally:
@@ -409,11 +409,18 @@ def _countdown_and_fire(arm: dict, drop: dict, grant: dict, start_time: float) -
             _active_countdowns.discard(arm["id"])
 
 
-def _fire_one(arm: dict, drop: dict, grant: dict) -> None:
+def _fire_one(arm: dict, drop: dict, grant: dict, go_live_at: float | None = None) -> None:
     """Attempts to fire exactly once for one arm request. The atomic
     'armed' -> 'fired' claim (store.try_claim_arm_request) is the sole
     guard against double-firing — if the claim fails, another tick (or a
-    concurrent invocation) already took it, and this is a safe no-op."""
+    concurrent invocation) already took it, and this is a safe no-op.
+
+    go_live_at is the drop's real on-chain public-mint start time (from
+    node_client.get_public_drop_window), when known — used only to compute
+    latency_ms (how many milliseconds after go-live this attempt actually
+    fired), the number that answers "how fast is this tool" for a
+    speed-critical mint. None when there's no go-live reference (e.g. a
+    direct/test call), in which case latency_ms is simply not recorded."""
     if not store.try_claim_arm_request(arm["id"]):
         return
 
@@ -428,6 +435,15 @@ def _fire_one(arm: dict, drop: dict, grant: dict) -> None:
         ))
         store.update_arm_request_status(arm["id"], "failed")
         return
+
+    # Captured immediately before the actual fire call — this, not
+    # mint_attempts.attempted_at (recorded further below, AFTER fire_mint's
+    # full round trip including up to a 60s receipt wait), is the real
+    # "we fired at this instant" timestamp.
+    fire_started_at = time.time()
+    latency_ms = (
+        round((fire_started_at - go_live_at) * 1000) if go_live_at is not None else None
+    )
 
     try:
         result = node_client.fire_mint(
@@ -458,6 +474,8 @@ def _fire_one(arm: dict, drop: dict, grant: dict) -> None:
         error_message=None if result.get("success") else result.get("error"),
         gas_used=result.get("gasUsed"),
         block_number=int(block_number) if block_number else None,
+        fired_at=fire_started_at,
+        latency_ms=latency_ms,
     ))
 
     if result.get("success"):
