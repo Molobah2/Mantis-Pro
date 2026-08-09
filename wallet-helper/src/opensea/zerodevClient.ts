@@ -4,15 +4,15 @@
  * wallet-helper (which is Abstract-chain/AGW-only) — deliberately kept in
  * its own module so the two never get confused.
  *
- * This file is READ-ONLY / non-firing: it derives a counterfactual smart
- * account address from an owner's EOA address alone. It never touches a
- * private key and never submits a transaction — session-key signing and
- * mint-firing are later, separate steps.
+ * Most of this file is READ-ONLY / non-firing (address derivation, approval
+ * verification). fireMint at the bottom is the one exception — it submits a
+ * REAL UserOperation that spends real ETH. Everything above it never
+ * touches a private key or submits a transaction.
  */
-import { http, type Address, createPublicClient } from "viem";
+import { http, type Address, createPublicClient, encodeFunctionData, verifyMessage } from "viem";
 import { mainnet } from "viem/chains";
 import { signerToEcdsaValidator } from "@zerodev/ecdsa-validator";
-import { createKernelAccount, addressToEmptyAccount } from "@zerodev/sdk";
+import { createKernelAccount, createKernelAccountClient, addressToEmptyAccount } from "@zerodev/sdk";
 import { getEntryPoint, KERNEL_V3_1 } from "@zerodev/sdk/constants";
 import { deserializePermissionAccount } from "@zerodev/permissions";
 
@@ -111,4 +111,279 @@ export async function verifySessionGrantOwnership(
   }
 
   return { valid: true };
+}
+
+/**
+ * Verifies a plain EOA signature over an arbitrary message actually
+ * recovers to the claimed owner address — used to authorize arm/cancel
+ * actions (opensea_automint/routes.py's /api/opensea/arm and
+ * /api/opensea/arm/<id>/cancel), which otherwise would accept a bare,
+ * self-reported ownerAddress with no proof of control (Ethereum addresses
+ * are public; anyone could otherwise arm or cancel on someone else's
+ * behalf). Deliberately a plain personal_sign check, not the ZeroDev
+ * session-key machinery above — arming/cancelling doesn't need a smart
+ * account, just proof the caller controls the EOA they claim to be.
+ */
+export async function verifyOwnerSignature(
+  ownerAddress: Address,
+  message: string,
+  signature: `0x${string}`
+): Promise<boolean> {
+  try {
+    return await verifyMessage({ address: ownerAddress, message, signature });
+  } catch {
+    return false;
+  }
+}
+
+// ── Firing (the one part of this file that spends real ETH) ────────────────
+
+// Same canonical address used in the browser-side permission construction
+// (wallet-helper/connect-src/eth-connect.tsx) — verified against a real
+// deployed drop earlier in this project via a simulateContract call that
+// reverted with SeaDrop's own IncorrectPayment error, not a generic revert.
+const SEADROP_ADDRESS: Address = "0x00005EA00Ac477B1030CE78506496e8C2dE24bf5";
+
+const SEADROP_ABI = [
+  {
+    name: "mintPublic",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      { name: "nftContract", type: "address" },
+      { name: "feeRecipient", type: "address" },
+      { name: "minterIfNotPayer", type: "address" },
+      { name: "quantity", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "getAllowedFeeRecipients",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "nftContract", type: "address" }],
+    outputs: [{ name: "", type: "address[]" }],
+  },
+  {
+    name: "getPublicDrop",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "nftContract", type: "address" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "mintPrice", type: "uint80" },
+          { name: "startTime", type: "uint48" },
+          { name: "endTime", type: "uint48" },
+          { name: "maxTotalMintableByWallet", type: "uint16" },
+          { name: "feeBps", type: "uint16" },
+          { name: "restrictFeeRecipients", type: "bool" },
+        ],
+      },
+    ],
+  },
+] as const;
+
+const ZERODEV_PROJECT_ID = process.env.ZERODEV_PROJECT_ID ?? "";
+// ZeroDev's v3 API: one URL serves as both bundler and (when a project has
+// gas sponsorship configured) paymaster endpoint. Chain 1 = Ethereum mainnet.
+const ZERODEV_BUNDLER_URL = `https://rpc.zerodev.app/api/v3/${ZERODEV_PROJECT_ID}/chain/1`;
+
+const USER_OP_RECEIPT_TIMEOUT_MS = 60_000;
+
+export interface PublicDropWindow {
+  startTime: number;
+  endTime: number;
+  mintPriceWei: string;
+}
+
+/**
+ * Read-only, no-wallet-required lookup of a collection's real on-chain
+ * public mint window — used by the firing watcher to know precisely when a
+ * drop actually goes live/ends, rather than relying on scraped page text.
+ * Verified live against real collections before being relied on anywhere
+ * (see opensea_automint/RESEARCH_NOTES.md-adjacent history — same call this
+ * project's expiration-suggestion feature already uses).
+ *
+ * Returns null when the contract doesn't implement a public drop stage
+ * (revert) or when startTime/endTime are unset (0) — an expected "not
+ * available" outcome, not an error.
+ */
+export async function getPublicDropWindow(
+  nftContract: Address
+): Promise<PublicDropWindow | null> {
+  try {
+    const drop = await publicClient.readContract({
+      address: SEADROP_ADDRESS,
+      abi: SEADROP_ABI,
+      functionName: "getPublicDrop",
+      args: [nftContract],
+    });
+    if (!drop.startTime && !drop.endTime) return null;
+    return {
+      startTime: Number(drop.startTime),
+      endTime: Number(drop.endTime),
+      mintPriceWei: drop.mintPrice.toString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export interface FireMintParams {
+  serializedApproval: string;
+  nftContract: Address;
+  smartAccountAddress: Address;
+  quantity: number;
+  valueCapWei: bigint;
+}
+
+export interface FireMintResult {
+  success: boolean;
+  userOpHash: string;
+  txHash: string | null;
+  blockNumber: string | null;
+  gasUsed: string | null;
+  error?: string;
+  // True ONLY for the "submitted but couldn't confirm the outcome within
+  // the timeout" case — a real UserOperation may or may not have landed
+  // on-chain. Deliberately distinct from a confirmed on-chain failure
+  // (success: false, ambiguous: false/absent): callers must never treat
+  // an ambiguous outcome as safe to retry, since the first attempt might
+  // still land and a second submission would risk a genuine duplicate
+  // spend/mint.
+  ambiguous?: boolean;
+}
+
+/**
+ * Submits a REAL mintPublic() UserOperation using an already-granted,
+ * already-scoped session-key permission. This is the one function in this
+ * codebase that spends real ETH — everything it does is re-verified against
+ * the live chain immediately before submitting, never trusted from
+ * caller-supplied values alone:
+ *
+ *  - feeRecipient is looked up fresh via getAllowedFeeRecipients (SeaDrop
+ *    rejects an unregistered fee recipient outright when a collection
+ *    restricts them — verified live: every collection checked so far
+ *    returns exactly one canonical recipient).
+ *  - mintPrice is read fresh via getPublicDrop and the resulting total cost
+ *    is checked against valueCapWei BEFORE building the call — a price
+ *    change between when the permission was granted and now can only ever
+ *    make this abort, never overspend.
+ *  - The CallPolicy embedded in the permission itself (nftContract EQUAL,
+ *    minterIfNotPayer EQUAL smartAccountAddress, quantity LESS_THAN_OR_EQUAL,
+ *    valueLimit) is enforced ON-CHAIN by the permission validator regardless
+ *    of anything this function does — this is defense in depth, not the
+ *    only layer.
+ *
+ * Throws only for setup failures (bad approval, ZeroDev not configured).
+ * A failed/reverted mint attempt is returned as {success: false, error},
+ * not thrown, so callers can log it as a real (non-exceptional) outcome.
+ */
+export async function fireMint(params: FireMintParams): Promise<FireMintResult> {
+  if (!ZERODEV_PROJECT_ID) {
+    throw new Error("ZERODEV_PROJECT_ID is not configured — cannot fire a mint");
+  }
+
+  const sessionKeyAccount = await deserializePermissionAccount(
+    publicClient,
+    entryPoint,
+    KERNEL_V3_1,
+    params.serializedApproval
+  );
+
+  if (sessionKeyAccount.address.toLowerCase() !== params.smartAccountAddress.toLowerCase()) {
+    throw new Error(
+      "Deserialized approval does not resolve to the expected smart account address"
+    );
+  }
+
+  const [allowedFeeRecipients, publicDrop] = await Promise.all([
+    publicClient.readContract({
+      address: SEADROP_ADDRESS,
+      abi: SEADROP_ABI,
+      functionName: "getAllowedFeeRecipients",
+      args: [params.nftContract],
+    }),
+    publicClient.readContract({
+      address: SEADROP_ADDRESS,
+      abi: SEADROP_ABI,
+      functionName: "getPublicDrop",
+      args: [params.nftContract],
+    }),
+  ]);
+
+  // Falls back to the smart account's own address (always non-zero, always
+  // valid) only when the collection genuinely doesn't restrict fee
+  // recipients — SeaDrop rejects the zero address unconditionally, so an
+  // empty allowedFeeRecipients list can't mean "any address including zero".
+  const feeRecipient: Address =
+    allowedFeeRecipients.length > 0 ? allowedFeeRecipients[0] : params.smartAccountAddress;
+
+  const totalCostWei = publicDrop.mintPrice * BigInt(params.quantity);
+  if (totalCostWei > params.valueCapWei) {
+    return {
+      success: false,
+      userOpHash: "",
+      txHash: null,
+      blockNumber: null,
+      gasUsed: null,
+      error: `Real mint price (${totalCostWei} wei total) exceeds the granted spend cap (${params.valueCapWei} wei) — aborted before submitting, nothing spent`,
+    };
+  }
+
+  const kernelClient = createKernelAccountClient({
+    account: sessionKeyAccount,
+    chain: mainnet,
+    bundlerTransport: http(ZERODEV_BUNDLER_URL),
+    paymaster: true,
+  });
+
+  const callData = encodeFunctionData({
+    abi: SEADROP_ABI,
+    functionName: "mintPublic",
+    args: [params.nftContract, feeRecipient, params.smartAccountAddress, BigInt(params.quantity)],
+  });
+
+  let userOpHash: string;
+  try {
+    userOpHash = await kernelClient.sendUserOperation({
+      calls: [{ to: SEADROP_ADDRESS, value: totalCostWei, data: callData }],
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, userOpHash: "", txHash: null, blockNumber: null, gasUsed: null, error: msg };
+  }
+
+  try {
+    const receipt = await kernelClient.waitForUserOperationReceipt({
+      hash: userOpHash as `0x${string}`,
+      timeout: USER_OP_RECEIPT_TIMEOUT_MS,
+    });
+    return {
+      success: receipt.success,
+      userOpHash,
+      txHash: receipt.receipt.transactionHash,
+      blockNumber: receipt.receipt.blockNumber.toString(),
+      gasUsed: receipt.receipt.gasUsed.toString(),
+      error: receipt.success ? undefined : "UserOperation included on-chain but reported failure",
+    };
+  } catch (err: unknown) {
+    // The UserOp was submitted (we have a real hash) but we couldn't
+    // confirm its outcome within the timeout — NOT the same as "it
+    // failed". Callers must treat this as unknown/pending, not a hard
+    // failure, and can look the hash up later.
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      ambiguous: true,
+      userOpHash,
+      txHash: null,
+      blockNumber: null,
+      gasUsed: null,
+      error: `Submitted but receipt not confirmed within timeout: ${msg}`,
+    };
+  }
 }

@@ -601,3 +601,315 @@ def test_session_grant_encrypt_secret_value_error_returns_500(
     assert resp.status_code == 500
     assert "error" in resp.get_json()
     assert calls == []
+
+
+# ── POST /api/opensea/arm ────────────────────────────────────────────────
+
+ARM_OWNER = "0x" + "e5" * 20
+ARM_SIGNATURE = "0x" + "ab" * 65
+
+
+def _valid_arm_payload() -> dict:
+    return {
+        "ownerAddress": ARM_OWNER,
+        "collectionSlug": "cool-drop",
+        "quantity": 2,
+        "maxPriceWei": "50000000000000000",
+        "signature": ARM_SIGNATURE,
+        "timestamp": time.time(),
+    }
+
+
+def _mock_arm_signature_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(node_client, "verify_owner_signature", lambda *a, **k: True)
+
+
+def test_arm_valid_payload_returns_200_and_arm_id(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    _mock_arm_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "arm_drop", lambda *a, **k: {"armId": 5})
+
+    resp = client.post("/api/opensea/arm", json=_valid_arm_payload())
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"armId": 5}
+
+
+def test_arm_invalid_payload_returns_400_and_never_calls_arm_drop(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    calls = []
+    monkeypatch.setattr(firing, "arm_drop", lambda *a, **k: calls.append(1) or {"armId": 1})
+
+    payload = _valid_arm_payload()
+    payload["ownerAddress"] = "not-an-address"
+
+    resp = client.post("/api/opensea/arm", json=payload)
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+    assert calls == []
+
+
+def test_arm_invalid_signature_returns_401_and_never_calls_arm_drop(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    calls = []
+    monkeypatch.setattr(node_client, "verify_owner_signature", lambda *a, **k: False)
+    monkeypatch.setattr(firing, "arm_drop", lambda *a, **k: calls.append(1) or {"armId": 1})
+
+    resp = client.post("/api/opensea/arm", json=_valid_arm_payload())
+
+    assert resp.status_code == 401
+    assert "error" in resp.get_json()
+    assert calls == []
+
+
+def test_arm_stale_signature_timestamp_returns_401_without_verifying_signature(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    verify_calls = []
+    monkeypatch.setattr(
+        node_client, "verify_owner_signature", lambda *a, **k: verify_calls.append(1) or True,
+    )
+    monkeypatch.setattr(firing, "arm_drop", lambda *a, **k: {"armId": 1})
+
+    payload = _valid_arm_payload()
+    payload["timestamp"] = time.time() - firing.SIGNATURE_MAX_AGE_SECONDS - 100
+
+    resp = client.post("/api/opensea/arm", json=payload)
+
+    assert resp.status_code == 401
+    assert verify_calls == []  # rejected on staleness before ever calling Node
+
+
+def test_arm_node_helper_failure_during_signature_verification_returns_502(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def raise_runtime_error(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+
+    monkeypatch.setattr(node_client, "verify_owner_signature", raise_runtime_error)
+
+    resp = client.post("/api/opensea/arm", json=_valid_arm_payload())
+
+    assert resp.status_code == 502
+    assert "error" in resp.get_json()
+
+
+def test_arm_validation_failure_from_firing_returns_400(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    _mock_arm_signature_valid(monkeypatch)
+    monkeypatch.setattr(
+        firing, "arm_drop", lambda *a, **k: {"error": "No active minting permission for this wallet — grant one first"},
+    )
+
+    resp = client.post("/api/opensea/arm", json=_valid_arm_payload())
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+def test_arm_already_armed_returns_409_with_existing_arm_id(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    _mock_arm_signature_valid(monkeypatch)
+    monkeypatch.setattr(
+        firing, "arm_drop", lambda *a, **k: {"error": "This drop is already armed", "armId": 3},
+    )
+
+    resp = client.post("/api/opensea/arm", json=_valid_arm_payload())
+
+    assert resp.status_code == 409
+    assert resp.get_json()["armId"] == 3
+
+
+def test_arm_rate_limits_after_threshold(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_arm_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "arm_drop", lambda *a, **k: {"armId": 1})
+
+    last_resp = None
+    for _ in range(11):
+        last_resp = client.post("/api/opensea/arm", json=_valid_arm_payload())
+
+    assert last_resp.status_code == 429
+
+
+def test_arm_malformed_json_body_returns_400_not_500(client) -> None:
+    resp = client.post("/api/opensea/arm", data="not-json{{{", content_type="application/json")
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+# ── GET /api/opensea/arm/for-drop ────────────────────────────────────────
+
+def test_arm_for_drop_returns_arm_and_attempts_when_armed(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    monkeypatch.setattr(
+        firing, "get_arm_status_for_drop",
+        lambda owner, slug: {"arm": {"id": 1, "status": "armed"}, "attempts": []},
+    )
+
+    resp = client.get(f"/api/opensea/arm/for-drop?owner={ARM_OWNER}&collectionSlug=cool-drop")
+
+    assert resp.status_code == 200
+    assert resp.get_json()["arm"]["id"] == 1
+
+
+def test_arm_for_drop_returns_null_arm_when_not_armed(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    monkeypatch.setattr(firing, "get_arm_status_for_drop", lambda owner, slug: None)
+
+    resp = client.get(f"/api/opensea/arm/for-drop?owner={ARM_OWNER}&collectionSlug=cool-drop")
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"arm": None, "attempts": []}
+
+
+def test_arm_for_drop_rejects_invalid_owner(client) -> None:
+    resp = client.get("/api/opensea/arm/for-drop?owner=not-an-address&collectionSlug=cool-drop")
+
+    assert resp.status_code == 400
+
+
+def test_arm_for_drop_rate_limits_after_threshold(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    monkeypatch.setattr(firing, "get_arm_status_for_drop", lambda owner, slug: None)
+
+    last_resp = None
+    for _ in range(61):
+        last_resp = client.get(f"/api/opensea/arm/for-drop?owner={ARM_OWNER}&collectionSlug=cool-drop")
+
+    assert last_resp.status_code == 429
+
+
+def test_arm_for_drop_rejects_invalid_slug(client) -> None:
+    resp = client.get(f"/api/opensea/arm/for-drop?owner={ARM_OWNER}&collectionSlug=UPPERCASE")
+
+    assert resp.status_code == 400
+
+
+# ── POST /api/opensea/arm/<id>/cancel ────────────────────────────────────
+
+def _valid_cancel_payload() -> dict:
+    return {"ownerAddress": ARM_OWNER, "signature": ARM_SIGNATURE, "timestamp": time.time()}
+
+
+def _mock_cancel_signature_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(node_client, "verify_owner_signature", lambda *a, **k: True)
+
+
+def test_cancel_arm_valid_request_returns_200(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_cancel_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "cancel_arm", lambda arm_id, owner: {"cancelled": True})
+
+    resp = client.post("/api/opensea/arm/5/cancel", json=_valid_cancel_payload())
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"cancelled": True}
+
+
+def test_cancel_arm_firing_error_returns_400(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_cancel_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "cancel_arm", lambda arm_id, owner: {"error": "Arm request not found"})
+
+    resp = client.post("/api/opensea/arm/5/cancel", json=_valid_cancel_payload())
+
+    assert resp.status_code == 400
+
+
+def test_cancel_arm_invalid_owner_address_returns_400_without_calling_cancel_arm(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    calls = []
+    monkeypatch.setattr(
+        firing, "cancel_arm", lambda arm_id, owner: calls.append(1) or {"cancelled": True},
+    )
+
+    payload = _valid_cancel_payload()
+    payload["ownerAddress"] = "not-an-address"
+    resp = client.post("/api/opensea/arm/5/cancel", json=payload)
+
+    assert resp.status_code == 400
+    assert calls == []
+
+
+def test_cancel_arm_invalid_signature_returns_401_and_never_calls_cancel_arm(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    calls = []
+    monkeypatch.setattr(node_client, "verify_owner_signature", lambda *a, **k: False)
+    monkeypatch.setattr(
+        firing, "cancel_arm", lambda arm_id, owner: calls.append(1) or {"cancelled": True},
+    )
+
+    resp = client.post("/api/opensea/arm/5/cancel", json=_valid_cancel_payload())
+
+    assert resp.status_code == 401
+    assert calls == []
+
+
+def test_cancel_arm_stale_signature_timestamp_returns_401(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    verify_calls = []
+    monkeypatch.setattr(
+        node_client, "verify_owner_signature", lambda *a, **k: verify_calls.append(1) or True,
+    )
+    monkeypatch.setattr(firing, "cancel_arm", lambda arm_id, owner: {"cancelled": True})
+
+    payload = _valid_cancel_payload()
+    payload["timestamp"] = time.time() - firing.SIGNATURE_MAX_AGE_SECONDS - 100
+    resp = client.post("/api/opensea/arm/5/cancel", json=payload)
+
+    assert resp.status_code == 401
+    assert verify_calls == []
+
+
+def test_cancel_arm_rate_limits_after_threshold(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_cancel_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "cancel_arm", lambda arm_id, owner: {"cancelled": True})
+
+    last_resp = None
+    for _ in range(21):
+        last_resp = client.post("/api/opensea/arm/5/cancel", json=_valid_cancel_payload())
+
+    assert last_resp.status_code == 429

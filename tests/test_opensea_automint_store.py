@@ -174,18 +174,21 @@ def test_arm_request_status_transitions_and_get() -> None:
 
 
 def test_get_pending_arm_requests_filters_by_status() -> None:
+    # Distinct drop_ids per row — idx_arm_requests_active_owner_drop only
+    # allows ONE non-terminal arm request per (owner, drop) pair now, so
+    # these can't all target the same drop.
     pending_id = store.create_arm_request(store.ArmRequestInput(
         owner_address="0xOwner6", drop_id=1, session_grant_id=1,
         quantity=1, max_price_wei="0", go_live_at=None,
     ))
     scheduled_id = store.create_arm_request(store.ArmRequestInput(
-        owner_address="0xOwner6", drop_id=1, session_grant_id=1,
+        owner_address="0xOwner6", drop_id=2, session_grant_id=1,
         quantity=1, max_price_wei="0", go_live_at=None,
     ))
     store.update_arm_request_status(scheduled_id, "scheduled")
 
     fired_id = store.create_arm_request(store.ArmRequestInput(
-        owner_address="0xOwner6", drop_id=1, session_grant_id=1,
+        owner_address="0xOwner6", drop_id=3, session_grant_id=1,
         quantity=1, max_price_wei="0", go_live_at=None,
     ))
     store.update_arm_request_status(fired_id, "fired")
@@ -200,6 +203,146 @@ def test_get_pending_arm_requests_filters_by_status() -> None:
 
 def test_get_arm_request_returns_none_when_not_found() -> None:
     assert store.get_arm_request(999999) is None
+
+
+def test_get_pending_arm_requests_includes_armed_status() -> None:
+    armed_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner6b", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.update_arm_request_status(armed_id, "armed")
+
+    pending_ids = {r["id"] for r in store.get_pending_arm_requests()}
+
+    assert armed_id in pending_ids
+
+
+def test_get_active_arm_request_for_drop_finds_non_terminal_request() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner7", drop_id=42, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+
+    result = store.get_active_arm_request_for_drop("0xOwner7", 42)
+
+    assert result is not None
+    assert result["id"] == arm_id
+
+
+def test_get_active_arm_request_for_drop_is_case_insensitive_on_owner() -> None:
+    store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xowner7lower", drop_id=43, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+
+    result = store.get_active_arm_request_for_drop("0xOwner7Lower", 43)
+
+    assert result is not None
+
+
+@pytest.mark.parametrize("terminal_status", ["succeeded", "failed", "cancelled", "expired"])
+def test_get_active_arm_request_for_drop_excludes_terminal_statuses(terminal_status: str) -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner8", drop_id=44, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.update_arm_request_status(arm_id, terminal_status)
+
+    result = store.get_active_arm_request_for_drop("0xOwner8", 44)
+
+    assert result is None
+
+
+def test_get_active_arm_request_for_drop_returns_none_when_none_exists() -> None:
+    assert store.get_active_arm_request_for_drop("0xNoSuchOwner", 999) is None
+
+
+def test_try_claim_arm_request_succeeds_when_status_is_armed() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner9", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.update_arm_request_status(arm_id, "armed")
+
+    claimed = store.try_claim_arm_request(arm_id)
+
+    assert claimed is True
+    assert store.get_arm_request(arm_id)["status"] == "fired"
+
+
+def test_try_claim_arm_request_fails_when_status_is_not_armed() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner10", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    # status is 'pending_schedule', not 'armed'
+
+    claimed = store.try_claim_arm_request(arm_id)
+
+    assert claimed is False
+    assert store.get_arm_request(arm_id)["status"] == "pending_schedule"
+
+
+def test_try_claim_arm_request_only_one_of_two_concurrent_claims_succeeds() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner11", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.update_arm_request_status(arm_id, "armed")
+
+    first_claim = store.try_claim_arm_request(arm_id)
+    second_claim = store.try_claim_arm_request(arm_id)  # simulates a second concurrent tick
+
+    assert first_claim is True
+    assert second_claim is False
+
+
+def test_try_cancel_arm_request_succeeds_for_pending_request() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner12", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+
+    cancelled = store.try_cancel_arm_request(arm_id)
+
+    assert cancelled is True
+    assert store.get_arm_request(arm_id)["status"] == "cancelled"
+
+
+def test_try_cancel_arm_request_fails_once_already_fired() -> None:
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address="0xOwner13", drop_id=1, session_grant_id=1,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.update_arm_request_status(arm_id, "fired")
+
+    cancelled = store.try_cancel_arm_request(arm_id)
+
+    assert cancelled is False
+    assert store.get_arm_request(arm_id)["status"] == "fired"
+
+
+def test_get_session_grant_round_trips_regardless_of_revoked_status() -> None:
+    grant_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xOwner14",
+        smart_account_address="0xSmartAcct14",
+        encrypted_session_key="key",
+        permission_config="{}",
+        allowed_targets="[]",
+        value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+    store.revoke_session_grant(grant_id)
+
+    result = store.get_session_grant(grant_id)
+
+    assert result is not None
+    assert result["id"] == grant_id
+    assert result["revoked"] == 1
+
+
+def test_get_session_grant_returns_none_when_not_found() -> None:
+    assert store.get_session_grant(999999) is None
 
 
 # ── Mint attempts ─────────────────────────────────────────────────────

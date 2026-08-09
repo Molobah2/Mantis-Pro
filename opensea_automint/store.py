@@ -58,6 +58,18 @@ def _init_schema(c: sqlite3.Connection) -> None:
         created_at         REAL,
         updated_at         REAL
     )""")
+    # Enforces "at most one active arm request per (owner, drop)" at the DB
+    # level — the real guard against the TOCTOU race in firing.arm_drop's
+    # own check-then-insert (that check is only an optimization/early-exit
+    # for a clear error message; this index is what actually prevents two
+    # concurrent requests from both creating a row and each independently
+    # firing a real, duplicate mint). A partial index so terminal rows
+    # (succeeded/failed/cancelled/expired) never collide — re-arming after
+    # any of those must still be allowed.
+    c.execute("""CREATE UNIQUE INDEX IF NOT EXISTS idx_arm_requests_active_owner_drop
+        ON arm_requests(owner_address, drop_id)
+        WHERE status IN ('pending_schedule', 'scheduled', 'armed', 'fired')
+    """)
     c.execute("""CREATE TABLE IF NOT EXISTS mint_attempts (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         arm_request_id  INTEGER,
@@ -223,6 +235,23 @@ def get_active_session_grant(owner_address: str) -> dict | None:
     return _session_grant_row_to_dict(row)
 
 
+def get_session_grant(grant_id: int) -> dict | None:
+    """A single session grant by id, regardless of revoked/expired status —
+    the firing watcher needs to see (and reject) an expired/revoked grant
+    explicitly, not have it silently disappear the way get_active_session_grant
+    would."""
+    with _lock, closing(_conn()) as c:
+        row = c.execute("""
+            SELECT id, owner_address, smart_account_address, encrypted_session_key,
+                   permission_config, allowed_targets, value_cap_wei, expires_at,
+                   revoked, created_at
+            FROM session_grants WHERE id=?
+        """, (grant_id,)).fetchone()
+    if not row:
+        return None
+    return _session_grant_row_to_dict(row)
+
+
 def revoke_session_grant(grant_id: int) -> None:
     """Mark a session grant as revoked so it's no longer returned as active."""
     with _lock, closing(_conn()) as c:
@@ -278,6 +307,22 @@ def get_tracked_drops() -> list[dict]:
     return [_tracked_drop_row_to_dict(r) for r in rows]
 
 
+def get_tracked_drop_by_slug(collection_slug: str) -> dict | None:
+    """A single tracked drop by its collection_slug — the identifier the
+    frontend actually has (the internal integer id is deliberately never
+    exposed to API callers, see drops.py's to_display_dict). None if it
+    doesn't exist."""
+    with _lock, closing(_conn()) as c:
+        row = c.execute("""
+            SELECT id, collection_slug, name, contract_address, chain, mint_page_url,
+                   discovered_at, source, stage_data, updated_at
+            FROM tracked_drops WHERE collection_slug=?
+        """, (collection_slug,)).fetchone()
+    if not row:
+        return None
+    return _tracked_drop_row_to_dict(row)
+
+
 def get_tracked_drop(drop_id: int) -> dict | None:
     """A single tracked drop by id, or None if it doesn't exist."""
     with _lock, closing(_conn()) as c:
@@ -303,7 +348,11 @@ def _tracked_drop_row_to_dict(row: tuple) -> dict:
 # ── Arm requests ──────────────────────────────────────────────────────
 
 def create_arm_request(arm: ArmRequestInput) -> int:
-    """Record a new arm request in 'pending_schedule' status. Returns the new row id."""
+    """Record a new arm request in 'pending_schedule' status. Returns the new
+    row id. Raises sqlite3.IntegrityError if this (owner, drop) pair already
+    has a non-terminal arm request — enforced by idx_arm_requests_active_owner_drop,
+    not just an application-level check (see that index's comment in
+    _init_schema for why this must be a real DB constraint)."""
     owner = arm.owner_address.lower()
     now = time.time()
     with _lock, closing(_conn()) as c:
@@ -330,6 +379,21 @@ def update_arm_request_status(arm_id: int, status: str) -> None:
         c.commit()
 
 
+def try_cancel_arm_request(arm_id: int) -> bool:
+    """Atomically cancels an arm request, but only while it's still in a
+    non-terminal, not-yet-fired state — an already-fired/succeeded/failed
+    request can't be un-fired, so cancellation after that point would be
+    misleading. Returns True only if this call performed the cancellation."""
+    now = time.time()
+    with _lock, closing(_conn()) as c:
+        cur = c.execute("""
+            UPDATE arm_requests SET status='cancelled', updated_at=?
+            WHERE id=? AND status IN ('pending_schedule', 'scheduled', 'armed')
+        """, (now, arm_id))
+        c.commit()
+        return cur.rowcount == 1
+
+
 def get_arm_request(arm_id: int) -> dict | None:
     """A single arm request by id, or None if it doesn't exist."""
     with _lock, closing(_conn()) as c:
@@ -344,16 +408,53 @@ def get_arm_request(arm_id: int) -> dict | None:
 
 
 def get_pending_arm_requests() -> list[dict]:
-    """Arm requests still awaiting scheduling or their go-live moment
-    (status in 'pending_schedule'/'scheduled')."""
+    """Arm requests the firing watcher still needs to check on (status in
+    'pending_schedule'/'scheduled'/'armed') — everything short of a
+    terminal state (fired/succeeded/failed/cancelled/expired)."""
     with _lock, closing(_conn()) as c:
         rows = c.execute("""
             SELECT id, owner_address, drop_id, session_grant_id, quantity, max_price_wei,
                    go_live_at, status, created_at, updated_at
-            FROM arm_requests WHERE status IN ('pending_schedule', 'scheduled')
+            FROM arm_requests WHERE status IN ('pending_schedule', 'scheduled', 'armed')
             ORDER BY id
         """).fetchall()
     return [_arm_request_row_to_dict(r) for r in rows]
+
+
+def get_active_arm_request_for_drop(owner_address: str, drop_id: int) -> dict | None:
+    """The owner's non-terminal (not yet succeeded/failed/cancelled/expired)
+    arm request for this drop, if any — used to stop a wallet from arming
+    the same drop twice, which would otherwise risk firing twice."""
+    owner = owner_address.lower()
+    with _lock, closing(_conn()) as c:
+        row = c.execute("""
+            SELECT id, owner_address, drop_id, session_grant_id, quantity, max_price_wei,
+                   go_live_at, status, created_at, updated_at
+            FROM arm_requests
+            WHERE owner_address=? AND drop_id=?
+              AND status IN ('pending_schedule', 'scheduled', 'armed', 'fired')
+            ORDER BY id DESC LIMIT 1
+        """, (owner, drop_id)).fetchone()
+    if not row:
+        return None
+    return _arm_request_row_to_dict(row)
+
+
+def try_claim_arm_request(arm_id: int) -> bool:
+    """Atomically transitions one arm request from 'armed' to 'fired' —
+    the sole guard against firing the same request twice from concurrent
+    watcher ticks. Returns True only when THIS call performed the
+    transition (i.e. it won the race); False means either the request
+    wasn't in 'armed' status (already claimed by another tick, or not
+    ready yet) or doesn't exist."""
+    now = time.time()
+    with _lock, closing(_conn()) as c:
+        cur = c.execute(
+            "UPDATE arm_requests SET status='fired', updated_at=? WHERE id=? AND status='armed'",
+            (now, arm_id)
+        )
+        c.commit()
+        return cur.rowcount == 1
 
 
 def _arm_request_row_to_dict(row: tuple) -> dict:

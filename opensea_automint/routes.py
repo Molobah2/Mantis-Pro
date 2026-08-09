@@ -15,7 +15,7 @@ from flask import Blueprint, Response, jsonify, request, send_file
 from portal_upvote import security as _sec
 from wallet_crypto import encrypt_secret
 
-from . import collection_details, drops, node_client, security, store
+from . import collection_details, drops, firing, node_client, security, store
 
 opensea_automint_bp = Blueprint("opensea_automint", __name__)
 
@@ -224,6 +224,148 @@ def api_session_grant() -> Response:
     ))
 
     return jsonify({"grantId": grant_id}), 200
+
+
+_ARM_RATE_LIMIT = 10
+_ARM_RATE_WINDOW_SECONDS = 3600
+_ARM_RATE_KEY = "arm-drop"
+
+
+@opensea_automint_bp.route("/api/opensea/arm", methods=["POST"])
+def api_arm_drop() -> Response:
+    """Arms a drop for auto-firing, using the caller's already-granted
+    session-key permission (see api_session_grant above). This route only
+    ever creates a DB row describing INTENT to fire later — it never
+    touches node_client.fire_mint itself. The actual firing happens
+    asynchronously from firing.check_and_fire_armed_requests, driven by a
+    scheduled job (see agent.py), once the drop's real on-chain public
+    stage goes live.
+
+    ownerAddress alone is NOT proof of identity — Ethereum addresses are
+    public — so this requires a real EOA signature over the exact arm
+    parameters (see firing.build_arm_message), verified against the chain
+    via node_client.verify_owner_signature, before ever touching
+    firing.arm_drop. Without this, anyone who knew a victim's address could
+    arm a drop on their behalf using the victim's already-granted permission."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _ARM_RATE_KEY, limit=_ARM_RATE_LIMIT, window=_ARM_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    body = request.get_json(silent=True) or {}
+
+    validation_error = security.validate_arm_input(body)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    if not firing.is_signature_timestamp_fresh(body["timestamp"]):
+        return jsonify({"error": "Signature has expired — please try again"}), 401
+
+    message = firing.build_arm_message(
+        body["collectionSlug"], body["quantity"], body["maxPriceWei"], body["timestamp"],
+    )
+    try:
+        signature_valid = node_client.verify_owner_signature(
+            body["ownerAddress"], message, body["signature"],
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    if not signature_valid:
+        return jsonify({"error": "Invalid signature — could not verify wallet ownership"}), 401
+
+    result = firing.arm_drop(
+        body["ownerAddress"], body["collectionSlug"], body["quantity"], body["maxPriceWei"],
+    )
+    if "error" in result:
+        # "already armed" still carries the existing armId — 409 Conflict
+        # fits better than a flat 400 for that specific case.
+        status = 409 if "armId" in result else 400
+        return jsonify(result), status
+
+    return jsonify(result), 200
+
+
+_ARM_FOR_DROP_RATE_LIMIT = 60
+_ARM_FOR_DROP_RATE_WINDOW_SECONDS = 3600
+_ARM_FOR_DROP_RATE_KEY = "arm-for-drop"
+
+
+@opensea_automint_bp.route("/api/opensea/arm/for-drop")
+def api_get_arm_for_drop() -> Response:
+    """Whether the caller already has an active arm request for a given
+    drop, plus its mint attempts so far — lets the dashboard show live
+    status without needing to know an arm request's internal id.
+
+    Deliberately NOT signature-gated like api_arm_drop/api_cancel_arm:
+    this is polled repeatedly while a modal is open, and requiring a wallet
+    signature prompt on every poll would be unusable. This does mean a
+    caller who knows a wallet's address can see that wallet's arm
+    status/attempt history (quantity, price, tx hashes) — an accepted,
+    lower-severity read-only information exposure (no funds or actions are
+    at risk), bounded by rate limiting rather than eliminated."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _ARM_FOR_DROP_RATE_KEY, limit=_ARM_FOR_DROP_RATE_LIMIT, window=_ARM_FOR_DROP_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    owner = request.args.get("owner", "")
+    if not security.ETH_ADDR_RE.match(owner):
+        return jsonify({"error": "Invalid owner address"}), 400
+
+    collection_slug = request.args.get("collectionSlug", "")
+    if not collection_details.SLUG_RE.match(collection_slug):
+        return jsonify({"error": "Invalid collection slug"}), 400
+
+    result = firing.get_arm_status_for_drop(owner, collection_slug)
+    return jsonify(result if result else {"arm": None, "attempts": []})
+
+
+_CANCEL_ARM_RATE_LIMIT = 20
+_CANCEL_ARM_RATE_WINDOW_SECONDS = 3600
+_CANCEL_ARM_RATE_KEY = "cancel-arm"
+
+
+@opensea_automint_bp.route("/api/opensea/arm/<int:arm_id>/cancel", methods=["POST"])
+def api_cancel_arm(arm_id: int) -> Response:
+    """Cancels an arm request before it fires. Only the owner who created
+    it can cancel it; already-fired/succeeded/failed requests can't be
+    un-fired and are rejected by firing.cancel_arm.
+
+    Requires the same signature-based proof of ownership as api_arm_drop
+    (see its docstring) — arm_id is a small, sequential, otherwise-guessable
+    integer, so without this, anyone could cancel any wallet's armed
+    request (e.g. seconds before a hyped drop opens) just by knowing its id."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _CANCEL_ARM_RATE_KEY, limit=_CANCEL_ARM_RATE_LIMIT, window=_CANCEL_ARM_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    body = request.get_json(silent=True) or {}
+
+    validation_error = security.validate_cancel_input(body)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    if not firing.is_signature_timestamp_fresh(body["timestamp"]):
+        return jsonify({"error": "Signature has expired — please try again"}), 401
+
+    message = firing.build_cancel_message(arm_id, body["timestamp"])
+    try:
+        signature_valid = node_client.verify_owner_signature(
+            body["ownerAddress"], message, body["signature"],
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    if not signature_valid:
+        return jsonify({"error": "Invalid signature — could not verify wallet ownership"}), 401
+
+    result = firing.cancel_arm(arm_id, body["ownerAddress"])
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result), 200
 
 
 @opensea_automint_bp.route("/opensea-automint/eth-connect.bundle.js")

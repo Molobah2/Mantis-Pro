@@ -190,3 +190,136 @@ def test_expires_at_more_than_30_days_out_returns_error() -> None:
     body["expiresAt"] = time.time() + 31 * 86400
 
     assert security.validate_session_grant_input(body) is not None
+
+
+# ── validate_arm_input ────────────────────────────────────────────────────
+
+VALID_SIGNATURE = "0x" + "ab" * 65
+
+
+def _valid_arm_payload() -> dict:
+    return {
+        "ownerAddress": OWNER_ADDRESS,
+        "collectionSlug": "cool-drop",
+        "quantity": 2,
+        "maxPriceWei": "50000000000000000",
+        "signature": VALID_SIGNATURE,
+        "timestamp": time.time(),
+    }
+
+
+def test_valid_arm_payload_returns_none() -> None:
+    assert security.validate_arm_input(_valid_arm_payload()) is None
+
+
+def test_arm_bad_owner_address_format_returns_error() -> None:
+    body = _valid_arm_payload()
+    body["ownerAddress"] = "not-an-address"
+
+    assert security.validate_arm_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_slug", ["", "UPPERCASE", "has spaces", "../etc/passwd", None, 7])
+def test_arm_invalid_collection_slug_returns_error(bad_slug: object) -> None:
+    body = _valid_arm_payload()
+    body["collectionSlug"] = bad_slug
+
+    assert security.validate_arm_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_sig", ["", "not-hex", "0x" + "ab" * 64, "0x" + "zz" * 65, None, 12345])
+def test_arm_invalid_signature_returns_error(bad_sig: object) -> None:
+    body = _valid_arm_payload()
+    body["signature"] = bad_sig
+
+    assert security.validate_arm_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_ts", [0, -1, "not-a-number", None, True])
+def test_arm_invalid_timestamp_returns_error(bad_ts: object) -> None:
+    body = _valid_arm_payload()
+    body["timestamp"] = bad_ts
+
+    assert security.validate_arm_input(body) is not None
+
+
+# ── validate_cancel_input ─────────────────────────────────────────────────
+
+def _valid_cancel_payload() -> dict:
+    return {
+        "ownerAddress": OWNER_ADDRESS,
+        "signature": VALID_SIGNATURE,
+        "timestamp": time.time(),
+    }
+
+
+def test_valid_cancel_payload_returns_none() -> None:
+    assert security.validate_cancel_input(_valid_cancel_payload()) is None
+
+
+def test_cancel_bad_owner_address_format_returns_error() -> None:
+    body = _valid_cancel_payload()
+    body["ownerAddress"] = "not-an-address"
+
+    assert security.validate_cancel_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_sig", ["", "not-hex", None])
+def test_cancel_invalid_signature_returns_error(bad_sig: object) -> None:
+    body = _valid_cancel_payload()
+    body["signature"] = bad_sig
+
+    assert security.validate_cancel_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_ts", [0, -1, None])
+def test_cancel_invalid_timestamp_returns_error(bad_ts: object) -> None:
+    body = _valid_cancel_payload()
+    body["timestamp"] = bad_ts
+
+    assert security.validate_cancel_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_quantity", [0, -1, 1001, "2", 2.5, None, True])
+def test_arm_invalid_quantity_returns_error(bad_quantity: object) -> None:
+    body = _valid_arm_payload()
+    body["quantity"] = bad_quantity
+
+    assert security.validate_arm_input(body) is not None
+
+
+def test_arm_quantity_error_message_mentions_quantity_not_max_quantity() -> None:
+    body = _valid_arm_payload()
+    body["quantity"] = 0
+
+    error = security.validate_arm_input(body)
+
+    assert error is not None
+    assert "quantity" in error
+    assert "maxQuantity" not in error
+
+
+@pytest.mark.parametrize("bad_price", ["not-a-number", "-1", None])
+def test_arm_invalid_max_price_wei_returns_error(bad_price: object) -> None:
+    body = _valid_arm_payload()
+    body["maxPriceWei"] = bad_price
+
+    assert security.validate_arm_input(body) is not None
+
+
+def test_arm_max_price_wei_exceeding_ceiling_returns_error() -> None:
+    body = _valid_arm_payload()
+    body["maxPriceWei"] = str(11 * 10**18)  # above the 10 ETH sanity ceiling
+
+    assert security.validate_arm_input(body) is not None
+
+
+def test_arm_max_price_error_message_mentions_max_price_wei() -> None:
+    body = _valid_arm_payload()
+    body["maxPriceWei"] = "not-a-number"
+
+    error = security.validate_arm_input(body)
+
+    assert error is not None
+    assert "maxPriceWei" in error
+    assert "valueCapWei" not in error

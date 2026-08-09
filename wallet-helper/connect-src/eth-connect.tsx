@@ -124,6 +124,14 @@ declare global {
     // (no public drop stage, RPC error, or the drop has no on-chain end
     // time) — callers fall back to their own manual duration options.
     getSuggestedExpirySeconds?: (nftContractAddress: string) => Promise<number | null>;
+    // Imperative bridge: signs an arbitrary message with the connected
+    // owner wallet (plain personal_sign, no ZeroDev/session-key machinery
+    // — arming/cancelling doesn't need a smart account, just proof the
+    // caller controls the EOA). Used to authorize the arm/cancel API calls
+    // — see opensea_automint/firing.py's build_arm_message/
+    // build_cancel_message, which the dashboard's JS must construct
+    // identically for the backend's signature verification to pass.
+    signOwnerMessage?: (message: string) => Promise<string>;
   }
 }
 
@@ -309,6 +317,22 @@ async function getSuggestedExpirySeconds(
 }
 
 window.getSuggestedExpirySeconds = getSuggestedExpirySeconds;
+
+// Plain personal_sign over an arbitrary message — used to prove the
+// connected wallet controls ownerAddress before the backend acts on an
+// arm/cancel request (see routes.ts's /eth/verify-owner-signature and
+// this file's own verifyOwnerSignature-equivalent server-side). Does NOT
+// use the ZeroDev session-key machinery above; arming/cancelling doesn't
+// need a smart account, just a signature from the owner's real wallet.
+async function signOwnerMessage(message: string): Promise<string> {
+  const { ownerAddress, walletClient } = walletStateRef.current;
+  if (!ownerAddress || !walletClient) {
+    throw new Error("Connect your wallet first");
+  }
+  return await walletClient.signMessage({ account: ownerAddress, message });
+}
+
+window.signOwnerMessage = signOwnerMessage;
 
 function isSmartAccountAddressResponse(
   data: unknown

@@ -129,3 +129,101 @@ def validate_session_grant_input(body: dict) -> Optional[str]:
         return expires_at_error
 
     return None
+
+
+# Self-contained (matches this module's existing style of not importing a
+# one-line regex from collection_details for a single cross-module use) —
+# same pattern collection_details.SLUG_RE uses.
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,100}$")
+
+
+def _validate_collection_slug(collection_slug: object) -> Optional[str]:
+    if not isinstance(collection_slug, str) or not SLUG_RE.match(collection_slug):
+        return "Invalid collectionSlug format"
+    return None
+
+
+# ECDSA signature format: 0x + r(32 bytes) + s(32 bytes) + v(1 byte) = 65
+# bytes = 130 hex chars — the standard personal_sign/eth_sign output shape.
+SIGNATURE_RE = re.compile(r"^0x[0-9a-fA-F]{130}$")
+
+_MAX_MESSAGE_LEN = 500  # generous over the actual built message length; catches abuse, not legitimate use
+
+
+def _validate_signature(signature: object) -> Optional[str]:
+    if not isinstance(signature, str) or not SIGNATURE_RE.match(signature):
+        return "Invalid signature format"
+    return None
+
+
+def _validate_timestamp(timestamp: object) -> Optional[str]:
+    # bool is a subclass of int here too — same trap as maxQuantity/expiresAt.
+    if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+        return "timestamp must be a number"
+    if timestamp <= 0:
+        return "timestamp must be positive"
+    return None
+
+
+def validate_arm_input(body: dict) -> Optional[str]:
+    """Validate an arm-request POST body ({ownerAddress, collectionSlug,
+    quantity, maxPriceWei, signature, timestamp}) BEFORE any DB touch.
+    Returns an error message string on failure, None on success. Reuses the
+    same quantity/value-wei bounds as validate_session_grant_input —
+    arming can never request more than a grant itself allows, but that
+    cross-check (against the actual stored grant) happens in
+    firing.arm_drop, not here; this only rejects malformed/out-of-sane-range
+    input up front. collectionSlug (not an internal drop id) is what the
+    frontend actually has — drops.py's to_display_dict deliberately never
+    exposes the internal integer id.
+
+    signature/timestamp together authorize the action: the caller must
+    prove control of ownerAddress by signing a message built from these
+    exact fields (see firing.build_arm_message) — format-checked here,
+    actually verified against the chain (and checked for staleness) by the
+    route layer, since that requires a real RPC call this module
+    deliberately never makes (see this module's docstring)."""
+    owner_address = body.get("ownerAddress", "")
+    if not isinstance(owner_address, str) or not ETH_ADDR_RE.match(owner_address):
+        return "Invalid ownerAddress format"
+
+    slug_error = _validate_collection_slug(body.get("collectionSlug"))
+    if slug_error:
+        return slug_error
+
+    quantity_error = _validate_max_quantity(body.get("quantity"))
+    if quantity_error:
+        return quantity_error.replace("maxQuantity", "quantity")
+
+    max_price_error = _validate_value_cap_wei(body.get("maxPriceWei"))
+    if max_price_error:
+        return max_price_error.replace("valueCapWei", "maxPriceWei")
+
+    signature_error = _validate_signature(body.get("signature"))
+    if signature_error:
+        return signature_error
+
+    timestamp_error = _validate_timestamp(body.get("timestamp"))
+    if timestamp_error:
+        return timestamp_error
+
+    return None
+
+
+def validate_cancel_input(body: dict) -> Optional[str]:
+    """Validate a cancel-request POST body ({ownerAddress, signature,
+    timestamp}) BEFORE any DB touch. The arm request id itself comes from
+    the URL path, not the body — see firing.build_cancel_message."""
+    owner_address = body.get("ownerAddress", "")
+    if not isinstance(owner_address, str) or not ETH_ADDR_RE.match(owner_address):
+        return "Invalid ownerAddress format"
+
+    signature_error = _validate_signature(body.get("signature"))
+    if signature_error:
+        return signature_error
+
+    timestamp_error = _validate_timestamp(body.get("timestamp"))
+    if timestamp_error:
+        return timestamp_error
+
+    return None

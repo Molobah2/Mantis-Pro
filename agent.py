@@ -1843,11 +1843,30 @@ try:
     _opensea_scheduler = _BS3(timezone="UTC")
     _opensea_scheduler.add_job(_run_opensea_refresh, "interval", minutes=15,
                                 id="opensea_automint_refresh", replace_existing=True)
+
+    # The firing watcher — checks every armed request against the real
+    # on-chain public-mint window and fires the moment it goes live (see
+    # opensea_automint/firing.py). Runs far more often than the drop
+    # refresh above because firing timing precision matters; max_instances=1
+    # guards against a slow tick (a real fire_mint call can take up to ~90s)
+    # overlapping with the next scheduled tick for the same job.
+    from opensea_automint import firing as _opensea_firing
+
+    def _run_opensea_firing_tick():
+        try:
+            _opensea_firing.check_and_fire_armed_requests()
+        except Exception as e:
+            print(f"[opensea-automint] firing watcher tick failed: {e}")
+
+    _opensea_scheduler.add_job(_run_opensea_firing_tick, "interval", seconds=10,
+                                id="opensea_automint_firing", replace_existing=True,
+                                max_instances=1, coalesce=True)
+
     _opensea_scheduler.start()
     threading.Thread(target=_run_opensea_refresh, daemon=True).start()
-    print("[opensea-automint] APScheduler started — drop refresh every 15 min")
+    print("[opensea-automint] APScheduler started — drop refresh every 15 min, firing watcher every 10s")
 except ImportError:
-    print("[opensea-automint] APScheduler not installed — drops will only refresh via admin endpoint")
+    print("[opensea-automint] APScheduler not installed — drops will only refresh via admin endpoint, firing watcher will not run")
 
 @app.route("/portal-upvote")
 def portal_upvote_page():

@@ -685,7 +685,12 @@ function renderModalDetails(details, requestedForSlug, drop) {
 
   slot.outerHTML =
     descriptionHtml + linksHtml + scheduleHtml + noContentHtml +
-    '<div id="grant-section-container">' + renderGrantSection(drop, currentModalContractAddress) + '</div>';
+    '<div id="grant-section-container">' + renderGrantSection(drop, currentModalContractAddress) + '</div>' +
+    '<div id="arm-section-container">' + renderArmSection(currentModalContractAddress) + '</div>';
+
+  if (currentModalContractAddress && document.getElementById('arm-status') && drop && drop.collection_slug) {
+    initArmStatus(drop.collection_slug, currentModalContractAddress);
+  }
 
   // Only kick off the on-chain lookup when the grant form actually rendered
   // (wallet connected + contract known) — avoids a pointless RPC call when
@@ -775,7 +780,11 @@ function initGrantExpiry(contractAddress) {
 }
 
 function renderGrantSection(drop, contractAddress) {
-  if (!drop || drop.status !== 'minting_now') return '';
+  // Both statuses matter here: 'upcoming' is the actual auto-mint use case
+  // (grant + arm before it opens, then walk away), 'minting_now' still
+  // supports granting late (e.g. right as a drop opens) or for a public
+  // stage on a multi-stage drop that's already live.
+  if (!drop || (drop.status !== 'minting_now' && drop.status !== 'upcoming')) return '';
 
   if (!contractAddress) {
     return '<div class="modal-details-state">Mint contract not yet discovered for this collection — permission grant unavailable.</div>';
@@ -812,6 +821,14 @@ function refreshGrantSectionIfOpen() {
   container.innerHTML = renderGrantSection(currentModalDrop, currentModalContractAddress);
   if (currentModalContractAddress && document.getElementById('grant-expiry')) {
     initGrantExpiry(currentModalContractAddress);
+  }
+
+  var armContainer = document.getElementById('arm-section-container');
+  if (armContainer) {
+    armContainer.innerHTML = renderArmSection(currentModalContractAddress);
+    if (currentModalContractAddress && document.getElementById('arm-status') && currentModalDrop.collection_slug) {
+      initArmStatus(currentModalDrop.collection_slug, currentModalContractAddress);
+    }
   }
 }
 
@@ -870,10 +887,229 @@ async function handleGrantClick(btn) {
     });
     if (status) status.textContent = 'Permission granted (id ' + result.grantId + '). Nothing has been minted — this only authorizes a future, separate mint action.';
     btn.textContent = 'Granted';
+    if (document.getElementById('arm-status') && currentModalDrop && currentModalDrop.collection_slug) {
+      initArmStatus(currentModalDrop.collection_slug, contractAddress);
+    }
   } catch (err) {
     if (status) status.textContent = 'Grant failed: ' + (err && err.message ? err.message : String(err));
     btn.disabled = false;
     btn.textContent = 'Grant Permission';
+  }
+}
+
+// ── Arm Auto-Mint ──────────────────────────────────────────────────────
+// Fires automatically once the drop's real on-chain public stage opens —
+// see opensea_automint/firing.py's watcher. This section only ever creates
+// or cancels an arm REQUEST (a row saying "please do this later"); nothing
+// here itself spends ETH — that only happens server-side, asynchronously,
+// once the drop is actually live.
+
+var ARM_DEFAULT_MAX_PRICE_ETH = 0.05;
+var ARM_MAX_QUANTITY = 10;
+
+var ARM_STATUS_LABELS = {
+  pending_schedule: 'Armed — waiting to check the drop schedule',
+  scheduled: 'Armed — waiting for the drop to open',
+  armed: 'Firing now…',
+  fired: 'Firing now…',
+  succeeded: 'Minted!',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+  expired: 'Expired — window closed before firing',
+};
+
+var ARM_CANCELABLE_STATUSES = ['pending_schedule', 'scheduled', 'armed'];
+var ARM_TERMINAL_STATUSES = ['succeeded', 'failed', 'cancelled', 'expired'];
+
+function renderArmSection(contractAddress) {
+  if (!contractAddress) return '';
+  if (!window.__ethOwnerAddress) return '';
+
+  return (
+    '<div class="grant-section" data-contract="' + esc(contractAddress) + '">' +
+      '<div class="connect-label">Auto-Mint</div>' +
+      '<div id="arm-status" class="modal-details-state">Loading auto-mint status…</div>' +
+    '</div>'
+  );
+}
+
+function renderArmForm() {
+  return (
+    '<div class="grant-row">' +
+      '<label>Quantity<input type="number" id="arm-quantity" min="1" max="' + ARM_MAX_QUANTITY + '" value="1"></label>' +
+      '<label>Max ETH (total)<input type="number" id="arm-max-price" min="0" step="0.01" value="' + ARM_DEFAULT_MAX_PRICE_ETH + '"></label>' +
+    '</div>' +
+    '<button id="arm-btn" type="button" class="modal-link-btn">Arm Auto-Mint</button>' +
+    '<div id="arm-form-status" class="modal-details-state"></div>'
+  );
+}
+
+function renderArmStatusDisplay(arm, attempts) {
+  var label = ARM_STATUS_LABELS[arm.status] || arm.status;
+  var html = '<div class="schedule-detail">Status: <strong>' + esc(label) + '</strong></div>';
+
+  var lastAttempt = attempts && attempts.length ? attempts[attempts.length - 1] : null;
+  if (lastAttempt && lastAttempt.tx_hash) {
+    html += '<div class="schedule-detail"><a class="modal-link-btn" href="https://etherscan.io/tx/' +
+      encodeURIComponent(lastAttempt.tx_hash) + '" target="_blank" rel="noopener noreferrer">View transaction &rarr;</a></div>';
+  } else if (lastAttempt && lastAttempt.error_message) {
+    html += '<div class="schedule-detail">' + esc(lastAttempt.error_message) + '</div>';
+  }
+
+  if (ARM_CANCELABLE_STATUSES.indexOf(arm.status) !== -1) {
+    html += '<button id="arm-cancel-btn" type="button" class="modal-link-btn" data-arm-id="' + arm.id + '">Cancel</button>';
+  } else if (ARM_TERMINAL_STATUSES.indexOf(arm.status) !== -1 && arm.status !== 'succeeded') {
+    // Failed/cancelled/expired can be armed again — succeeded is left final.
+    html += renderArmForm();
+  }
+
+  return html;
+}
+
+// Guards against a fast close-then-reopen-different-drop the same way
+// initGrantExpiry does: only apply the fetched result if #arm-status is
+// still actually in the DOM by the time it resolves.
+function initArmStatus(collectionSlug, contractAddress) {
+  var el = document.getElementById('arm-status');
+  if (!el) return;
+  fetch('/api/opensea/arm/for-drop?owner=' + encodeURIComponent(window.__ethOwnerAddress) +
+        '&collectionSlug=' + encodeURIComponent(collectionSlug))
+    .then(function (res) {
+      if (!res.ok) throw new Error('API ' + res.status);
+      return res.json();
+    })
+    .then(function (data) {
+      var current = document.getElementById('arm-status');
+      if (!current) return; // modal closed (or moved to a different drop) while this was in flight
+      current.innerHTML = data.arm ? renderArmStatusDisplay(data.arm, data.attempts || []) : renderArmForm();
+    })
+    .catch(function () {
+      var current = document.getElementById('arm-status');
+      if (current) current.innerHTML = renderArmForm();
+    });
+}
+
+document.addEventListener('click', function (e) {
+  if (e.target && e.target.id === 'arm-btn') {
+    handleArmClick(e.target);
+  }
+  if (e.target && e.target.id === 'arm-cancel-btn') {
+    handleCancelArmClick(e.target);
+  }
+});
+
+// Must build byte-for-byte the same message text as opensea_automint/
+// firing.py's build_arm_message/build_cancel_message — the backend
+// verifies the signature against a message it reconstructs independently
+// from the request's own fields, so any mismatch (wording, field order,
+// even whitespace) makes a legitimate signature fail verification.
+// timestamp is always a plain integer (Math.floor(Date.now()/1000)),
+// deliberately never a float, so its text representation can never differ
+// between JS and Python.
+function buildArmMessage(collectionSlug, quantity, maxPriceWei, timestamp) {
+  return 'Mantis Pro OpenSea Auto-Mint\n' +
+    'action: arm\n' +
+    'collectionSlug: ' + collectionSlug + '\n' +
+    'quantity: ' + quantity + '\n' +
+    'maxPriceWei: ' + maxPriceWei + '\n' +
+    'timestamp: ' + timestamp;
+}
+
+function buildCancelMessage(armId, timestamp) {
+  return 'Mantis Pro OpenSea Auto-Mint\n' +
+    'action: cancel\n' +
+    'armId: ' + armId + '\n' +
+    'timestamp: ' + timestamp;
+}
+
+async function handleArmClick(btn) {
+  var section = btn.closest('.grant-section');
+  var contractAddress = section ? section.getAttribute('data-contract') : null;
+  var quantityInput = document.getElementById('arm-quantity');
+  var maxPriceInput = document.getElementById('arm-max-price');
+  var formStatus = document.getElementById('arm-form-status');
+
+  if (!contractAddress || !currentModalDrop || !currentModalDrop.collection_slug) {
+    if (formStatus) formStatus.textContent = 'Arm unavailable — drop details not loaded.';
+    return;
+  }
+  if (!window.signOwnerMessage) {
+    if (formStatus) formStatus.textContent = 'Arm unavailable — wallet module not loaded.';
+    return;
+  }
+
+  var quantity = Math.max(1, Math.min(ARM_MAX_QUANTITY, parseInt(quantityInput.value, 10) || 1));
+  var maxPriceWei = ethStringToWei(maxPriceInput.value);
+  var timestamp = Math.floor(Date.now() / 1000);
+
+  btn.disabled = true;
+  btn.textContent = 'Arming…';
+  if (formStatus) formStatus.textContent = '';
+
+  try {
+    // Proves the caller actually controls this wallet — without this, the
+    // backend would only ever see a bare, self-reported address (public
+    // knowledge for any wallet) and anyone could arm on someone else's
+    // behalf. See opensea_automint/routes.py's api_arm_drop docstring.
+    formStatus && (formStatus.textContent = 'Confirm the signature request in your wallet…');
+    var signature = await window.signOwnerMessage(
+      buildArmMessage(currentModalDrop.collection_slug, quantity, maxPriceWei, timestamp)
+    );
+    if (formStatus) formStatus.textContent = '';
+
+    var res = await fetch('/api/opensea/arm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ownerAddress: window.__ethOwnerAddress,
+        collectionSlug: currentModalDrop.collection_slug,
+        quantity: quantity,
+        maxPriceWei: maxPriceWei,
+        signature: signature,
+        timestamp: timestamp,
+      }),
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(body.error || ('API ' + res.status));
+
+    initArmStatus(currentModalDrop.collection_slug, contractAddress);
+  } catch (err) {
+    if (formStatus) formStatus.textContent = 'Arm failed: ' + (err && err.message ? err.message : String(err));
+    btn.disabled = false;
+    btn.textContent = 'Arm Auto-Mint';
+  }
+}
+
+async function handleCancelArmClick(btn) {
+  var armId = btn.getAttribute('data-arm-id');
+  if (!armId || !window.__ethOwnerAddress || !window.signOwnerMessage) return;
+
+  var timestamp = Math.floor(Date.now() / 1000);
+
+  btn.disabled = true;
+  btn.textContent = 'Cancelling…';
+
+  try {
+    var signature = await window.signOwnerMessage(buildCancelMessage(armId, timestamp));
+
+    var res = await fetch('/api/opensea/arm/' + encodeURIComponent(armId) + '/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ownerAddress: window.__ethOwnerAddress,
+        signature: signature,
+        timestamp: timestamp,
+      }),
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(body.error || ('API ' + res.status));
+
+    if (currentModalDrop && currentModalContractAddress) {
+      initArmStatus(currentModalDrop.collection_slug, currentModalContractAddress);
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Cancel';
   }
 }
 
