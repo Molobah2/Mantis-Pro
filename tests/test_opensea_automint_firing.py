@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 
 import pytest
@@ -38,6 +39,39 @@ def _make_drop(contract_address: str = CONTRACT, slug: str = "some-drop") -> str
 
 def _drop_db_id(slug: str) -> int:
     return store.get_tracked_drop_by_slug(slug)["id"]
+
+
+def _wait_for_arm_status(arm_id: int, expected_statuses, timeout: float = 2.0) -> dict:
+    """Firing now happens off a background thread (see firing._countdown_and_fire)
+    for any arm request that's already at/near its go-live time — even the
+    'already live' fast path fires via a spawned thread now, specifically so
+    a slow fire_mint call can never block the tick from checking OTHER
+    pending arm requests. That means check_and_fire_armed_requests() can
+    return before a same-tick fire attempt has actually finished, so tests
+    must poll for the real outcome rather than asserting immediately."""
+    if isinstance(expected_statuses, str):
+        expected_statuses = {expected_statuses}
+    deadline = time.time() + timeout
+    arm = store.get_arm_request(arm_id)
+    while arm["status"] not in expected_statuses and time.time() < deadline:
+        time.sleep(0.01)
+        arm = store.get_arm_request(arm_id)
+    return arm
+
+
+def _wait_for_mint_attempt_count(arm_id: int, min_count: int, timeout: float = 2.0) -> list:
+    """'armed' status is ambiguous on its own — it's set both right BEFORE
+    a fire attempt starts and, separately, after a failed-but-retry-eligible
+    attempt finishes (see firing._fire_one). Waiting for the status string
+    alone can catch the former and read stale/absent mint_attempts. Use
+    this instead whenever a test needs to know a real attempt was actually
+    recorded, not just that the status briefly equals 'armed'."""
+    deadline = time.time() + timeout
+    attempts = store.get_mint_attempts(arm_id)
+    while len(attempts) < min_count and time.time() < deadline:
+        time.sleep(0.01)
+        attempts = store.get_mint_attempts(arm_id)
+    return attempts
 
 
 def _make_grant(
@@ -349,6 +383,149 @@ def test_watcher_marks_scheduled_when_window_not_yet_open(monkeypatch: pytest.Mo
     assert store.get_arm_request(arm_id)["status"] == "scheduled"
 
 
+# ── countdown-thread precision firing ───────────────────────────────────
+
+def test_watcher_fires_via_countdown_thread_within_critical_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Inside CRITICAL_WINDOW_SECONDS but not live yet — must spawn a
+    # countdown thread (not wait for the next 5s scheduler tick) and fire
+    # shortly after the real go-live moment, entirely off the tick cadence.
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+    ))
+    start_time = time.time() + 0.2  # well inside the 20s critical window
+    monkeypatch.setattr(
+        firing.node_client, "get_public_drop_window",
+        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+    )
+    fire_mint_calls = []
+    monkeypatch.setattr(
+        firing.node_client, "fire_mint",
+        lambda *a, **k: fire_mint_calls.append(1) or {
+            "success": True, "userOpHash": "0x1", "txHash": "0x2", "blockNumber": "1", "gasUsed": "1",
+        },
+    )
+
+    firing.check_and_fire_armed_requests()
+
+    # Immediately after the tick, still waiting — proves firing did NOT
+    # happen synchronously inside this call (which would block the tick).
+    assert store.get_arm_request(arm_id)["status"] in ("scheduled", "armed")
+
+    arm = _wait_for_arm_status(arm_id, "succeeded", timeout=3.0)
+    assert arm["status"] == "succeeded"
+    assert len(fire_mint_calls) == 1
+
+
+def test_watcher_does_not_spawn_duplicate_countdown_on_repeated_ticks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+    ))
+    start_time = time.time() + 0.3
+    monkeypatch.setattr(
+        firing.node_client, "get_public_drop_window",
+        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+    )
+    fire_mint_calls = []
+    monkeypatch.setattr(
+        firing.node_client, "fire_mint",
+        lambda *a, **k: fire_mint_calls.append(1) or {
+            "success": True, "userOpHash": "0x1", "txHash": "0x2", "blockNumber": "1", "gasUsed": "1",
+        },
+    )
+
+    # Simulate several scheduler ticks landing while the countdown thread
+    # is still waiting — must not spawn a second thread / fire twice.
+    firing.check_and_fire_armed_requests()
+    firing.check_and_fire_armed_requests()
+    firing.check_and_fire_armed_requests()
+
+    arm = _wait_for_arm_status(arm_id, "succeeded", timeout=3.0)
+    assert arm["status"] == "succeeded"
+    assert len(fire_mint_calls) == 1
+
+
+def test_active_countdowns_cleaned_up_after_firing(monkeypatch: pytest.MonkeyPatch) -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+    ))
+    start_time = time.time() + 0.1
+    monkeypatch.setattr(
+        firing.node_client, "get_public_drop_window",
+        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+    )
+    monkeypatch.setattr(
+        firing.node_client, "fire_mint",
+        lambda *a, **k: {"success": True, "userOpHash": "0x1", "txHash": "0x2", "blockNumber": "1", "gasUsed": "1"},
+    )
+
+    firing.check_and_fire_armed_requests()
+    _wait_for_arm_status(arm_id, "succeeded", timeout=3.0)
+
+    # A brief grace period for the countdown thread's finally block to run
+    # (it executes right after the status update, but is one more Python
+    # statement away from that point).
+    deadline = time.time() + 1.0
+    while arm_id in firing._active_countdowns and time.time() < deadline:
+        time.sleep(0.01)
+
+    assert arm_id not in firing._active_countdowns
+
+
+def test_watcher_fires_immediately_when_already_past_go_live_without_blocking_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The "already live" fast path must ALSO fire via a background thread
+    # (not synchronously inside the tick) — otherwise a slow fire_mint call
+    # for one arm request would delay every OTHER pending arm request in
+    # the same tick.
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=None,
+    ))
+    monkeypatch.setattr(
+        firing.node_client, "get_public_drop_window",
+        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+    )
+
+    fire_started = threading.Event()
+    fire_may_finish = threading.Event()
+
+    def slow_fire_mint(*a, **k):
+        fire_started.set()
+        fire_may_finish.wait(timeout=3.0)
+        return {"success": True, "userOpHash": "0x1", "txHash": "0x2", "blockNumber": "1", "gasUsed": "1"}
+
+    monkeypatch.setattr(firing.node_client, "fire_mint", slow_fire_mint)
+
+    tick_start = time.time()
+    firing.check_and_fire_armed_requests()
+    tick_duration = time.time() - tick_start
+
+    # The tick itself must return quickly even though fire_mint is
+    # deliberately blocked — proves it was handed off to a thread.
+    assert tick_duration < 1.0
+    assert fire_started.wait(timeout=1.0)
+
+    fire_may_finish.set()
+    arm = _wait_for_arm_status(arm_id, "succeeded", timeout=3.0)
+    assert arm["status"] == "succeeded"
+
+
 def test_watcher_expires_when_window_already_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     slug = _make_drop()
     grant_id = _make_grant()
@@ -431,7 +608,7 @@ def test_watcher_fires_and_records_success_when_window_open(monkeypatch: pytest.
 
     firing.check_and_fire_armed_requests()
 
-    arm = store.get_arm_request(arm_id)
+    arm = _wait_for_arm_status(arm_id, "succeeded")
     assert arm["status"] == "succeeded"
     assert len(fire_mint_calls) == 1
     _, contract, smart_account, quantity, value_cap_wei = fire_mint_calls[0]
@@ -450,7 +627,7 @@ def test_watcher_decrypts_the_stored_session_key_before_firing(monkeypatch: pyte
     slug = _make_drop()
     real_secret = "this-is-the-real-serialized-approval"
     grant_id = _make_grant(encrypted_session_key=encrypt_secret(real_secret))
-    store.create_arm_request(store.ArmRequestInput(
+    arm_id = store.create_arm_request(store.ArmRequestInput(
         owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
         quantity=1, max_price_wei="1000", go_live_at=None,
     ))
@@ -467,6 +644,7 @@ def test_watcher_decrypts_the_stored_session_key_before_firing(monkeypatch: pyte
     monkeypatch.setattr(firing.node_client, "fire_mint", fake_fire_mint)
 
     firing.check_and_fire_armed_requests()
+    _wait_for_arm_status(arm_id, "succeeded")
 
     assert seen_approvals == [real_secret]
 
@@ -492,17 +670,20 @@ def test_watcher_retries_on_failure_up_to_max_attempts_then_gives_up(
         },
     )
 
-    for _ in range(firing.MAX_FIRE_ATTEMPTS):
+    # Keep ticking until the arm request reaches its terminal 'failed'
+    # state. Each tick either spawns a new fire-attempt thread or (if the
+    # previous attempt's thread hasn't finished cleaning up its
+    # _active_countdowns entry yet) is a harmless no-op — so this doesn't
+    # assume an exact 1:1 correspondence between tick calls and attempts,
+    # only that repeated ticking eventually converges on the right outcome.
+    deadline = time.time() + 5.0
+    arm = store.get_arm_request(arm_id)
+    while arm["status"] != "failed" and time.time() < deadline:
         firing.check_and_fire_armed_requests()
+        time.sleep(0.05)
         arm = store.get_arm_request(arm_id)
-        if arm["status"] == "failed":
-            break
-        # Between attempts the arm request cycles back through 'armed' —
-        # simulate the next tick seeing it in that state again.
-        assert arm["status"] == "armed"
 
-    final = store.get_arm_request(arm_id)
-    assert final["status"] == "failed"
+    assert arm["status"] == "failed"
     assert len(store.get_mint_attempts(arm_id)) == firing.MAX_FIRE_ATTEMPTS
 
 
@@ -561,7 +742,7 @@ def test_watcher_records_error_attempt_and_fails_when_decryption_fails(
 
     firing.check_and_fire_armed_requests()
 
-    arm = store.get_arm_request(arm_id)
+    arm = _wait_for_arm_status(arm_id, "failed")
     assert arm["status"] == "failed"
     attempts = store.get_mint_attempts(arm_id)
     assert len(attempts) == 1
@@ -589,11 +770,17 @@ def test_watcher_treats_node_helper_runtime_error_as_a_failed_attempt(
 
     firing.check_and_fire_armed_requests()
 
-    arm = store.get_arm_request(arm_id)
-    assert arm["status"] == "armed"  # first of MAX_FIRE_ATTEMPTS, retried
-    attempts = store.get_mint_attempts(arm_id)
+    attempts = _wait_for_mint_attempt_count(arm_id, 1)
     assert attempts[0]["status"] == "failed"
     assert "not running" in attempts[0]["error_message"]
+
+    # The attempt is recorded slightly before the final status transition
+    # (see firing._fire_one: record_mint_attempt, then
+    # update_arm_request_status) — 'fired' is always transient here (it's
+    # the claim status set right before the attempt), so waiting past it
+    # is safe and unambiguous, unlike waiting for 'armed' outright.
+    arm = _wait_for_arm_status(arm_id, {"armed", "failed"})
+    assert arm["status"] == "armed"  # first of MAX_FIRE_ATTEMPTS, retried
 
 
 def test_watcher_never_retries_an_ambiguous_outcome(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -622,7 +809,7 @@ def test_watcher_never_retries_an_ambiguous_outcome(monkeypatch: pytest.MonkeyPa
 
     firing.check_and_fire_armed_requests()
 
-    arm = store.get_arm_request(arm_id)
+    arm = _wait_for_arm_status(arm_id, "failed")
     assert arm["status"] == "failed"  # NOT "armed" — must not be retry-eligible
     attempts = store.get_mint_attempts(arm_id)
     assert len(attempts) == 1
@@ -651,7 +838,7 @@ def test_watcher_never_retries_after_a_node_helper_timeout(monkeypatch: pytest.M
 
     firing.check_and_fire_armed_requests()
 
-    arm = store.get_arm_request(arm_id)
+    arm = _wait_for_arm_status(arm_id, "failed")
     assert arm["status"] == "failed"  # ambiguous — must not be retried
 
 

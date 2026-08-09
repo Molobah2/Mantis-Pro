@@ -1845,11 +1845,16 @@ try:
                                 id="opensea_automint_refresh", replace_existing=True)
 
     # The firing watcher — checks every armed request against the real
-    # on-chain public-mint window and fires the moment it goes live (see
-    # opensea_automint/firing.py). Runs far more often than the drop
-    # refresh above because firing timing precision matters; max_instances=1
-    # guards against a slow tick (a real fire_mint call can take up to ~90s)
-    # overlapping with the next scheduled tick for the same job.
+    # on-chain public-mint window. Actual firing precision comes from a
+    # dedicated per-arm-request countdown thread that takes over once a
+    # drop is within firing.CRITICAL_WINDOW_SECONDS (20s) of going live and
+    # busy-waits on the local clock (opensea_automint/firing.py) — this
+    # tick's only job is to catch each arm request BEFORE it enters that
+    # window, so 5s (comfortably under the 20s window) is tight enough;
+    # tighter than that would just add RPC load with no speed benefit.
+    # max_instances=1 guards against a slow tick overlapping the next one —
+    # harmless here since the actual fire_mint call now always runs off a
+    # spawned thread, never blocking the tick itself.
     from opensea_automint import firing as _opensea_firing
 
     def _run_opensea_firing_tick():
@@ -1858,13 +1863,13 @@ try:
         except Exception as e:
             print(f"[opensea-automint] firing watcher tick failed: {e}")
 
-    _opensea_scheduler.add_job(_run_opensea_firing_tick, "interval", seconds=10,
+    _opensea_scheduler.add_job(_run_opensea_firing_tick, "interval", seconds=5,
                                 id="opensea_automint_firing", replace_existing=True,
                                 max_instances=1, coalesce=True)
 
     _opensea_scheduler.start()
     threading.Thread(target=_run_opensea_refresh, daemon=True).start()
-    print("[opensea-automint] APScheduler started — drop refresh every 15 min, firing watcher every 10s")
+    print("[opensea-automint] APScheduler started — drop refresh every 15 min, firing watcher every 5s (+ countdown threads near go-live)")
 except ImportError:
     print("[opensea-automint] APScheduler not installed — drops will only refresh via admin endpoint, firing watcher will not run")
 

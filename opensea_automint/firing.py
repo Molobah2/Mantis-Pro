@@ -20,6 +20,7 @@ Status lifecycle for an arm_requests row (see store.py):
 import json
 import logging
 import sqlite3
+import threading
 import time
 
 from wallet_crypto import decrypt_secret
@@ -29,12 +30,34 @@ from . import node_client, store
 logger = logging.getLogger(__name__)
 
 # Safety margin after a drop's real on-chain startTime before this is
-# treated as actually live. Firing exactly at startTime risks a boundary
-# race against slight clock drift between this process and the chain;
-# ERC-4337 bundler simulation should also catch/reject a would-revert
-# UserOp before ever broadcasting it, but this margin avoids relying on
-# that as the only protection.
-GO_LIVE_SAFETY_MARGIN_SECONDS = 3
+# treated as actually live. Kept small — precision no longer depends on
+# the scheduler's tick interval (see the countdown-thread mechanism below),
+# so this only needs to cover genuine clock drift between this process and
+# the chain, not the old tick-interval slop. Firing a hair too early wastes
+# a retry (ERC-4337 bundler simulation rejects a would-revert UserOp before
+# ever broadcasting it, so nothing is spent) — biasing slightly late avoids
+# that wasted round-trip, which would cost far more than this margin does.
+GO_LIVE_SAFETY_MARGIN_SECONDS = 1
+
+# How long before a drop's real on-chain startTime this module switches
+# from "check on the next regular scheduler tick" to "spawn a dedicated
+# thread that busy-waits on the local clock and fires the instant go-live
+# passes." This is what actually delivers speed: the regular tick interval
+# (agent.py) only needs to be tight enough to catch an arm request BEFORE
+# it enters this window — actual firing precision comes from the countdown
+# thread's tight sleep loop, decoupled entirely from the tick cadence.
+CRITICAL_WINDOW_SECONDS = 20
+
+# How finely the countdown thread polls the clock while waiting — small
+# enough that firing latency past the real go-live moment is negligible
+# compared to network/bundler latency, large enough not to busy-loop the CPU.
+COUNTDOWN_POLL_INTERVAL_SECONDS = 0.05
+
+# Tracks arm requests that already have a dedicated countdown thread
+# running, so repeated scheduler ticks (every ~5s, see agent.py) don't spawn
+# a second one for the same request while the first is still waiting.
+_active_countdowns: set[int] = set()
+_countdowns_lock = threading.Lock()
 
 # Bounded retries for a failed/reverted attempt (e.g. a transient RPC error,
 # or firing one tick before the chain's clock agrees startTime has passed).
@@ -258,13 +281,71 @@ def _check_and_fire_one(arm: dict, now: float) -> None:
         store.update_arm_request_status(arm["id"], "expired")
         return
 
-    if now < window["startTime"] + GO_LIVE_SAFETY_MARGIN_SECONDS:
-        if arm["status"] != "scheduled":
-            store.update_arm_request_status(arm["id"], "scheduled")
+    if now >= window["startTime"] + GO_LIVE_SAFETY_MARGIN_SECONDS:
+        # Already live by the time a regular tick caught this (e.g. the
+        # process just restarted, or this arm request only just got past
+        # validation) — fire via the same background-thread path as the
+        # countdown case below (deadline in the past means it fires on the
+        # very first clock check), rather than blocking this tick: a slow
+        # fire_mint call (up to ~90s worst case) must never delay every
+        # OTHER pending arm request this same tick is about to check.
+        _start_countdown_if_not_already_running(arm, drop, grant, window["startTime"])
         return
 
-    store.update_arm_request_status(arm["id"], "armed")
-    _fire_one(arm, drop, grant)
+    if now >= window["startTime"] - CRITICAL_WINDOW_SECONDS:
+        # Close enough to go-live that waiting for the next regular tick
+        # (every ~5s, see agent.py) would cost real, avoidable latency —
+        # hand off to a dedicated thread that busy-waits on the local
+        # clock and fires the instant go-live actually passes.
+        if arm["status"] != "scheduled":
+            store.update_arm_request_status(arm["id"], "scheduled")
+        _start_countdown_if_not_already_running(arm, drop, grant, window["startTime"])
+        return
+
+    if arm["status"] != "scheduled":
+        store.update_arm_request_status(arm["id"], "scheduled")
+
+
+def _start_countdown_if_not_already_running(
+    arm: dict, drop: dict, grant: dict, start_time: float
+) -> None:
+    """Spawns (at most once per arm request) a dedicated thread that fires
+    the moment start_time passes. Also used for the "already live" case —
+    a start_time already in the past just means the thread's very first
+    clock check is already past its deadline, so it fires immediately."""
+    with _countdowns_lock:
+        if arm["id"] in _active_countdowns:
+            return  # a thread from an earlier tick is already waiting/firing
+        _active_countdowns.add(arm["id"])
+
+    thread = threading.Thread(
+        target=_countdown_and_fire, args=(arm, drop, grant, start_time), daemon=True,
+        name=f"firing-countdown-{arm['id']}",
+    )
+    thread.start()
+
+
+def _countdown_and_fire(arm: dict, drop: dict, grant: dict, start_time: float) -> None:
+    """Runs in its own thread, decoupled from the scheduler's tick cadence
+    (and from every OTHER pending arm request's tick processing) entirely:
+    busy-waits (in small increments) on the local wall clock until
+    start_time passes, then fires immediately — this is what actually
+    delivers sub-second firing precision, not the tick interval."""
+    try:
+        deadline = start_time + GO_LIVE_SAFETY_MARGIN_SECONDS
+        while True:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            time.sleep(min(remaining, COUNTDOWN_POLL_INTERVAL_SECONDS))
+
+        store.update_arm_request_status(arm["id"], "armed")
+        _fire_one(arm, drop, grant)
+    except Exception as e:
+        logger.warning("[firing] arm request %d: countdown thread error: %s", arm["id"], e)
+    finally:
+        with _countdowns_lock:
+            _active_countdowns.discard(arm["id"])
 
 
 def _fire_one(arm: dict, drop: dict, grant: dict) -> None:
