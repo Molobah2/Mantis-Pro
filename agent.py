@@ -3486,4 +3486,11 @@ def portal_upvote_connect_bundle():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"Starting Mantis Pro server on port {port}")
-    app.run(host="0.0.0.0", port=port, use_reloader=False)
+    # threaded=True matters beyond general responsiveness: several features
+    # (e.g. opensea_automint/collection_details.py) use a
+    # threading.Semaphore to cap concurrent Playwright browser launches —
+    # that primitive is dead weight if the server can only ever have one
+    # request in flight at a time. Without this, a single slow request
+    # (a real browser launch can take up to ~30s) stalls every other route
+    # for every other user until it finishes.
+    app.run(host="0.0.0.0", port=port, use_reloader=False, threaded=True)

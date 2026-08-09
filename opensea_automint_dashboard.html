@@ -329,6 +329,51 @@
   }
   .modal-link-btn:hover { background: rgba(255,255,255,0.12); color: var(--t0); }
 
+  .modal-schedule {
+    margin-top: 4px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .schedule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .schedule-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 10px 12px;
+  }
+  .schedule-row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .schedule-name { font-size: 13px; font-weight: 500; color: var(--t0); }
+  .schedule-badge {
+    font-size: 10.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 100px;
+  }
+  .schedule-badge-public { background: rgba(120,200,150,0.16); color: #8fd9ac; }
+  .schedule-badge-gated { background: rgba(230,170,90,0.16); color: #e6b464; }
+  .schedule-timing, .schedule-detail {
+    font-size: 12px;
+    color: var(--t2);
+    margin-top: 4px;
+  }
+  .schedule-note {
+    font-size: 11px;
+    color: var(--t3);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+
   .modal-mint-link {
     margin-top: 4px;
     padding-top: 14px;
@@ -562,6 +607,40 @@ function renderModalShell(drop) {
   );
 }
 
+// Shows the drop's real mint stages (e.g. allowlist-only stages before the
+// public one) — plain public data, no wallet needed. Purely informational:
+// tells the user THAT a stage exists and when it runs, not whether their
+// own wallet is eligible for it (that requires a real wallet connection and
+// isn't determinable client-side today).
+function renderMintSchedule(schedule) {
+  if (!schedule || schedule.length === 0) return '';
+
+  var rows = schedule.map(function (stage) {
+    var isAllowlist = (stage.stage_type || '').toLowerCase() !== 'public';
+    var badgeClass = isAllowlist ? 'schedule-badge schedule-badge-gated' : 'schedule-badge schedule-badge-public';
+    var timing = stage.starts ? 'Starts: ' + esc(stage.starts) : '';
+    if (stage.ends) timing += (timing ? ' — Ends: ' : 'Ends: ') + esc(stage.ends);
+    return (
+      '<li class="schedule-row">' +
+        '<div class="schedule-row-top">' +
+          '<span class="schedule-name">' + esc(stage.name) + '</span>' +
+          '<span class="' + badgeClass + '">' + esc(stage.stage_type) + '</span>' +
+        '</div>' +
+        (timing ? '<div class="schedule-timing">' + timing + '</div>' : '') +
+        (stage.detail ? '<div class="schedule-detail">' + esc(stage.detail) + '</div>' : '') +
+      '</li>'
+    );
+  }).join('');
+
+  return (
+    '<div class="modal-schedule">' +
+      '<div class="connect-label">Mint Schedule</div>' +
+      '<ol class="schedule-list">' + rows + '</ol>' +
+      '<div class="schedule-note">Allowlist-only stages require checking eligibility with a connected wallet directly on OpenSea — not yet available here.</div>' +
+    '</div>'
+  );
+}
+
 function renderModalDetails(details, requestedForSlug, drop) {
   // Guards against a fast close-then-reopen-different-drop: if the fetch that
   // resolves belongs to a slug that's no longer the open modal (either
@@ -573,11 +652,17 @@ function renderModalDetails(details, requestedForSlug, drop) {
   var slot = document.getElementById('modal-details-slot');
   if (!slot) return; // modal was closed before the fetch resolved
 
-  var hasContent = details && (details.description || (details.links && Object.keys(details.links).length > 0));
+  var hasContent = details && (
+    details.description ||
+    (details.links && Object.keys(details.links).length > 0) ||
+    (details.mint_schedule && details.mint_schedule.length > 0)
+  );
 
   var descriptionHtml = details && details.description
     ? '<div class="modal-description">' + esc(details.description) + '</div>'
     : '';
+
+  var scheduleHtml = details ? renderMintSchedule(details.mint_schedule) : '';
 
   var linkButtons = '';
   if (details && details.links) {
@@ -599,7 +684,7 @@ function renderModalDetails(details, requestedForSlug, drop) {
   currentModalContractAddress = (details && details.contract_address) || null;
 
   slot.outerHTML =
-    descriptionHtml + linksHtml + noContentHtml +
+    descriptionHtml + linksHtml + scheduleHtml + noContentHtml +
     '<div id="grant-section-container">' + renderGrantSection(drop, currentModalContractAddress) + '</div>';
 
   // Only kick off the on-chain lookup when the grant form actually rendered

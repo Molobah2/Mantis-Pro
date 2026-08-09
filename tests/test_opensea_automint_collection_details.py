@@ -304,7 +304,7 @@ def test_fetch_collection_details_live_returns_empty_shape_when_playwright_unava
 
     result = collection_details.fetch_collection_details_live("some-collection")
 
-    assert result == {"description": None, "links": {}, "contract_address": None}
+    assert result == {"description": None, "links": {}, "contract_address": None, "mint_schedule": []}
 
 
 def test_fetch_collection_details_live_returns_empty_shape_when_concurrency_limit_exhausted(
@@ -325,12 +325,16 @@ def test_fetch_collection_details_live_returns_empty_shape_when_concurrency_limi
         for _ in range(collection_details._MAX_CONCURRENT_FETCHES):
             collection_details._launch_semaphore.release()
 
-    assert result == {"description": None, "links": {}, "contract_address": None}
+    assert result == {"description": None, "links": {}, "contract_address": None, "mint_schedule": []}
 
 
-def test_fetch_collection_details_live_uses_api_result_without_launching_playwright(
+def test_fetch_collection_details_live_uses_api_description_but_still_calls_playwright_for_schedule(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Mint schedule has no REST API equivalent, so Playwright now always
+    # runs (for schedule data) even when the API already has a usable
+    # description/links — but the API's description/links still win over
+    # whatever Playwright's own (possibly stale/broken) extraction found.
     api_result = {
         "description": "an API-sourced description",
         "links": {"twitter": "https://x.com/foo"},
@@ -343,13 +347,21 @@ def test_fetch_collection_details_live_uses_api_result_without_launching_playwri
     monkeypatch.setattr(
         collection_details,
         "_fetch_via_playwright",
-        lambda slug: playwright_calls.append(slug) or {"description": None, "links": {}},
+        lambda slug: playwright_calls.append(slug) or {
+            "description": "should be ignored",
+            "links": {"website": "should be ignored"},
+            "mint_schedule": [{"name": "Public stage", "stage_type": "Public",
+                                "starts": "August 14 at 3:00 PM GMT", "ends": None, "detail": "Free"}],
+        },
     )
 
     result = collection_details.fetch_collection_details_live("some-collection")
 
-    assert playwright_calls == []
-    assert result == api_result
+    assert playwright_calls == ["some-collection"]
+    assert result == {**api_result, "mint_schedule": [
+        {"name": "Public stage", "stage_type": "Public",
+         "starts": "August 14 at 3:00 PM GMT", "ends": None, "detail": "Free"},
+    ]}
 
 
 def test_fetch_collection_details_live_falls_back_to_playwright_when_api_fails(
@@ -359,7 +371,11 @@ def test_fetch_collection_details_live_falls_back_to_playwright_when_api_fails(
     monkeypatch.setattr(
         collection_details,
         "_fetch_via_playwright",
-        lambda slug: {"description": "scraped description", "links": {"website": "https://foo.xyz"}},
+        lambda slug: {
+            "description": "scraped description",
+            "links": {"website": "https://foo.xyz"},
+            "mint_schedule": [],
+        },
     )
 
     result = collection_details.fetch_collection_details_live("some-collection")
@@ -368,6 +384,7 @@ def test_fetch_collection_details_live_falls_back_to_playwright_when_api_fails(
         "description": "scraped description",
         "links": {"website": "https://foo.xyz"},
         "contract_address": None,
+        "mint_schedule": [],
     }
 
 
@@ -390,7 +407,7 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
     monkeypatch.setattr(
         collection_details,
         "_fetch_via_playwright",
-        lambda slug: {"description": "scraped description", "links": {}},
+        lambda slug: {"description": "scraped description", "links": {}, "mint_schedule": []},
     )
 
     result = collection_details.fetch_collection_details_live("some-collection")
@@ -399,7 +416,223 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
         "description": "scraped description",
         "links": {},
         "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
+        "mint_schedule": [],
     }
+
+
+# ── _parse_schedule_stage / _extract_mint_schedule ───────────────────────
+
+def test_parse_schedule_stage_allowlist_with_no_end_time() -> None:
+    text = "Team\nAllowlist\nStarts: August 14 at 1:00 PM GMT\nFree | Limit 20 per wallet"
+
+    result = collection_details._parse_schedule_stage(text)
+
+    assert result == {
+        "name": "Team",
+        "stage_type": "Allowlist",
+        "starts": "August 14 at 1:00 PM GMT",
+        "ends": None,
+        "detail": "Free | Limit 20 per wallet",
+    }
+
+
+def test_parse_schedule_stage_public_with_end_time_and_price() -> None:
+    text = (
+        "Public stage\nPublic\nStarts: August 14 at 3:00 PM GMT\n"
+        "Ends: September 13 at 3:00 PM GMT\n$21.09 | Limit 1,000 per wallet"
+    )
+
+    result = collection_details._parse_schedule_stage(text)
+
+    assert result == {
+        "name": "Public stage",
+        "stage_type": "Public",
+        "starts": "August 14 at 3:00 PM GMT",
+        "ends": "September 13 at 3:00 PM GMT",
+        "detail": "$21.09 | Limit 1,000 per wallet",
+    }
+
+
+def test_parse_schedule_stage_returns_none_for_too_few_lines() -> None:
+    assert collection_details._parse_schedule_stage("Team\nAllowlist") is None
+
+
+def test_parse_schedule_stage_ends_without_starts() -> None:
+    # Not observed live, but the regex-scan logic should handle it correctly
+    # regardless of which of Starts:/Ends: is present.
+    text = "Public stage\nPublic\nEnds: September 13 at 3:00 PM GMT\nFree"
+
+    result = collection_details._parse_schedule_stage(text)
+
+    assert result["starts"] is None
+    assert result["ends"] == "September 13 at 3:00 PM GMT"
+
+
+def test_parse_schedule_stage_preserves_multiple_detail_lines() -> None:
+    # Regression test: a stage rendering price and limit as two separate
+    # non-"Starts:"/"Ends:" lines must keep both, not silently drop the
+    # first one by overwriting a scalar.
+    text = "Team\nAllowlist\nStarts: August 14 at 1:00 PM GMT\n$5.00\nLimit 20 per wallet"
+
+    result = collection_details._parse_schedule_stage(text)
+
+    assert result["detail"] == "$5.00 Limit 20 per wallet"
+
+
+def test_parse_schedule_stage_ignores_blank_lines() -> None:
+    text = "Team\n\nAllowlist\n\nStarts: August 14 at 1:00 PM GMT\n\nFree | Limit 20 per wallet\n\n"
+
+    result = collection_details._parse_schedule_stage(text)
+
+    assert result == {
+        "name": "Team",
+        "stage_type": "Allowlist",
+        "starts": "August 14 at 1:00 PM GMT",
+        "ends": None,
+        "detail": "Free | Limit 20 per wallet",
+    }
+
+
+def test_parse_schedule_stage_truncates_overlong_fields() -> None:
+    overlong = "x" * 500
+    text = f"{overlong}\n{overlong}\nStarts: {overlong}\n{overlong}"
+
+    result = collection_details._parse_schedule_stage(text)
+
+    assert result is not None
+    assert len(result["name"]) == collection_details._MAX_SCHEDULE_FIELD_LENGTH
+    assert len(result["stage_type"]) == collection_details._MAX_SCHEDULE_FIELD_LENGTH
+    assert len(result["starts"]) == collection_details._MAX_SCHEDULE_FIELD_LENGTH
+    assert len(result["detail"]) == collection_details._MAX_SCHEDULE_FIELD_LENGTH
+
+
+class _FakeLocator:
+    def __init__(self, items: list[str | None] | None = None, raise_on_count: bool = False) -> None:
+        # An item of None means "this element raises on inner_text()" —
+        # simulates one stage detaching/failing mid-scrape while siblings
+        # still succeed.
+        self._items = items or []
+        self._raise_on_count = raise_on_count
+
+    def count(self) -> int:
+        if self._raise_on_count:
+            raise Exception("locator resolution failed")
+        return len(self._items)
+
+    def nth(self, i: int) -> "_FakeItem":
+        item = self._items[i]
+        return _FakeItem(item or "", raise_on_text=item is None)
+
+
+class _FakeItem:
+    def __init__(self, text: str, raise_on_text: bool = False) -> None:
+        self._text = text
+        self._raise_on_text = raise_on_text
+
+    def inner_text(self, timeout: int) -> str:
+        if self._raise_on_text:
+            raise Exception("element detached")
+        return self._text
+
+
+class _FakePage:
+    def __init__(self, locator: _FakeLocator) -> None:
+        self._locator = locator
+
+    def locator(self, selector: str) -> _FakeLocator:
+        return self._locator
+
+
+def test_extract_mint_schedule_returns_parsed_stages() -> None:
+    page = _FakePage(_FakeLocator([
+        "Team\nAllowlist\nStarts: August 14 at 1:00 PM GMT\nFree | Limit 20 per wallet",
+        "Public stage\nPublic\nStarts: August 14 at 3:00 PM GMT\n$21.09 | Limit 1,000 per wallet",
+    ]))
+
+    result = collection_details._extract_mint_schedule(page)
+
+    assert len(result) == 2
+    assert result[0]["name"] == "Team"
+    assert result[1]["name"] == "Public stage"
+
+
+def test_extract_mint_schedule_returns_empty_list_when_locator_fails() -> None:
+    page = _FakePage(_FakeLocator(raise_on_count=True))
+
+    result = collection_details._extract_mint_schedule(page)
+
+    assert result == []
+
+
+def test_extract_mint_schedule_skips_unparseable_stages_without_raising() -> None:
+    page = _FakePage(_FakeLocator(["Team\nAllowlist"]))  # too few lines, unparseable
+
+    result = collection_details._extract_mint_schedule(page)
+
+    assert result == []
+
+
+def test_extract_mint_schedule_skips_one_failing_stage_but_keeps_the_rest() -> None:
+    page = _FakePage(_FakeLocator([
+        "Team\nAllowlist\nStarts: August 14 at 1:00 PM GMT\nFree | Limit 20 per wallet",
+        None,  # this element raises on inner_text() — e.g. detached mid-scrape
+        "Public stage\nPublic\nStarts: August 14 at 3:00 PM GMT\n$21.09 | Limit 1,000 per wallet",
+    ]))
+
+    result = collection_details._extract_mint_schedule(page)
+
+    assert len(result) == 2
+    assert result[0]["name"] == "Team"
+    assert result[1]["name"] == "Public stage"
+
+
+def test_extract_mint_schedule_anchors_on_the_first_matching_label_only() -> None:
+    """
+    Real-browser regression test (not a pure-Python mock, since the bug this
+    guards against is in the actual XPath expression's semantics, which
+    Python mocks can't exercise): if the page renders the "Mint schedule"
+    label text more than once (e.g. a duplicate section — plausible on a
+    real React site), the extractor must still read exactly one <ol>'s
+    stages, not a union of stages from every <ol> that follows any matching
+    label. Both duplicates here are fully visible (NOT display:none) —
+    inner_text() returns "" for hidden elements regardless of which <ol>
+    the XPath resolves to, which would mask this exact bug rather than
+    exercise it.
+    """
+    pytest.importorskip("playwright.sync_api")
+    from playwright.sync_api import sync_playwright
+
+    html = """
+    <html><body>
+      <div>
+        <span>Mint schedule</span>
+        <ol>
+          <li>Decoy<br>Allowlist<br>Starts: January 1 at 1:00 PM GMT<br>Free</li>
+        </ol>
+      </div>
+      <div>
+        <span>Mint schedule</span>
+        <ol>
+          <li>Team<br>Allowlist<br>Starts: August 14 at 1:00 PM GMT<br>Free | Limit 20 per wallet</li>
+          <li>Public stage<br>Public<br>Starts: August 14 at 3:00 PM GMT<br>$21.09 | Limit 1,000 per wallet</li>
+        </ol>
+      </div>
+    </body></html>
+    """
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.set_content(html)
+            result = collection_details._extract_mint_schedule(page)
+        finally:
+            browser.close()
+
+    # Must come from exactly ONE <ol> (the first matching label's), not a
+    # union of both — i.e. exactly 1 stage (the Decoy), not 3.
+    assert len(result) == 1
+    assert result[0]["name"] == "Decoy"
 
 
 # ── get_collection_details (caching) ─────────────────────────────────────
