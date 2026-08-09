@@ -198,6 +198,54 @@ def api_session_grant() -> Response:
     return jsonify({"grantId": grant_id, "sessionAddress": session_address}), 200
 
 
+_REVOKE_GRANT_RATE_LIMIT = 20
+_REVOKE_GRANT_RATE_WINDOW_SECONDS = 3600
+_REVOKE_GRANT_RATE_KEY = "revoke-grant"
+
+
+@opensea_automint_bp.route("/api/opensea/session-grant/<int:grant_id>/revoke", methods=["POST"])
+def api_revoke_grant(grant_id: int) -> Response:
+    """Revokes a session grant on demand — only for the owner who created
+    it. This ONLY stops the app from using that key for future arm/fire
+    actions (see firing.revoke_grant's docstring) — it has no on-chain
+    effect and does not sweep any ETH still sitting at the session address.
+
+    Requires the same signature-based proof of ownership as api_cancel_arm
+    — a grant id is a small, sequential, otherwise-guessable integer, so
+    without this, anyone could revoke any wallet's grant just by knowing
+    its id."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _REVOKE_GRANT_RATE_KEY,
+        limit=_REVOKE_GRANT_RATE_LIMIT, window=_REVOKE_GRANT_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    body = request.get_json(silent=True) or {}
+
+    validation_error = security.validate_revoke_grant_input(body)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    if not firing.is_signature_timestamp_fresh(body["timestamp"]):
+        return jsonify({"error": "Signature has expired — please try again"}), 401
+
+    message = messages.build_revoke_grant_message(grant_id, body["timestamp"])
+    try:
+        signature_valid = node_client.verify_owner_signature(
+            body["ownerAddress"], message, body["signature"],
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    if not signature_valid:
+        return jsonify({"error": "Invalid signature — could not verify wallet ownership"}), 401
+
+    result = firing.revoke_grant(grant_id, body["ownerAddress"])
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
 _ARM_RATE_LIMIT = 10
 _ARM_RATE_WINDOW_SECONDS = 3600
 _ARM_RATE_KEY = "arm-drop"

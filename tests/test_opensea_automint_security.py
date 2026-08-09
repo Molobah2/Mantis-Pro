@@ -274,6 +274,43 @@ def test_cancel_invalid_timestamp_returns_error(bad_ts: object) -> None:
     assert security.validate_cancel_input(body) is not None
 
 
+# ── validate_revoke_grant_input ──────────────────────────────────────────
+
+def _valid_revoke_grant_payload() -> dict:
+    return {
+        "ownerAddress": OWNER_ADDRESS,
+        "signature": VALID_SIGNATURE,
+        "timestamp": time.time(),
+    }
+
+
+def test_valid_revoke_grant_payload_returns_none() -> None:
+    assert security.validate_revoke_grant_input(_valid_revoke_grant_payload()) is None
+
+
+def test_revoke_grant_bad_owner_address_format_returns_error() -> None:
+    body = _valid_revoke_grant_payload()
+    body["ownerAddress"] = "not-an-address"
+
+    assert security.validate_revoke_grant_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_sig", ["", "not-hex", None])
+def test_revoke_grant_invalid_signature_returns_error(bad_sig: object) -> None:
+    body = _valid_revoke_grant_payload()
+    body["signature"] = bad_sig
+
+    assert security.validate_revoke_grant_input(body) is not None
+
+
+@pytest.mark.parametrize("bad_ts", [0, -1, None])
+def test_revoke_grant_invalid_timestamp_returns_error(bad_ts: object) -> None:
+    body = _valid_revoke_grant_payload()
+    body["timestamp"] = bad_ts
+
+    assert security.validate_revoke_grant_input(body) is not None
+
+
 @pytest.mark.parametrize("bad_quantity", [0, -1, 1001, "2", 2.5, None, True])
 def test_arm_invalid_quantity_returns_error(bad_quantity: object) -> None:
     body = _valid_arm_payload()

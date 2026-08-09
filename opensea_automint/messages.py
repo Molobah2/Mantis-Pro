@@ -58,3 +58,16 @@ def build_cancel_message(arm_id: int, timestamp: int) -> str:
         f"armId: {arm_id}\n"
         f"timestamp: {timestamp}"
     )
+
+
+def build_revoke_grant_message(grant_id: int, timestamp: int) -> str:
+    """The message an owner's wallet signs to authorize revoking a session
+    grant on demand. Revocation only stops THIS APP from using that key for
+    future arm/fire actions — it has no on-chain effect and does not sweep
+    any ETH already sitting at the session address (see firing.revoke_grant)."""
+    return (
+        "Mantis Pro OpenSea Auto-Mint\n"
+        "action: revoke-grant\n"
+        f"grantId: {grant_id}\n"
+        f"timestamp: {timestamp}"
+    )

@@ -557,6 +557,131 @@ def test_session_grant_encrypt_secret_value_error_returns_500(
     assert calls == []
 
 
+# ── POST /api/opensea/session-grant/<id>/revoke ──────────────────────────
+
+REVOKE_OWNER = "0x" + "e5" * 20
+REVOKE_SIGNATURE = "0x" + "ab" * 65
+
+
+def _valid_revoke_grant_payload() -> dict:
+    return {"ownerAddress": REVOKE_OWNER, "signature": REVOKE_SIGNATURE, "timestamp": time.time()}
+
+
+def _mock_revoke_signature_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(node_client, "verify_owner_signature", lambda *a, **k: True)
+
+
+def test_revoke_grant_valid_request_returns_200(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_revoke_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "revoke_grant", lambda grant_id, owner: {"revoked": True})
+
+    resp = client.post("/api/opensea/session-grant/5/revoke", json=_valid_revoke_grant_payload())
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"revoked": True}
+
+
+def test_revoke_grant_firing_error_returns_400(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_revoke_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "revoke_grant", lambda grant_id, owner: {"error": "Session grant not found"})
+
+    resp = client.post("/api/opensea/session-grant/5/revoke", json=_valid_revoke_grant_payload())
+
+    assert resp.status_code == 400
+
+
+def test_revoke_grant_invalid_owner_address_returns_400_without_calling_revoke_grant(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    calls = []
+    monkeypatch.setattr(
+        firing, "revoke_grant", lambda grant_id, owner: calls.append(1) or {"revoked": True},
+    )
+
+    payload = _valid_revoke_grant_payload()
+    payload["ownerAddress"] = "not-an-address"
+    resp = client.post("/api/opensea/session-grant/5/revoke", json=payload)
+
+    assert resp.status_code == 400
+    assert calls == []
+
+
+def test_revoke_grant_invalid_signature_returns_401_and_never_calls_revoke_grant(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    calls = []
+    monkeypatch.setattr(node_client, "verify_owner_signature", lambda *a, **k: False)
+    monkeypatch.setattr(
+        firing, "revoke_grant", lambda grant_id, owner: calls.append(1) or {"revoked": True},
+    )
+
+    resp = client.post("/api/opensea/session-grant/5/revoke", json=_valid_revoke_grant_payload())
+
+    assert resp.status_code == 401
+    assert calls == []
+
+
+def test_revoke_grant_stale_signature_timestamp_returns_401(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    verify_calls = []
+    monkeypatch.setattr(
+        node_client, "verify_owner_signature", lambda *a, **k: verify_calls.append(1) or True,
+    )
+    monkeypatch.setattr(firing, "revoke_grant", lambda grant_id, owner: {"revoked": True})
+
+    payload = _valid_revoke_grant_payload()
+    payload["timestamp"] = time.time() - firing.SIGNATURE_MAX_AGE_SECONDS - 100
+    resp = client.post("/api/opensea/session-grant/5/revoke", json=payload)
+
+    assert resp.status_code == 401
+    assert verify_calls == []
+
+
+def test_revoke_grant_node_helper_failure_returns_502(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    def raise_runtime_error(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+
+    monkeypatch.setattr(node_client, "verify_owner_signature", raise_runtime_error)
+
+    resp = client.post("/api/opensea/session-grant/5/revoke", json=_valid_revoke_grant_payload())
+
+    assert resp.status_code == 502
+    assert "error" in resp.get_json()
+
+
+def test_revoke_grant_rate_limits_after_threshold(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_revoke_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "revoke_grant", lambda grant_id, owner: {"revoked": True})
+
+    last_resp = None
+    for _ in range(21):
+        last_resp = client.post("/api/opensea/session-grant/5/revoke", json=_valid_revoke_grant_payload())
+
+    assert last_resp.status_code == 429
+
+
+def test_revoke_grant_malformed_json_body_returns_400_not_500(client) -> None:
+    resp = client.post(
+        "/api/opensea/session-grant/5/revoke", data="not-json{{{", content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
 # ── POST /api/opensea/arm ────────────────────────────────────────────────
 
 ARM_OWNER = "0x" + "e5" * 20

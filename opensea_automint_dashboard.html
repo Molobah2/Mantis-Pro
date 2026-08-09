@@ -488,6 +488,20 @@
     padding: 6px 10px;
     font-family: inherit;
   }
+  .fund-box-revoke {
+    cursor: pointer;
+    background: var(--surface);
+    border: 1px solid var(--err);
+    border-radius: 8px;
+    color: var(--err);
+    font-size: 11px;
+    padding: 6px 10px;
+    font-family: inherit;
+  }
+  .fund-box-revoke:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
   .fund-box-note {
     font-size: 11.5px;
     color: var(--t2);
@@ -932,7 +946,7 @@ async function handleGrantClick(btn) {
       valueCapWei: valueCapWei,
       expiresInSeconds: expiresInSeconds,
     });
-    if (status) status.innerHTML = renderFundBoxHtml(result.sessionAddress, valueCapInput.value);
+    if (status) status.innerHTML = renderFundBoxHtml(result.sessionAddress, valueCapInput.value, result.grantId);
     btn.textContent = 'Granted';
     if (document.getElementById('arm-status') && currentModalDrop && currentModalDrop.collection_slug) {
       initArmStatus(currentModalDrop.collection_slug, contractAddress);
@@ -947,9 +961,9 @@ async function handleGrantClick(btn) {
 // This session key fires a DIRECT signed transaction from its own address —
 // unlike a sponsored smart account, it must hold its own ETH. Nothing can
 // fire (even after arming) until this address is actually funded.
-function renderFundBoxHtml(sessionAddress, maxEthStr) {
+function renderFundBoxHtml(sessionAddress, maxEthStr, grantId) {
   return (
-    '<div class="fund-box">' +
+    '<div class="fund-box" data-grant-id="' + esc(grantId) + '">' +
       '<div class="fund-box-title">Permission granted — now fund this address</div>' +
       '<div class="fund-box-row">' +
         '<div class="fund-box-address" id="fund-box-address">' + esc(sessionAddress) + '</div>' +
@@ -957,21 +971,79 @@ function renderFundBoxHtml(sessionAddress, maxEthStr) {
       '</div>' +
       '<div class="fund-box-note">Send at least ' + esc(maxEthStr) + ' ETH (your max spend cap) plus a small gas buffer to this address. ' +
       'It signs and broadcasts the mint transaction directly — nothing will fire until it holds real ETH.</div>' +
+      '<div class="fund-box-row">' +
+        '<button type="button" class="fund-box-revoke" data-grant-id="' + esc(grantId) + '">Revoke Permission</button>' +
+      '</div>' +
+      '<div class="fund-box-note">Revoking only stops this app from using the key again — it does not move any ETH ' +
+      'already sent to this address. Withdraw any remaining balance yourself once you’re done minting.</div>' +
     '</div>'
   );
 }
 
+// Must build byte-for-byte the same message text as opensea_automint/
+// messages.py's build_revoke_grant_message — see buildArmMessage's comment
+// above for why (backend re-derives the message independently and
+// verifies the signature against it).
+function buildRevokeGrantMessage(grantId, timestamp) {
+  return 'Mantis Pro OpenSea Auto-Mint\n' +
+    'action: revoke-grant\n' +
+    'grantId: ' + grantId + '\n' +
+    'timestamp: ' + timestamp;
+}
+
+async function handleRevokeGrantClick(btn) {
+  var grantId = btn.getAttribute('data-grant-id');
+  if (!grantId || !window.__ethOwnerAddress || !window.signOwnerMessage) return;
+
+  var box = btn.closest('.fund-box');
+  var timestamp = Math.floor(Date.now() / 1000);
+
+  btn.disabled = true;
+  btn.textContent = 'Revoking…';
+
+  try {
+    var signature = await window.signOwnerMessage(buildRevokeGrantMessage(grantId, timestamp));
+
+    var res = await fetch('/api/opensea/session-grant/' + encodeURIComponent(grantId) + '/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ownerAddress: window.__ethOwnerAddress,
+        signature: signature,
+        timestamp: timestamp,
+      }),
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(body.error || ('API ' + res.status));
+
+    if (box) {
+      var note = document.createElement('div');
+      note.className = 'fund-box-note';
+      note.textContent = 'Revoked — this key can no longer be used to arm or fire a mint.';
+      box.appendChild(note);
+    }
+    btn.textContent = 'Revoked';
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Revoke failed: ' + (err && err.message ? err.message : String(err));
+  }
+}
+
 document.addEventListener('click', function (e) {
   var copyBtn = e.target && e.target.closest && e.target.closest('.fund-box-copy');
-  if (!copyBtn) return;
-  var addr = copyBtn.getAttribute('data-copy') || '';
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(addr).then(function () {
-      var original = copyBtn.textContent;
-      copyBtn.textContent = 'Copied!';
-      setTimeout(function () { copyBtn.textContent = original; }, 1500);
-    }).catch(function () {});
+  if (copyBtn) {
+    var addr = copyBtn.getAttribute('data-copy') || '';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(addr).then(function () {
+        var original = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        setTimeout(function () { copyBtn.textContent = original; }, 1500);
+      }).catch(function () {});
+    }
+    return;
   }
+  var revokeBtn = e.target && e.target.closest && e.target.closest('.fund-box-revoke');
+  if (revokeBtn) handleRevokeGrantClick(revokeBtn);
 });
 
 // ── Arm Auto-Mint ──────────────────────────────────────────────────────

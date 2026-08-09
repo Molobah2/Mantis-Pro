@@ -68,6 +68,44 @@ def test_get_active_session_grant_excludes_revoked_grants() -> None:
     assert active is None
 
 
+def test_try_revoke_session_grant_returns_true_on_first_call() -> None:
+    grant_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xOwner3b",
+        session_address="0xSession3b",
+        encrypted_session_key="key",
+        permission_config="{}",
+        allowed_targets="[]",
+        value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+
+    result = store.try_revoke_session_grant(grant_id)
+
+    assert result is True
+    assert store.get_session_grant(grant_id)["revoked"] == 1
+
+
+def test_try_revoke_session_grant_returns_false_when_already_revoked() -> None:
+    grant_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xOwner3c",
+        session_address="0xSession3c",
+        encrypted_session_key="key",
+        permission_config="{}",
+        allowed_targets="[]",
+        value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+    assert store.try_revoke_session_grant(grant_id) is True
+
+    result = store.try_revoke_session_grant(grant_id)
+
+    assert result is False
+
+
+def test_try_revoke_session_grant_returns_false_for_unknown_id() -> None:
+    assert store.try_revoke_session_grant(999999) is False
+
+
 def test_get_active_session_grant_excludes_expired_grants() -> None:
     store.insert_session_grant(store.SessionGrantInput(
         owner_address="0xOwner4",

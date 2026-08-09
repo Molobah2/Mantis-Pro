@@ -195,6 +195,28 @@ def arm_drop(owner_address: str, collection_slug: str, quantity: int, max_price_
     return {"armId": arm_id}
 
 
+def revoke_grant(grant_id: int, owner_address: str) -> dict:
+    """Revokes a session grant on demand — only for the owner who created
+    it, and only while it isn't already revoked. Returns {"revoked": True}
+    or {"error": str}.
+
+    This ONLY stops THIS APP from using the grant's session key for future
+    arm/fire actions (get_active_session_grant, _check_and_fire_one, and
+    _countdown_and_fire all reject a revoked grant). It does NOT touch the
+    underlying EOA — a session key is a real Ethereum private key, not a
+    revocable on-chain approval — and does NOT sweep any ETH still sitting
+    at the session address. Revoking narrows the window where the app
+    itself might use the key; it does nothing for funds already exposed by
+    a leaked key, and nothing to protect a balance left behind."""
+    grant = store.get_session_grant(grant_id)
+    if not grant or grant["owner_address"] != owner_address.lower():
+        return {"error": "Session grant not found"}
+
+    if not store.try_revoke_session_grant(grant_id):
+        return {"error": "Already revoked"}
+    return {"revoked": True}
+
+
 def cancel_arm(arm_id: int, owner_address: str) -> dict:
     """Cancels an arm request — only while it hasn't fired yet, and only
     for the owner who created it. Returns {"cancelled": bool} or

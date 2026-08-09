@@ -235,10 +235,27 @@ def get_session_grant(grant_id: int) -> dict | None:
 
 
 def revoke_session_grant(grant_id: int) -> None:
-    """Mark a session grant as revoked so it's no longer returned as active."""
+    """Mark a session grant as revoked so it's no longer returned as active.
+    Unconditional (revoking an already-revoked grant is a harmless no-op) —
+    used when a NEW grant supersedes an old one. For an owner-initiated,
+    on-demand revoke where "already revoked" should be reported back as a
+    real outcome rather than silently swallowed, see try_revoke_session_grant."""
     with _lock, closing(_conn()) as c:
         c.execute("UPDATE session_grants SET revoked=1 WHERE id=?", (grant_id,))
         c.commit()
+
+
+def try_revoke_session_grant(grant_id: int) -> bool:
+    """Atomically revokes a session grant, but only if it isn't already
+    revoked. Returns True only if THIS call performed the revocation —
+    lets the caller distinguish "just revoked it" from "already was" rather
+    than reporting success either way."""
+    with _lock, closing(_conn()) as c:
+        cur = c.execute(
+            "UPDATE session_grants SET revoked=1 WHERE id=? AND revoked=0", (grant_id,)
+        )
+        c.commit()
+        return cur.rowcount == 1
 
 
 def _session_grant_row_to_dict(row: tuple) -> dict:

@@ -129,6 +129,20 @@ def test_build_cancel_message_changes_with_any_field() -> None:
     assert messages.build_cancel_message(5, 1700000001) != base
 
 
+def test_build_revoke_grant_message_is_deterministic() -> None:
+    m1 = messages.build_revoke_grant_message(5, 1700000000)
+    m2 = messages.build_revoke_grant_message(5, 1700000000)
+
+    assert m1 == m2
+
+
+def test_build_revoke_grant_message_changes_with_any_field() -> None:
+    base = messages.build_revoke_grant_message(5, 1700000000)
+
+    assert messages.build_revoke_grant_message(6, 1700000000) != base
+    assert messages.build_revoke_grant_message(5, 1700000001) != base
+
+
 def test_is_signature_timestamp_fresh_accepts_current_timestamp() -> None:
     now = 1700000000.0
     assert firing.is_signature_timestamp_fresh(now, now=now) is True
@@ -357,6 +371,61 @@ def test_arm_drop_lowercases_owner_address() -> None:
     result = firing.arm_drop(OWNER.upper().replace("0X", "0x"), slug, quantity=1, max_price_wei="0")
 
     assert "armId" in result
+
+
+# ── revoke_grant ─────────────────────────────────────────────────────────
+
+def test_revoke_grant_succeeds_for_owners_own_grant() -> None:
+    grant_id = _make_grant()
+
+    result = firing.revoke_grant(grant_id, OWNER)
+
+    assert result == {"revoked": True}
+    assert store.get_session_grant(grant_id)["revoked"] == 1
+
+
+def test_revoke_grant_wrong_owner_returns_error_and_does_not_revoke() -> None:
+    grant_id = _make_grant()
+
+    result = firing.revoke_grant(grant_id, "0xSomeoneElse0000000000000000000000000000")
+
+    assert "error" in result
+    assert store.get_session_grant(grant_id)["revoked"] == 0
+
+
+def test_revoke_grant_unknown_id_returns_error() -> None:
+    result = firing.revoke_grant(999999, OWNER)
+
+    assert "error" in result
+
+
+def test_revoke_grant_already_revoked_returns_error() -> None:
+    grant_id = _make_grant()
+    first = firing.revoke_grant(grant_id, OWNER)
+    assert first == {"revoked": True}
+
+    second = firing.revoke_grant(grant_id, OWNER)
+
+    assert "error" in second
+    assert "already" in second["error"].lower()
+
+
+def test_revoke_grant_lowercases_owner_address() -> None:
+    grant_id = _make_grant(owner=OWNER.lower())
+
+    result = firing.revoke_grant(grant_id, OWNER.upper().replace("0X", "0x"))
+
+    assert result == {"revoked": True}
+
+
+def test_revoked_grant_can_no_longer_be_armed() -> None:
+    slug = _make_drop()
+    grant_id = _make_grant()
+    firing.revoke_grant(grant_id, OWNER)
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0")
+
+    assert "error" in result
 
 
 # ── cancel_arm ───────────────────────────────────────────────────────────
