@@ -653,6 +653,18 @@ def test_parse_schedule_datetime_to_epoch_parses_pm() -> None:
     assert result == datetime(2026, 8, 10, 15, 0, tzinfo=timezone.utc).timestamp()
 
 
+def test_parse_schedule_datetime_to_epoch_accepts_utc_suffix() -> None:
+    # Regression test: SHRKS (a real Robinhood Chain drop) renders its
+    # schedule with a "UTC" suffix instead of "GMT" — used to silently fail
+    # to parse (returning None for every stage), which meant its status
+    # could never resolve to "upcoming"/"minting_now" and it never showed
+    # in the dashboard grid despite being correctly tracked.
+    result = collection_details._parse_schedule_datetime_to_epoch(
+        "August 11 at 3:15 PM UTC", now=_FIXED_NOW
+    )
+    assert result == datetime(2026, 8, 11, 15, 15, tzinfo=timezone.utc).timestamp()
+
+
 def test_parse_schedule_datetime_to_epoch_handles_12_am_and_pm() -> None:
     midnight = collection_details._parse_schedule_datetime_to_epoch(
         "August 10 at 12:00 AM GMT", now=_FIXED_NOW

@@ -192,11 +192,13 @@ _SCHEDULE_END_RE = re.compile(r"^Ends:\s*(.+)$")
 
 _MONTH_NAMES = {name: i for i, name in enumerate(calendar.month_name) if name}
 
-# e.g. "August 10 at 3:00 PM GMT" — every scraped schedule timestamp seen
-# live so far uses this exact shape (see drops.py's _FUTURE_DATE_RE, the
-# same pattern noticed there).
+# e.g. "August 10 at 3:00 PM GMT" or "August 11 at 3:15 PM UTC" — OpenSea
+# renders either suffix depending on the collection (verified live: SHRKS,
+# a Robinhood Chain drop, uses "UTC" where every Ethereum drop seen so far
+# used "GMT") — both mean the same zero offset, so both are accepted (see
+# drops.py's _FUTURE_DATE_RE, the same pattern noticed there).
 _SCHEDULE_DATETIME_RE = re.compile(
-    r"^([A-Z][a-z]+)\s+(\d{1,2})\s+at\s+(\d{1,2}):(\d{2})\s*([AP]M)\s+GMT$"
+    r"^([A-Z][a-z]+)\s+(\d{1,2})\s+at\s+(\d{1,2}):(\d{2})\s*([AP]M)\s+(?:GMT|UTC)$"
 )
 
 
