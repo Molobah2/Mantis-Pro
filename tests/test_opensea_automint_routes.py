@@ -415,6 +415,45 @@ def test_session_grant_addresses_are_lowercased_consistently(
     assert captured[0].session_address == ("0x" + "b2" * 20)
 
 
+def test_session_grant_verifies_signature_against_original_case_addresses(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression test: the client (wallet-helper/connect-src/eth-connect.tsx)
+    # signs build_grant_message using sessionAccount.address exactly as viem
+    # returns it — checksummed, mixed-case — and whatever case nftContract
+    # was in on the page. The route used to reconstruct the message with the
+    # LOWERCASED session_address/nft_contract locals instead of the raw body
+    # fields, so any real (checksummed) address made verification fail with
+    # "Invalid signature" on every single real grant attempt — never caught
+    # before because every other test's fixtures happened to already be
+    # all-lowercase, and verify_owner_signature was always stubbed to True
+    # regardless of what message text it was actually called with.
+    captured_messages = []
+
+    def fake_verify(owner_address: str, message: str, signature: str) -> bool:
+        captured_messages.append(message)
+        return True
+
+    monkeypatch.setattr(node_client, "verify_owner_signature", fake_verify)
+    monkeypatch.setattr(node_client, "verify_session_key", lambda *a, **k: True)
+    _mock_no_prior_grant(monkeypatch)
+    monkeypatch.setattr(store, "insert_session_grant", lambda grant: 1)
+    monkeypatch.setattr(routes, "encrypt_secret", lambda plaintext: "encrypted")
+
+    mixed_case_session = "0x" + "B2aAbB" + "b2" * 17
+    mixed_case_contract = "0x" + "D4cCdD" + "d4" * 17
+    payload = _valid_grant_payload()
+    payload["sessionAddress"] = mixed_case_session
+    payload["nftContract"] = mixed_case_contract
+
+    resp = client.post("/api/opensea/session-grant", json=payload)
+
+    assert resp.status_code == 200
+    assert len(captured_messages) == 1
+    assert f"sessionAddress: {mixed_case_session}" in captured_messages[0]
+    assert f"nftContract: {mixed_case_contract}" in captured_messages[0]
+
+
 def test_session_grant_invalid_payload_returns_400_and_never_calls_insert(
     client, monkeypatch: pytest.MonkeyPatch
 ) -> None:

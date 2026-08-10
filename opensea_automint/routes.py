@@ -169,8 +169,16 @@ def api_session_grant() -> Response:
 
     # Proves the OWNER actually authorized this specific grant (address is
     # public, so format validation alone can't catch a spoofed claim).
+    # Rebuilt from the ORIGINAL-CASE body fields, not the lowercased
+    # session_address/nft_contract locals above — the client signs the
+    # message using sessionAccount.address exactly as viem returns it
+    # (checksummed, mixed-case) and whatever case nftContract happened to
+    # be in the page, so reconstructing with .lower()'d values produces
+    # different text than what was actually signed, and ecrecover silently
+    # resolves to the wrong address instead of erroring — this made every
+    # real grant attempt fail with "Invalid signature", 100% reproducible.
     message = messages.build_grant_message(
-        session_address, nft_contract, body["maxQuantity"], body["valueCapWei"],
+        body["sessionAddress"], body["nftContract"], body["maxQuantity"], body["valueCapWei"],
         body["expiresAt"], body["timestamp"],
     )
     try:
