@@ -53,6 +53,12 @@ _CACHE_TTL = 1800  # 30 minutes — details change far less often than mint stat
 
 _PAGE_LOAD_TIMEOUT_MS = 30_000
 _POST_LOAD_SETTLE_MS = 2_500
+# Generous — this is a WAIT-FOR (resolves as soon as ready, see
+# _fetch_via_playwright), not a blind sleep, so a high cap costs nothing in
+# the common case. Verified necessary 2026-08-10: the same page render that
+# completed comfortably within a few seconds locally took meaningfully
+# longer on Railway's container, past the previous fixed-sleep budget.
+_SCHEDULE_APPEAR_TIMEOUT_MS = 15_000
 _LINK_TIMEOUT_MS = 2_000
 _MAX_DESCRIPTION_LENGTH = 600  # truncate before this reaches any storage/display
 _MAX_LINKS_TO_SCAN = 20        # bounded loop — collection page links are external content we don't control
@@ -477,6 +483,24 @@ def _fetch_via_playwright(slug: str) -> dict:
                         wait_until="load",
                         timeout=_PAGE_LOAD_TIMEOUT_MS,
                     )
+                    # The mint schedule (like the rest of this Next.js page)
+                    # renders client-side, after "load" fires — waiting a
+                    # FIXED duration for that to finish is exactly the kind
+                    # of thing that works on a fast local machine and then
+                    # comes up empty under real production resource
+                    # constraints. Wait for the actual content instead;
+                    # this resolves as soon as it's ready (typically well
+                    # under the cap) and only times out if the page truly
+                    # has no schedule section — a real, expected case for
+                    # some collections, not an error.
+                    try:
+                        page.wait_for_selector(
+                            "text=/mint schedule/i", timeout=_SCHEDULE_APPEAR_TIMEOUT_MS,
+                        )
+                    except Exception as e:
+                        logger.debug(
+                            "[collection_details] no mint-schedule section appeared for %r: %s", slug, e
+                        )
                     page.wait_for_timeout(_POST_LOAD_SETTLE_MS)
                     description = _extract_description(page)
                     links = _extract_links(page)
