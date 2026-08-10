@@ -28,6 +28,7 @@ class _FakeResponse:
 
 
 _CHEAP_SHOT_API_RESPONSE = {
+    "name": "Cheap Shot",
     "description": "Who said this was a fair fight? ...",
     "project_url": "",
     "wiki_url": "",
@@ -119,12 +120,26 @@ def test_fetch_collection_details_via_api_parses_real_example_response(
     result = collection_details.fetch_collection_details_via_api("cheap-shot")
 
     assert result is not None
+    assert result["name"] == "Cheap Shot"
     assert result["description"] == _CHEAP_SHOT_API_RESPONSE["description"]
     assert result["links"] == {
         "discord": "https://discord.gg/AfB8EYDVbB",
         "twitter": "https://x.com/OrangeHare_io",
     }
     assert result["contract_address"] == "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23"
+
+
+def test_fetch_collection_details_via_api_missing_name_yields_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = {**_CHEAP_SHOT_API_RESPONSE}
+    del response["name"]
+    monkeypatch.setattr(collection_details._req, "get", lambda *a, **k: _FakeResponse(200, response))
+
+    result = collection_details.fetch_collection_details_via_api("cheap-shot")
+
+    assert result is not None
+    assert result["name"] is None
 
 
 def test_fetch_collection_details_via_api_no_contracts_yields_none_address(
@@ -311,7 +326,7 @@ def test_fetch_collection_details_live_returns_empty_shape_when_playwright_unava
 
     result = collection_details.fetch_collection_details_live("some-collection")
 
-    assert result == {"description": None, "links": {}, "contract_address": None, "mint_schedule": []}
+    assert result == {"description": None, "links": {}, "contract_address": None, "name": None, "mint_schedule": []}
 
 
 def test_fetch_collection_details_live_returns_empty_shape_when_concurrency_limit_exhausted(
@@ -332,7 +347,7 @@ def test_fetch_collection_details_live_returns_empty_shape_when_concurrency_limi
         for _ in range(collection_details._MAX_CONCURRENT_FETCHES):
             collection_details._launch_semaphore.release()
 
-    assert result == {"description": None, "links": {}, "contract_address": None, "mint_schedule": []}
+    assert result == {"description": None, "links": {}, "contract_address": None, "name": None, "mint_schedule": []}
 
 
 def test_fetch_collection_details_live_uses_api_description_but_still_calls_playwright_for_schedule(
@@ -343,6 +358,7 @@ def test_fetch_collection_details_live_uses_api_description_but_still_calls_play
     # description/links — but the API's description/links still win over
     # whatever Playwright's own (possibly stale/broken) extraction found.
     api_result = {
+        "name": "Some Collection",
         "description": "an API-sourced description",
         "links": {"twitter": "https://x.com/foo"},
         "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
@@ -391,6 +407,7 @@ def test_fetch_collection_details_live_falls_back_to_playwright_when_api_fails(
         "description": "scraped description",
         "links": {"website": "https://foo.xyz"},
         "contract_address": None,
+        "name": None,
         "mint_schedule": [],
     }
 
@@ -406,6 +423,7 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
         collection_details,
         "fetch_collection_details_via_api",
         lambda slug: {
+            "name": "Some Collection",
             "description": None,
             "links": {},
             "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
@@ -423,6 +441,7 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
         "description": "scraped description",
         "links": {},
         "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
+        "name": "Some Collection",
         "mint_schedule": [],
     }
 

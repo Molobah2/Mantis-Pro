@@ -58,6 +58,40 @@ def api_refresh_drops() -> Response:
     return jsonify({"drops": shaped, "count": len(shaped)})
 
 
+_TRACK_DROP_RATE_LIMIT = 20
+_TRACK_DROP_RATE_WINDOW_SECONDS = 3600
+_TRACK_DROP_RATE_KEY = "track-drop"
+
+
+@opensea_automint_bp.route("/api/opensea/drops/track", methods=["POST"])
+def api_track_drop() -> Response:
+    """Manually adds one collection to the tracked-drops list by its known
+    slug (see drops.track_drop_by_slug) — for a drop that isn't (or isn't
+    yet) featured on OpenSea's own /drops listing page, which is the only
+    thing the bulk discovery scrape ever sees.
+
+    Deliberately NOT admin-gated, unlike api_refresh_drops — this is no
+    more sensitive than the already-public, already-unauthenticated
+    api_collection_details (also a real per-slug Playwright scrape);
+    bounded by rate limiting the same way."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _TRACK_DROP_RATE_KEY, limit=_TRACK_DROP_RATE_LIMIT, window=_TRACK_DROP_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    body = request.get_json(silent=True) or {}
+    slug = body.get("collectionSlug", "")
+    if not collection_details.SLUG_RE.match(slug):
+        return jsonify({"error": "Invalid collection slug"}), 400
+
+    drop = drops.track_drop_by_slug(slug)
+    if not drop:
+        return jsonify({"error": "Could not find a mint contract for this collection"}), 404
+
+    return jsonify({"drop": drops.to_display_dict(drop)}), 200
+
+
 _COLLECTION_DETAILS_RATE_LIMIT = 30
 _COLLECTION_DETAILS_RATE_WINDOW_SECONDS = 3600
 _COLLECTION_DETAILS_RATE_KEY = "collection-details"

@@ -538,6 +538,35 @@
     color: var(--t2);
   }
 
+  .track-row {
+    display: flex;
+    gap: 8px;
+  }
+  .track-row input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border-hi);
+    border-radius: var(--r-sm);
+    color: var(--t0);
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .track-row button {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    background: var(--surface-hi);
+    border: 1px solid var(--border-hi);
+    border-radius: var(--r-sm);
+    color: var(--t1);
+    font-size: 12.5px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .track-row button:hover { background: rgba(255,255,255,0.1); }
+  .track-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
   @media (max-width: 600px) {
     header { padding: 0 16px; gap: 12px; }
     main { padding: 32px 16px 60px; }
@@ -562,6 +591,15 @@
   <div class="connect-section">
     <div class="connect-label">Wallet (Ethereum mainnet)</div>
     <div id="eth-connect-root"></div>
+  </div>
+
+  <div class="connect-section">
+    <div class="connect-label">Track a collection by slug</div>
+    <div class="track-row">
+      <input type="text" id="track-slug-input" placeholder="e.g. gobbozhq">
+      <button id="track-slug-btn" type="button">Track</button>
+    </div>
+    <div id="track-status" class="modal-details-state"></div>
   </div>
 
   <div id="loading-msg" class="state-msg">Loading drops…</div>
@@ -1431,6 +1469,43 @@ async function refreshDrops() {
   }
 }
 
+// ── Track a collection by slug ───────────────────────────────────────────
+// Bypasses the bulk /drops discovery scrape, which only ever surfaces
+// whatever OpenSea's own listing page happens to feature — a smaller or
+// not-yet-trending drop (e.g. one you're specifically testing) may simply
+// never appear there. See opensea_automint/drops.py's track_drop_by_slug.
+
+async function handleTrackSlugClick() {
+  var input = document.getElementById('track-slug-input');
+  var status = document.getElementById('track-status');
+  var btn = document.getElementById('track-slug-btn');
+  var slug = (input.value || '').trim().toLowerCase();
+  if (!slug) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Tracking…';
+  if (status) status.textContent = '';
+
+  try {
+    var res = await fetch('/api/opensea/drops/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ collectionSlug: slug }),
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(body.error || ('API ' + res.status));
+
+    input.value = '';
+    if (status) status.textContent = 'Tracking ' + esc((body.drop && body.drop.name) || slug) + '.';
+    loadDrops();
+  } catch (err) {
+    if (status) status.textContent = 'Could not track: ' + (err && err.message ? err.message : String(err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Track';
+  }
+}
+
 // ── Mint History ─────────────────────────────────────────────────────────
 // The permanent record of every mint this tool has ever actually fired —
 // separate from the per-drop arm status shown inside a drop's modal (which
@@ -1514,6 +1589,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if (e.key !== 'Escape') return;
     if (!overlay.classList.contains('hidden')) closeModal();
     if (!historyOverlay.classList.contains('hidden')) closeHistoryModal();
+  });
+
+  document.getElementById('track-slug-btn').addEventListener('click', handleTrackSlugClick);
+  document.getElementById('track-slug-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') handleTrackSlugClick();
   });
 
   loadDrops();

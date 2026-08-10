@@ -204,6 +204,59 @@ def test_refresh_with_valid_admin_auth_calls_get_drops_force_refresh_and_returns
     assert body["drops"][0]["is_publicly_mintable"] is True
 
 
+# ── POST /api/opensea/drops/track ────────────────────────────────────────
+
+def test_track_drop_returns_shaped_drop_on_success(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(drops, "track_drop_by_slug", lambda slug: _minting_now_row())
+
+    resp = client.post("/api/opensea/drops/track", json={"collectionSlug": "cheap-shot"})
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["drop"]["collection_slug"] == "cheap-shot"
+    assert body["drop"]["status"] == "minting_now"
+
+
+def test_track_drop_returns_404_when_no_contract_found(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(drops, "track_drop_by_slug", lambda slug: None)
+
+    resp = client.post("/api/opensea/drops/track", json={"collectionSlug": "cheap-shot"})
+
+    assert resp.status_code == 404
+    assert "error" in resp.get_json()
+
+
+def test_track_drop_rejects_invalid_slug(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(drops, "track_drop_by_slug", lambda slug: calls.append(1) or None)
+
+    resp = client.post("/api/opensea/drops/track", json={"collectionSlug": "UPPERCASE"})
+
+    assert resp.status_code == 400
+    assert calls == []
+
+
+def test_track_drop_rate_limits_after_threshold(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(drops, "track_drop_by_slug", lambda slug: _minting_now_row())
+
+    last_resp = None
+    for _ in range(21):
+        last_resp = client.post("/api/opensea/drops/track", json={"collectionSlug": "cheap-shot"})
+
+    assert last_resp.status_code == 429
+
+
+def test_track_drop_malformed_json_body_returns_400_not_500(client) -> None:
+    resp = client.post(
+        "/api/opensea/drops/track", data="not-json{{{", content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
 # ── GET /opensea-automint ─────────────────────────────────────────────────
 
 def test_dashboard_page_serves_html(client) -> None:

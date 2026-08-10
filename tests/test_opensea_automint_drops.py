@@ -1,7 +1,9 @@
 import json
+import time
 
 import pytest
 
+from opensea_automint import collection_details as _collection_details
 from opensea_automint import drops, store
 
 # ── Real visible-text fixtures captured from opensea.io/drops (RESEARCH_NOTES.md) ──
@@ -481,6 +483,105 @@ def test_to_display_dict_flattens_upcoming_status_with_detail() -> None:
     assert result["status"] == "upcoming"
     assert result["status_detail"] == "MINT STARTS IN"
     assert result["is_publicly_mintable"] is False
+
+
+# ── track_drop_by_slug ────────────────────────────────────────────────────
+
+CONTRACT_ADDRESS = "0x30243a8fa62a7236d897bce6a3a98e8d8cc81db8"
+
+
+def _mock_details(monkeypatch: pytest.MonkeyPatch, details: dict) -> None:
+    monkeypatch.setattr(_collection_details, "get_collection_details", lambda slug: details)
+
+
+def test_track_drop_by_slug_returns_none_when_no_contract_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_details(monkeypatch, {"name": "GOBBOZ", "contract_address": None, "mint_schedule": []})
+
+    result = drops.track_drop_by_slug("gobbozhq")
+
+    assert result is None
+
+
+def test_track_drop_by_slug_persists_with_real_name_and_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_details(monkeypatch, {
+        "name": "GOBBOZ", "contract_address": CONTRACT_ADDRESS, "mint_schedule": [],
+    })
+
+    result = drops.track_drop_by_slug("gobbozhq")
+
+    assert result is not None
+    assert result["collection_slug"] == "gobbozhq"
+    assert result["name"] == "GOBBOZ"
+    assert result["contract_address"] == CONTRACT_ADDRESS
+
+
+def test_track_drop_by_slug_falls_back_to_slug_when_name_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_details(monkeypatch, {"name": None, "contract_address": CONTRACT_ADDRESS, "mint_schedule": []})
+
+    result = drops.track_drop_by_slug("gobbozhq")
+
+    assert result["name"] == "gobbozhq"
+
+
+def test_track_drop_by_slug_status_upcoming_when_stage_has_not_started(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    future = time.time() + 3600
+    _mock_details(monkeypatch, {
+        "name": "GOBBOZ", "contract_address": CONTRACT_ADDRESS,
+        "mint_schedule": [{"name": "GTD", "starts_epoch": future, "starts": "in 1 hour", "ends_epoch": None}],
+    })
+
+    result = drops.track_drop_by_slug("gobbozhq")
+
+    stage_data = json.loads(result["stage_data"])
+    assert stage_data["status"] == "upcoming"
+    assert stage_data["status_detail"] == "in 1 hour"
+
+
+def test_track_drop_by_slug_status_minting_now_when_stage_is_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_details(monkeypatch, {
+        "name": "GOBBOZ", "contract_address": CONTRACT_ADDRESS,
+        "mint_schedule": [{
+            "name": "Public", "starts_epoch": time.time() - 100,
+            "ends_epoch": time.time() + 3600, "starts": "an hour ago",
+        }],
+    })
+
+    result = drops.track_drop_by_slug("gobbozhq")
+
+    stage_data = json.loads(result["stage_data"])
+    assert stage_data["status"] == "minting_now"
+
+
+def test_track_drop_by_slug_status_not_minting_when_all_stages_ended(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_details(monkeypatch, {
+        "name": "GOBBOZ", "contract_address": CONTRACT_ADDRESS,
+        "mint_schedule": [{
+            "name": "Public", "starts_epoch": time.time() - 7200,
+            "ends_epoch": time.time() - 3600, "starts": "2 hours ago",
+        }],
+    })
+
+    result = drops.track_drop_by_slug("gobbozhq")
+
+    stage_data = json.loads(result["stage_data"])
+    assert stage_data["status"] == "not_minting"
+
+
+def test_track_drop_by_slug_raises_value_error_for_invalid_slug() -> None:
+    with pytest.raises(ValueError):
+        drops.track_drop_by_slug("UPPERCASE")
 
 
 def test_to_display_dict_handles_missing_stage_data() -> None:

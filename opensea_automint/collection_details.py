@@ -385,6 +385,8 @@ def fetch_collection_details_via_api(slug: str) -> dict | None:
         logger.warning("[collection_details] OpenSea API unexpected response shape for %r", slug)
         return None
 
+    name = _as_stripped_str(data.get("name")) or None
+
     description = _as_stripped_str(data.get("description")) or None
     if description:
         description = description[:_MAX_DESCRIPTION_LENGTH]
@@ -421,6 +423,7 @@ def fetch_collection_details_via_api(slug: str) -> dict | None:
             break
 
     return {
+        "name": name,
         "description": description,
         "links": links,
         "contract_address": contract_address,
@@ -460,9 +463,18 @@ def _fetch_via_playwright(slug: str) -> dict:
                 browser = p.chromium.launch(headless=True)
                 try:
                     page = browser.new_page(user_agent=_USER_AGENT)
+                    # "networkidle" hangs (and times out) on collections with
+                    # a live mint page — continuous background polling for
+                    # countdown/mint-count updates means the network never
+                    # goes idle, even though the actual page content (mint
+                    # schedule included) has long since rendered. Verified
+                    # live 2026-08-09 against a real drop: "networkidle"
+                    # timed out after 30s with an empty result, while "load"
+                    # (plus the existing settle wait below) rendered the full
+                    # mint schedule correctly.
                     page.goto(
                         f"https://opensea.io/collection/{slug}",
-                        wait_until="networkidle",
+                        wait_until="load",
                         timeout=_PAGE_LOAD_TIMEOUT_MS,
                     )
                     page.wait_for_timeout(_POST_LOAD_SETTLE_MS)
@@ -525,11 +537,16 @@ def fetch_collection_details_live(slug: str) -> dict:
     mint_schedule = playwright_result.get("mint_schedule", [])
 
     contract_address = api_result.get("contract_address") if api_result else None
+    # Playwright never discovers a collection's display name any more than
+    # it discovers a contract_address — the API is the only source for
+    # both, so name is preserved the same way regardless of which source's
+    # description/links end up being used below.
+    name = api_result.get("name") if api_result else None
 
     if api_result and (api_result.get("description") or api_result.get("links")):
-        return {**api_result, "contract_address": contract_address, "mint_schedule": mint_schedule}
+        return {**api_result, "contract_address": contract_address, "name": name, "mint_schedule": mint_schedule}
 
-    return {**playwright_result, "contract_address": contract_address, "mint_schedule": mint_schedule}
+    return {**playwright_result, "contract_address": contract_address, "name": name, "mint_schedule": mint_schedule}
 
 
 def get_collection_details(slug: str) -> dict:

@@ -274,6 +274,60 @@ def to_display_dict(drop_row: dict) -> dict:
     }
 
 
+def track_drop_by_slug(collection_slug: str) -> dict | None:
+    """Manually adds (or refreshes) ONE collection as a tracked drop by its
+    known slug — bypasses the bulk /drops discovery scrape entirely, which
+    only ever surfaces whatever OpenSea's own listing page happens to
+    feature (a curated/trending subset, not every collection with a
+    scheduled mint). Uses collection_details.get_collection_details for
+    the real name/contract_address/mint_schedule.
+
+    Status is derived from the schedule's stages (the earliest one that's
+    either currently running or hasn't started yet) rather than scraped
+    listing-page countdown text, since there is none for a slug added this
+    way — purely cosmetic for the dashboard grid; it plays no part in
+    actual firing timing (see firing.py, which uses either the real
+    on-chain public-drop window or the resolved presale stage's
+    go_live_at, never this).
+
+    Returns the upserted drop row (store.get_tracked_drop_by_slug shape),
+    or None if no contract_address could be found at all — nothing useful
+    to track without one. Raises ValueError if collection_slug fails
+    SLUG_RE (a programming-error guard, callers must validate first)."""
+    # Imported locally, not at module level — collection_details.py itself
+    # imports FROM drops (_USER_AGENT), so a top-level import here would be
+    # circular.
+    from . import collection_details
+
+    details = collection_details.get_collection_details(collection_slug)
+    contract_address = details.get("contract_address") or ""
+    if not contract_address:
+        return None
+
+    now = time.time()
+    status = "not_minting"
+    status_detail = None
+    for stage in details.get("mint_schedule") or []:
+        starts_epoch = stage.get("starts_epoch")
+        ends_epoch = stage.get("ends_epoch")
+        if starts_epoch and starts_epoch <= now and (not ends_epoch or ends_epoch > now):
+            status, status_detail = "minting_now", None
+            break
+        if starts_epoch and starts_epoch > now:
+            status, status_detail = "upcoming", stage.get("starts")
+            break
+
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug=collection_slug,
+        name=details.get("name") or collection_slug,
+        contract_address=contract_address,
+        mint_page_url=f"https://opensea.io/collection/{collection_slug}",
+        source="manual",
+        stage_data=json.dumps({"status": status, "status_detail": status_detail, "image_url": None}),
+    ))
+    return store.get_tracked_drop_by_slug(collection_slug)
+
+
 def get_drops(force_refresh: bool = False) -> list[dict]:
     """
     Cached wrapper: returns cached drops if fresh, else calls fetch_drops_live(),
