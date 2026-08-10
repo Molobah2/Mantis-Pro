@@ -422,3 +422,80 @@ def test_fire_signed_mint_raises_runtime_error_on_non_dict_json(
         node_client.fire_signed_mint(
             SESSION_PRIVATE_KEY, NFT_CONTRACT, 1, VALUE_CAP_WEI, MINT_PARAMS, SALT, SIGNATURE,
         )
+
+
+# ── get_recent_public_drop_updates ───────────────────────────────────────
+
+def test_get_recent_public_drop_updates_returns_result_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+    success_result = {
+        "updates": [{"nftContract": NFT_CONTRACT, "startTime": 1786374000, "endTime": 1786399200,
+                      "mintPriceWei": "1000000000000000"}],
+        "scannedToBlock": "25726400",
+    }
+
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        calls.append((url, json, timeout))
+        return _FakeResponse(200, success_result)
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    result = node_client.get_recent_public_drop_updates("25726300")
+
+    assert result == success_result
+    url, body, timeout = calls[0]
+    assert url.endswith("/eth/recent-public-drop-updates")
+    assert body == {"fromBlock": "25726300"}
+    assert timeout == 30
+
+
+def test_get_recent_public_drop_updates_passes_through_none_from_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: calls.append(json) or _FakeResponse(200, {"updates": [], "scannedToBlock": "1"}),
+    )
+
+    node_client.get_recent_public_drop_updates(None)
+
+    assert calls[0] == {"fromBlock": None}
+
+
+def test_get_recent_public_drop_updates_raises_runtime_error_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int):
+        raise node_client._req.exceptions.ConnectionError()
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="Node wallet-helper is not running on port 3456"):
+        node_client.get_recent_public_drop_updates(None)
+
+
+def test_get_recent_public_drop_updates_raises_runtime_error_on_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(500, {"error": "RPC unavailable"}),
+    )
+
+    with pytest.raises(RuntimeError, match="RPC unavailable"):
+        node_client.get_recent_public_drop_updates(None)
+
+
+def test_get_recent_public_drop_updates_raises_runtime_error_on_non_dict_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(200, ["unexpected"]),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RuntimeError, match="unexpected response shape"):
+        node_client.get_recent_public_drop_updates(None)

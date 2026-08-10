@@ -4,7 +4,7 @@ import time
 import pytest
 
 from opensea_automint import collection_details as _collection_details
-from opensea_automint import drops, store
+from opensea_automint import drops, node_client, store
 
 # ── Real visible-text fixtures captured from opensea.io/drops (RESEARCH_NOTES.md) ──
 # The prompt's "|" separators represent newlines as returned by Playwright's
@@ -582,6 +582,188 @@ def test_track_drop_by_slug_status_not_minting_when_all_stages_ended(
 def test_track_drop_by_slug_raises_value_error_for_invalid_slug() -> None:
     with pytest.raises(ValueError):
         drops.track_drop_by_slug("UPPERCASE")
+
+
+# ── discover_new_seadrop_collections ─────────────────────────────────────
+
+def test_discover_new_seadrop_collections_tracks_a_newly_seen_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        node_client, "get_recent_public_drop_updates",
+        lambda from_block: {
+            "updates": [{"nftContract": CONTRACT_ADDRESS, "startTime": 1786374000,
+                         "endTime": 1786399200, "mintPriceWei": "1000000000000000"}],
+            "scannedToBlock": "25726400",
+        },
+    )
+    monkeypatch.setattr(
+        _collection_details, "resolve_slug_from_contract_address", lambda addr: "gobbozhq",
+    )
+    _mock_details(monkeypatch, {
+        "name": "GOBBOZ", "contract_address": CONTRACT_ADDRESS, "mint_schedule": [],
+    })
+
+    count = drops.discover_new_seadrop_collections()
+
+    assert count == 1
+    tracked = store.get_tracked_drop_by_slug("gobbozhq")
+    assert tracked is not None
+    assert store.get_state("seadrop_last_scanned_block") == "25726400"
+
+
+def test_discover_new_seadrop_collections_skips_already_tracked_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="gobbozhq", name="GOBBOZ", contract_address=CONTRACT_ADDRESS,
+        mint_page_url="https://opensea.io/collection/gobbozhq", source="manual", stage_data="{}",
+    ))
+    monkeypatch.setattr(
+        node_client, "get_recent_public_drop_updates",
+        lambda from_block: {
+            "updates": [{"nftContract": CONTRACT_ADDRESS, "startTime": 1786374000,
+                         "endTime": 1786399200, "mintPriceWei": "1000000000000000"}],
+            "scannedToBlock": "25726400",
+        },
+    )
+    resolve_calls = []
+    monkeypatch.setattr(
+        _collection_details, "resolve_slug_from_contract_address",
+        lambda addr: resolve_calls.append(addr) or "gobbozhq",
+    )
+
+    count = drops.discover_new_seadrop_collections()
+
+    assert count == 0
+    assert resolve_calls == []  # never even attempted to resolve — already tracked
+
+
+def test_discover_new_seadrop_collections_skips_contract_with_no_resolvable_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        node_client, "get_recent_public_drop_updates",
+        lambda from_block: {
+            "updates": [{"nftContract": CONTRACT_ADDRESS, "startTime": 1786374000,
+                         "endTime": 1786399200, "mintPriceWei": "1000000000000000"}],
+            "scannedToBlock": "25726400",
+        },
+    )
+    monkeypatch.setattr(_collection_details, "resolve_slug_from_contract_address", lambda addr: None)
+
+    count = drops.discover_new_seadrop_collections()
+
+    assert count == 0
+    assert store.get_tracked_drop_by_contract_address(CONTRACT_ADDRESS) is None
+
+
+def test_discover_new_seadrop_collections_dedupes_repeated_contract_in_same_scan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        node_client, "get_recent_public_drop_updates",
+        lambda from_block: {
+            "updates": [
+                {"nftContract": CONTRACT_ADDRESS, "startTime": 1, "endTime": 2, "mintPriceWei": "1"},
+                {"nftContract": CONTRACT_ADDRESS.upper().replace("0X", "0x"),
+                 "startTime": 3, "endTime": 4, "mintPriceWei": "2"},
+            ],
+            "scannedToBlock": "25726400",
+        },
+    )
+    resolve_calls = []
+    monkeypatch.setattr(
+        _collection_details, "resolve_slug_from_contract_address",
+        lambda addr: resolve_calls.append(addr) or "gobbozhq",
+    )
+    _mock_details(monkeypatch, {
+        "name": "GOBBOZ", "contract_address": CONTRACT_ADDRESS, "mint_schedule": [],
+    })
+
+    count = drops.discover_new_seadrop_collections()
+
+    assert count == 1
+    assert len(resolve_calls) == 1  # only resolved once despite two log entries
+
+
+def test_discover_new_seadrop_collections_uses_stored_scan_bookmark(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store.set_state("seadrop_last_scanned_block", "25726300")
+    captured_from_block = []
+    monkeypatch.setattr(
+        node_client, "get_recent_public_drop_updates",
+        lambda from_block: captured_from_block.append(from_block) or {"updates": [], "scannedToBlock": "25726400"},
+    )
+
+    drops.discover_new_seadrop_collections()
+
+    assert captured_from_block == ["25726301"]  # one past the last scanned block
+
+
+def test_discover_new_seadrop_collections_passes_none_from_block_on_first_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_from_block = []
+    monkeypatch.setattr(
+        node_client, "get_recent_public_drop_updates",
+        lambda from_block: captured_from_block.append(from_block) or {"updates": [], "scannedToBlock": "1"},
+    )
+
+    drops.discover_new_seadrop_collections()
+
+    assert captured_from_block == [None]
+
+
+def test_discover_new_seadrop_collections_resets_bookmark_when_no_progress_made(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A bookmark that's fallen too far behind the chain's current tip can
+    # hit an unreachable ("archive") range on the free RPC and make zero
+    # progress forever otherwise — verified live 2026-08-10. Detected by
+    # scannedToBlock coming back BELOW the requested fromBlock; must drop
+    # the bookmark rather than get permanently stuck retrying it.
+    store.set_state("seadrop_last_scanned_block", "100")
+    monkeypatch.setattr(
+        node_client, "get_recent_public_drop_updates",
+        lambda from_block: {"updates": [], "scannedToBlock": "100"},  # < fromBlock (101)
+    )
+
+    count = drops.discover_new_seadrop_collections()
+
+    assert count == 0
+    assert store.get_state("seadrop_last_scanned_block") is None
+
+
+def test_discover_new_seadrop_collections_does_not_reset_bookmark_on_real_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store.set_state("seadrop_last_scanned_block", "100")
+    monkeypatch.setattr(
+        node_client, "get_recent_public_drop_updates",
+        lambda from_block: {"updates": [], "scannedToBlock": "150"},  # > fromBlock (101)
+    )
+
+    drops.discover_new_seadrop_collections()
+
+    assert store.get_state("seadrop_last_scanned_block") == "150"
+
+
+def test_discover_new_seadrop_collections_returns_zero_and_does_not_raise_on_node_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_error(from_block):
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+
+    monkeypatch.setattr(node_client, "get_recent_public_drop_updates", raise_error)
+
+    count = drops.discover_new_seadrop_collections()
+
+    assert count == 0
+    # Bookmark must NOT advance on a failed scan — nothing was actually
+    # confirmed scanned, so the next tick must retry the same range.
+    assert store.get_state("seadrop_last_scanned_block") is None
 
 
 def test_to_display_dict_handles_missing_stage_data() -> None:

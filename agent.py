@@ -1867,9 +1867,30 @@ try:
                                 id="opensea_automint_firing", replace_existing=True,
                                 max_instances=1, coalesce=True)
 
+    # On-chain discovery: OpenSea's own /drops listing page only ever shows
+    # a curated/featured subset — plenty of real, imminent SeaDrop mints
+    # never appear there at all. This polls SeaDrop's PublicDropUpdated
+    # event directly (the real source of truth for which collections are
+    # using it) so a new drop gets tracked automatically, without needing
+    # to already know its slug. 3 minutes keeps each poll's block range
+    # small — verified live that this RPC's eth_getLogs support degrades
+    # unpredictably on larger ranges (see ethClient.ts's
+    # GET_LOGS_CHUNK_BLOCKS comment).
+    def _run_opensea_seadrop_discovery():
+        try:
+            count = _opensea_drops.discover_new_seadrop_collections()
+            if count:
+                print(f"[opensea-automint] on-chain discovery: {count} new collection(s) tracked")
+        except Exception as e:
+            print(f"[opensea-automint] on-chain discovery failed: {e}")
+
+    _opensea_scheduler.add_job(_run_opensea_seadrop_discovery, "interval", minutes=3,
+                                id="opensea_automint_seadrop_discovery", replace_existing=True)
+
     _opensea_scheduler.start()
     threading.Thread(target=_run_opensea_refresh, daemon=True).start()
-    print("[opensea-automint] APScheduler started — drop refresh every 15 min, firing watcher every 5s (+ countdown threads near go-live)")
+    threading.Thread(target=_run_opensea_seadrop_discovery, daemon=True).start()
+    print("[opensea-automint] APScheduler started — drop refresh every 15 min, on-chain discovery every 3 min, firing watcher every 5s (+ countdown threads near go-live)")
 except ImportError:
     print("[opensea-automint] APScheduler not installed — drops will only refresh via admin endpoint, firing watcher will not run")
 

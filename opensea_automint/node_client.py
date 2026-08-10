@@ -127,6 +127,47 @@ def get_public_drop_window(nft_contract_address: str) -> dict | None:
     }
 
 
+def get_recent_public_drop_updates(from_block: str | None) -> dict:
+    """POST to the Node wallet-helper's /eth/recent-public-drop-updates
+    route — discovers collections that have (re)configured their SeaDrop
+    public mint stage on-chain since from_block (None means "start from a
+    recent lookback", see ethClient.ts). This is the real source of truth
+    for which collections are using SeaDrop, independent of whatever
+    OpenSea's own /drops listing page happens to feature — used by
+    drops.discover_new_seadrop_collections (a periodic background job),
+    not anything time-critical.
+
+    Returns {"updates": [{"nftContract": str, "startTime": int,
+    "endTime": int, "mintPriceWei": str}, ...], "scannedToBlock": str}.
+    Raises RuntimeError only for actual Node-helper-level failures.
+    """
+    payload = {"fromBlock": from_block}
+
+    try:
+        r = _req.post(
+            f"{_cfg.NODE_HELPER_URL}/eth/recent-public-drop-updates", json=payload, timeout=30
+        )
+    except _req.exceptions.ConnectionError:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+    except _req.exceptions.Timeout:
+        raise RuntimeError("Node wallet-helper timed out")
+
+    try:
+        result = r.json()
+    except ValueError:
+        raise RuntimeError(f"Node helper returned a non-JSON response (HTTP {r.status_code})")
+
+    if not isinstance(result, dict):
+        raise RuntimeError("Node helper returned an unexpected response shape")
+
+    if r.status_code != 200:
+        error_msg = result.get("error", f"HTTP {r.status_code}")
+        logger.warning("[node_client] recent-public-drop-updates failed: %s", error_msg)
+        raise RuntimeError(error_msg)
+
+    return result
+
+
 def fire_mint(
     session_private_key: str,
     nft_contract_address: str,

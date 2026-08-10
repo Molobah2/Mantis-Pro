@@ -436,6 +436,48 @@ def fetch_collection_details_via_api(slug: str) -> dict | None:
     }
 
 
+def resolve_slug_from_contract_address(contract_address: str) -> str | None:
+    """Reverse-looks-up an OpenSea collection slug from its known
+    contract address, via OpenSea's public v2 REST API (GET
+    /api/v2/chain/ethereum/contract/<address>) — verified live 2026-08-10.
+    Used by drops.discover_new_seadrop_collections: on-chain discovery
+    finds a contract address, this turns it into the slug the rest of
+    this codebase (track_drop_by_slug, get_collection_details, the
+    dashboard) actually keys on.
+
+    Returns None on any failure (not found, network error, malformed
+    response) — never raises, mirrors this module's other functions'
+    resilience style."""
+    headers = {"Accept": "application/json"}
+    api_key = os.getenv("OPENSEA_API_KEY", "").strip()
+    if api_key:
+        headers["x-api-key"] = api_key
+
+    try:
+        r = _req.get(
+            f"https://api.opensea.io/api/v2/chain/ethereum/contract/{contract_address}",
+            timeout=_API_REQUEST_TIMEOUT_S, headers=headers,
+        )
+    except _req.exceptions.RequestException as e:
+        logger.warning(
+            "[collection_details] contract lookup failed for %r: %s", contract_address, e
+        )
+        return None
+
+    if r.status_code != 200:
+        return None
+
+    try:
+        data = r.json()
+    except ValueError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    return _as_stripped_str(data.get("collection")) or None
+
+
 def _fetch_via_playwright(slug: str) -> dict:
     """
     Playwright I/O: navigates to https://opensea.io/collection/<slug>

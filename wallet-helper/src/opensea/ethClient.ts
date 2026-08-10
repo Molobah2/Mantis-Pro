@@ -207,6 +207,122 @@ export async function getPublicDropWindow(
   }
 }
 
+// Emitted by SeaDrop itself every time ANY collection (re)configures its
+// public mint stage — the real source of truth for "which collections are
+// using SeaDrop for a public mint," independent of whatever OpenSea's own
+// /drops listing page happens to curate/feature. Verified against
+// ProjectOpenSea/seadrop's SeaDropErrorsAndEvents.sol.
+const PUBLIC_DROP_UPDATED_EVENT = {
+  type: "event",
+  name: "PublicDropUpdated",
+  inputs: [
+    { name: "nftContract", type: "address", indexed: true },
+    {
+      name: "publicDrop",
+      type: "tuple",
+      indexed: false,
+      components: [
+        { name: "mintPrice", type: "uint80" },
+        { name: "startTime", type: "uint48" },
+        { name: "endTime", type: "uint48" },
+        { name: "maxTotalMintableByWallet", type: "uint16" },
+        { name: "feeBps", type: "uint16" },
+        { name: "restrictFeeRecipients", type: "bool" },
+      ],
+    },
+  ],
+} as const;
+
+// Verified live 2026-08-10 against the real SeaDrop contract on this
+// project's configured RPC: eth_getLogs reliably succeeded for ranges up
+// to ~100 blocks behind the current tip, started failing around ~130
+// blocks behind, and failed consistently ~2000 blocks behind ("Archive
+// requests require a personal token" — a real error from this specific
+// free-tier RPC). Not a documented hard limit, just observed behavior of
+// a free, load-balanced RPC's backend nodes — kept well under the
+// confirmed-working distance-from-tip, not just chunk size, since an
+// older chunk near the START of a large catch-up range is what actually
+// fails first.
+const GET_LOGS_CHUNK_BLOCKS = 60n;
+
+// Only used when no prior scan position is known (first run, or a
+// self-healing reset — see drops.py's discover_new_seadrop_collections).
+// Deliberately small and inside the confirmed-working near-tip range
+// (see GET_LOGS_CHUNK_BLOCKS) — this is NOT sized to backfill much
+// history; the goal is catching new/upcoming drops going forward at the
+// 3-minute poll cadence (agent.py), not indexing every collection that's
+// ever used SeaDrop.
+const INITIAL_LOOKBACK_BLOCKS = 60n;
+
+export interface PublicDropUpdate {
+  nftContract: Address;
+  startTime: number;
+  endTime: number;
+  mintPriceWei: string;
+}
+
+export interface RecentPublicDropUpdatesResult {
+  updates: PublicDropUpdate[];
+  scannedToBlock: string;
+}
+
+/**
+ * Discovers every collection that has (re)configured its SeaDrop public
+ * mint stage since fromBlock (or, when fromBlock is null, since
+ * INITIAL_LOOKBACK_BLOCKS before the current tip — see above). Chunks the
+ * block range to stay within what this RPC has actually demonstrated it
+ * can handle reliably, and stops early — returning whatever it found so
+ * far, plus the last block it successfully scanned — the moment one chunk
+ * fails, rather than losing all progress to one bad request. Callers
+ * persist scannedToBlock and resume from there on the next call; nothing
+ * is ever silently skipped or re-scanned.
+ */
+export async function getRecentPublicDropUpdates(
+  fromBlock: bigint | null
+): Promise<RecentPublicDropUpdatesResult> {
+  const latestBlock = await publicClient.getBlockNumber();
+  const start =
+    fromBlock !== null
+      ? fromBlock
+      : latestBlock > INITIAL_LOOKBACK_BLOCKS
+        ? latestBlock - INITIAL_LOOKBACK_BLOCKS
+        : 0n;
+
+  const updates: PublicDropUpdate[] = [];
+  let cursor = start;
+  let scannedToBlock = start > 0n ? start - 1n : 0n;
+
+  while (cursor <= latestBlock) {
+    const chunkEnd =
+      cursor + GET_LOGS_CHUNK_BLOCKS > latestBlock ? latestBlock : cursor + GET_LOGS_CHUNK_BLOCKS;
+    try {
+      const logs = await publicClient.getLogs({
+        address: SEADROP_ADDRESS,
+        event: PUBLIC_DROP_UPDATED_EVENT,
+        fromBlock: cursor,
+        toBlock: chunkEnd,
+      });
+      for (const log of logs) {
+        if (!log.args.nftContract || !log.args.publicDrop) continue;
+        updates.push({
+          nftContract: log.args.nftContract,
+          startTime: Number(log.args.publicDrop.startTime),
+          endTime: Number(log.args.publicDrop.endTime),
+          mintPriceWei: log.args.publicDrop.mintPrice.toString(),
+        });
+      }
+      scannedToBlock = chunkEnd;
+      cursor = chunkEnd + 1n;
+    } catch {
+      // Stop here with whatever succeeded so far — the next call resumes
+      // right after the last successfully-scanned block.
+      break;
+    }
+  }
+
+  return { updates, scannedToBlock: scannedToBlock.toString() };
+}
+
 export interface FireMintParams {
   sessionPrivateKey: `0x${string}`;
   nftContract: Address;

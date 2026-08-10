@@ -171,6 +171,45 @@ def test_get_tracked_drop_returns_none_when_not_found() -> None:
     assert store.get_tracked_drop(999999) is None
 
 
+def test_get_tracked_drop_by_contract_address_round_trips() -> None:
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="gobbozhq", name="GOBBOZ",
+        contract_address="0x30243A8Fa62A7236D897BcE6A3a98E8D8CC81DB8",
+        mint_page_url="https://opensea.io/collection/gobbozhq",
+        source="manual", stage_data="{}",
+    ))
+
+    result = store.get_tracked_drop_by_contract_address(
+        "0x30243a8fa62a7236d897bce6a3a98e8d8cc81db8"  # different case
+    )
+
+    assert result is not None
+    assert result["collection_slug"] == "gobbozhq"
+
+
+def test_get_tracked_drop_by_contract_address_returns_none_when_not_found() -> None:
+    assert store.get_tracked_drop_by_contract_address("0xNeverTracked000000000000000000000000") is None
+
+
+# ── App state ────────────────────────────────────────────────────────
+
+def test_get_state_returns_none_when_never_set() -> None:
+    assert store.get_state("some_key") is None
+
+
+def test_set_state_then_get_state_round_trips() -> None:
+    store.set_state("seadrop_last_scanned_block", "12345")
+
+    assert store.get_state("seadrop_last_scanned_block") == "12345"
+
+
+def test_set_state_overwrites_previous_value() -> None:
+    store.set_state("some_key", "first")
+    store.set_state("some_key", "second")
+
+    assert store.get_state("some_key") == "second"
+
+
 # ── Arm requests ──────────────────────────────────────────────────────
 
 def test_arm_request_status_transitions_and_get() -> None:

@@ -86,6 +86,15 @@ def _init_schema(c: sqlite3.Connection) -> None:
         checked_at    REAL,
         source        TEXT
     )""")
+    # Minimal key-value store for small pieces of durable state that don't
+    # warrant their own table — e.g. drops.py's on-chain discovery scan
+    # bookmark (the last block number successfully scanned for SeaDrop
+    # PublicDropUpdated events), so a restart resumes from where it left
+    # off instead of either re-scanning or silently skipping ahead.
+    c.execute("""CREATE TABLE IF NOT EXISTS app_state (
+        key   TEXT PRIMARY KEY,
+        value TEXT
+    )""")
     # Migrate: reserved for future ALTER TABLE additions, wrapped defensively.
     try:
         c.execute("ALTER TABLE tracked_drops ADD COLUMN chain TEXT DEFAULT 'ethereum'")
@@ -383,6 +392,24 @@ def get_tracked_drop(drop_id: int) -> dict | None:
                    discovered_at, source, stage_data, updated_at
             FROM tracked_drops WHERE id=?
         """, (drop_id,)).fetchone()
+    if not row:
+        return None
+    return _tracked_drop_row_to_dict(row)
+
+
+def get_tracked_drop_by_contract_address(contract_address: str) -> dict | None:
+    """A single tracked drop by its contract address (case-insensitive),
+    or None if no tracked drop has this contract yet. Used by drops.py's
+    on-chain discovery job to skip re-resolving/re-scraping a collection
+    it's already tracking, when the same contract shows up again in a
+    later PublicDropUpdated scan (e.g. a project adjusting its price or
+    timing after first configuring its drop)."""
+    with _lock, closing(_conn()) as c:
+        row = c.execute("""
+            SELECT id, collection_slug, name, contract_address, chain, mint_page_url,
+                   discovered_at, source, stage_data, updated_at
+            FROM tracked_drops WHERE LOWER(contract_address)=LOWER(?)
+        """, (contract_address,)).fetchone()
     if not row:
         return None
     return _tracked_drop_row_to_dict(row)
@@ -691,3 +718,32 @@ def get_eligibility(drop_id: int, owner_address: str) -> dict | None:
         "id": row[0], "drop_id": row[1], "owner_address": row[2], "is_eligible": is_eligible,
         "merkle_proof": row[4], "phase_id": row[5], "checked_at": row[6], "source": row[7],
     }
+
+
+# ── App state (small durable key/value pairs) ──────────────────────────
+
+def get_state(key: str) -> str | None:
+    """A single stored value by key, or None if never set."""
+    with _lock, closing(_conn()) as c:
+        row = c.execute("SELECT value FROM app_state WHERE key=?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def set_state(key: str, value: str) -> None:
+    """Sets (or overwrites) a single stored value by key."""
+    with _lock, closing(_conn()) as c:
+        c.execute("""
+            INSERT INTO app_state (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+        """, (key, value))
+        c.commit()
+
+
+def delete_state(key: str) -> None:
+    """Clears a stored value — a no-op if it was never set. Used by
+    drops.py's on-chain discovery job to self-heal a scan bookmark that's
+    fallen too far behind the chain's current tip to progress from (see
+    that module's docstring)."""
+    with _lock, closing(_conn()) as c:
+        c.execute("DELETE FROM app_state WHERE key=?", (key,))
+        c.commit()

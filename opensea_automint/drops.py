@@ -328,6 +328,98 @@ def track_drop_by_slug(collection_slug: str) -> dict | None:
     return store.get_tracked_drop_by_slug(collection_slug)
 
 
+_SEADROP_DISCOVERY_STATE_KEY = "seadrop_last_scanned_block"
+
+
+def discover_new_seadrop_collections() -> int:
+    """The actual fix for "so much coming up that's not on [OpenSea's
+    /drops] site": polls the chain directly (via
+    node_client.get_recent_public_drop_updates) for collections that have
+    configured a SeaDrop public mint stage since the last successful scan,
+    resolves each newly-seen contract to its OpenSea slug (see
+    collection_details.resolve_slug_from_contract_address), and tracks it
+    the same way track_drop_by_slug does. This reads from SeaDrop's own
+    on-chain events — the real source of truth for which collections are
+    using it — rather than OpenSea's own curated listing page, which only
+    ever shows a subset.
+
+    The scan position (last successfully-scanned block) is persisted via
+    store.get_state/set_state and only advanced past what Node actually
+    confirmed scanning — a failed or partial scan just means the next
+    scheduled tick resumes from the same bookmark, never silently skipping
+    a range of blocks.
+
+    Self-healing: verified live 2026-08-10 that this RPC's eth_getLogs
+    only reliably serves ranges near the current chain tip — a bookmark
+    that falls too far behind (e.g. several ticks in a row failed, or the
+    process was down for a while) can get permanently stuck retrying an
+    unreachable historical range on every future tick otherwise. If a
+    scan makes literally zero progress past a known bookmark, the
+    bookmark is dropped so the NEXT call restarts from a fresh recent
+    lookback instead — accepting a real gap in coverage (some collections
+    that configured a drop during the gap won't be auto-discovered) rather
+    than never making progress again.
+
+    Returns the number of newly tracked collections. Never raises —
+    mirrors this module's other functions' resilience style; intended to
+    be called from a periodic background job (see agent.py), where an
+    uncaught exception would otherwise kill the scheduler tick."""
+    from . import collection_details, node_client
+
+    last_scanned = store.get_state(_SEADROP_DISCOVERY_STATE_KEY)
+    from_block = str(int(last_scanned) + 1) if last_scanned is not None else None
+
+    try:
+        result = node_client.get_recent_public_drop_updates(from_block)
+    except RuntimeError as e:
+        logger.warning("[drops] on-chain discovery scan failed: %s", e)
+        return 0
+
+    updates = result.get("updates") or []
+    scanned_to_block = result.get("scannedToBlock")
+
+    if from_block is not None and scanned_to_block is not None:
+        if int(scanned_to_block) < int(from_block):
+            logger.warning(
+                "[drops] on-chain discovery made no progress past block %s — "
+                "resetting scan bookmark to a fresh recent lookback", from_block,
+            )
+            store.delete_state(_SEADROP_DISCOVERY_STATE_KEY)
+            return 0
+
+    newly_tracked = 0
+    seen_contracts: set[str] = set()
+    for update in updates:
+        contract_address = update.get("nftContract")
+        if not contract_address or contract_address.lower() in seen_contracts:
+            continue
+        seen_contracts.add(contract_address.lower())
+
+        if store.get_tracked_drop_by_contract_address(contract_address):
+            continue  # already tracking this one — a later price/timing
+            # update to the same contract doesn't need re-resolving.
+
+        slug = collection_details.resolve_slug_from_contract_address(contract_address)
+        if not slug:
+            logger.debug(
+                "[drops] on-chain discovery: no OpenSea slug found for %r", contract_address
+            )
+            continue
+
+        try:
+            tracked = track_drop_by_slug(slug)
+        except ValueError:
+            continue  # resolved slug somehow failed SLUG_RE — skip, don't crash the scan
+        if tracked:
+            newly_tracked += 1
+            logger.info("[drops] on-chain discovery: newly tracked %r (%s)", slug, contract_address)
+
+    if scanned_to_block is not None:
+        store.set_state(_SEADROP_DISCOVERY_STATE_KEY, scanned_to_block)
+
+    return newly_tracked
+
+
 def get_drops(force_refresh: bool = False) -> list[dict]:
     """
     Cached wrapper: returns cached drops if fresh, else calls fetch_drops_live(),

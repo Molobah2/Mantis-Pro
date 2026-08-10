@@ -300,6 +300,74 @@ def test_fetch_collection_details_via_api_omits_api_key_header_when_unset(
     assert "x-api-key" not in captured["headers"]
 
 
+# ── resolve_slug_from_contract_address ───────────────────────────────────
+
+CONTRACT_ADDRESS = "0x30243a8fa62a7236d897bce6a3a98e8d8cc81db8"
+
+
+def test_resolve_slug_from_contract_address_returns_slug_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = {}
+
+    def fake_get(url: str, timeout=None, headers=None) -> _FakeResponse:
+        captured["url"] = url
+        return _FakeResponse(200, {
+            "address": CONTRACT_ADDRESS, "chain": "ethereum",
+            "collection": "gobbozhq", "name": "GOBBOZ",
+        })
+
+    monkeypatch.setattr(collection_details._req, "get", fake_get)
+
+    result = collection_details.resolve_slug_from_contract_address(CONTRACT_ADDRESS)
+
+    assert result == "gobbozhq"
+    assert captured["url"] == f"https://api.opensea.io/api/v2/chain/ethereum/contract/{CONTRACT_ADDRESS}"
+
+
+def test_resolve_slug_from_contract_address_returns_none_on_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        collection_details._req, "get", lambda *a, **k: _FakeResponse(404, {"error": "not found"}),
+    )
+
+    assert collection_details.resolve_slug_from_contract_address(CONTRACT_ADDRESS) is None
+
+
+def test_resolve_slug_from_contract_address_returns_none_on_network_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_error(*a, **k):
+        raise requests.exceptions.ConnectionError()
+
+    monkeypatch.setattr(collection_details._req, "get", raise_error)
+
+    assert collection_details.resolve_slug_from_contract_address(CONTRACT_ADDRESS) is None
+
+
+def test_resolve_slug_from_contract_address_returns_none_on_non_json_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        collection_details._req, "get",
+        lambda *a, **k: _FakeResponse(200, raise_json_error=True),
+    )
+
+    assert collection_details.resolve_slug_from_contract_address(CONTRACT_ADDRESS) is None
+
+
+def test_resolve_slug_from_contract_address_returns_none_when_collection_field_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        collection_details._req, "get",
+        lambda *a, **k: _FakeResponse(200, {"address": CONTRACT_ADDRESS, "chain": "ethereum"}),
+    )
+
+    assert collection_details.resolve_slug_from_contract_address(CONTRACT_ADDRESS) is None
+
+
 # ── fetch_collection_details_live ────────────────────────────────────────
 
 @pytest.mark.parametrize(

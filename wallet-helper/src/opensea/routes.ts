@@ -6,6 +6,7 @@ import {
   fireMint,
   fireSignedMint,
   getPublicDropWindow,
+  getRecentPublicDropUpdates,
   type SignedMintParamsInput,
 } from "./ethClient.js";
 
@@ -96,6 +97,37 @@ openSeaRouter.post("/eth/public-drop-window", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[opensea:public-drop-window]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// POST /eth/recent-public-drop-updates — read-only, no wallet needed. Used
+// by the Python on-chain discovery job to find collections that have
+// configured a SeaDrop public mint stage, independent of OpenSea's own
+// /drops listing page. fromBlock omitted/null means "start from a recent
+// lookback" (see ethClient.ts's INITIAL_LOOKBACK_BLOCKS) — the caller's
+// first-ever call, before it has a scan bookmark of its own.
+openSeaRouter.post("/eth/recent-public-drop-updates", async (req, res) => {
+  const { fromBlock } = req.body as { fromBlock?: string | null };
+
+  let fromBlockBig: bigint | null = null;
+  if (fromBlock !== undefined && fromBlock !== null) {
+    try {
+      fromBlockBig = BigInt(fromBlock);
+    } catch {
+      return res.status(400).json({ error: "fromBlock must be a numeric string" });
+    }
+    if (fromBlockBig < 0n) {
+      return res.status(400).json({ error: "fromBlock must be non-negative" });
+    }
+  }
+
+  try {
+    const result = await getRecentPublicDropUpdates(fromBlockBig);
+    return res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[opensea:recent-public-drop-updates]", msg);
     return res.status(500).json({ error: msg });
   }
 });
