@@ -15,8 +15,10 @@
 import {
   http,
   type Address,
+  type Chain,
   createPublicClient,
   createWalletClient,
+  defineChain,
   encodeFunctionData,
   verifyMessage,
 } from "viem";
@@ -33,9 +35,46 @@ import { mainnet } from "viem/chains";
 const ETH_RPC =
   process.env.RPC_ETHEREUM_MAINNET ?? "https://ethereum-rpc.publicnode.com";
 
-// Stateless config — one client is reused across calls rather than
-// reconstructed per request.
-const publicClient = createPublicClient({ chain: mainnet, transport: http(ETH_RPC) });
+// Robinhood Chain: EVM-compatible Arbitrum Orbit L2, chain ID 4663, live
+// since 2026-07-01, gas paid in ETH. Verified live 2026-08-10 that the
+// SAME canonical SeaDrop singleton (0x00005EA0...) is deployed here via
+// CREATE2, byte-identical source to Ethereum mainnet's — no ERC20/currency
+// payment code in it despite OpenSea listing collections here with a
+// stablecoin "listing_currency"; that field is the marketplace's secondary
+// -listing currency preference, not the primary mint's payment token. So
+// this chain reuses every function below unmodified, just pointed at a
+// different RPC/chain ID. Robinhood's own docs describe the public RPC as
+// shared/rate-limited (no llamarpc/publicnode-style free aggregator known
+// to exist for it yet) — RPC_ROBINHOOD_CHAIN overrides it the same way
+// RPC_ETHEREUM_MAINNET does above.
+const ROBINHOOD_RPC =
+  process.env.RPC_ROBINHOOD_CHAIN ?? "https://rpc.mainnet.chain.robinhood.com";
+
+const robinhoodChain = defineChain({
+  id: 4663,
+  name: "Robinhood Chain",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: { default: { http: [ROBINHOOD_RPC] } },
+});
+
+export type ChainName = "ethereum" | "robinhood";
+
+const CHAIN_CONFIGS: Record<ChainName, { chain: Chain; rpc: string }> = {
+  ethereum: { chain: mainnet, rpc: ETH_RPC },
+  robinhood: { chain: robinhoodChain, rpc: ROBINHOOD_RPC },
+};
+
+// One client per chain, reused across calls rather than reconstructed per
+// request — same pattern as the original single-chain publicClient this
+// replaced.
+const publicClients: Record<ChainName, ReturnType<typeof createPublicClient>> = {
+  ethereum: createPublicClient({ chain: mainnet, transport: http(ETH_RPC) }),
+  robinhood: createPublicClient({ chain: robinhoodChain, transport: http(ROBINHOOD_RPC) }),
+};
+
+function getPublicClient(chainName: ChainName) {
+  return publicClients[chainName];
+}
 
 /**
  * Verifies a plain EOA signature over an arbitrary message actually
@@ -187,10 +226,11 @@ export interface PublicDropWindow {
  * available" outcome, not an error.
  */
 export async function getPublicDropWindow(
-  nftContract: Address
+  nftContract: Address,
+  chainName: ChainName = "ethereum"
 ): Promise<PublicDropWindow | null> {
   try {
-    const drop = await publicClient.readContract({
+    const drop = await getPublicClient(chainName).readContract({
       address: SEADROP_ADDRESS,
       abi: SEADROP_ABI,
       functionName: "getPublicDrop",
@@ -280,6 +320,7 @@ export interface RecentPublicDropUpdatesResult {
 export async function getRecentPublicDropUpdates(
   fromBlock: bigint | null
 ): Promise<RecentPublicDropUpdatesResult> {
+  const publicClient = getPublicClient("ethereum");
   const latestBlock = await publicClient.getBlockNumber();
   const start =
     fromBlock !== null
@@ -328,6 +369,7 @@ export interface FireMintParams {
   nftContract: Address;
   quantity: number;
   valueCapWei: bigint;
+  chain?: ChainName;
 }
 
 export interface FireMintResult {
@@ -381,6 +423,7 @@ export interface FireMintResult {
  * mint path; everything from here on is identical.
  */
 async function estimateSignAndSend(
+  chainName: ChainName,
   account: ReturnType<typeof privateKeyToAccount>,
   callData: `0x${string}`,
   valueWei: bigint,
@@ -388,6 +431,9 @@ async function estimateSignAndSend(
   maxFeePerGas: bigint,
   maxPriorityFeePerGas: bigint
 ): Promise<FireMintResult> {
+  const { chain, rpc } = CHAIN_CONFIGS[chainName];
+  const publicClient = getPublicClient(chainName);
+
   let gas: bigint;
   try {
     const estimated = await publicClient.estimateGas({
@@ -413,7 +459,7 @@ async function estimateSignAndSend(
     };
   }
 
-  const walletClient = createWalletClient({ account, chain: mainnet, transport: http(ETH_RPC) });
+  const walletClient = createWalletClient({ account, chain, transport: http(rpc) });
 
   let txHash: `0x${string}`;
   try {
@@ -461,6 +507,8 @@ async function estimateSignAndSend(
 }
 
 export async function fireMint(params: FireMintParams): Promise<FireMintResult> {
+  const chainName: ChainName = params.chain ?? "ethereum";
+  const publicClient = getPublicClient(chainName);
   const account = privateKeyToAccount(params.sessionPrivateKey);
 
   const [allowedFeeRecipients, publicDrop, nonce, feesPerGas] = await Promise.all([
@@ -505,7 +553,7 @@ export async function fireMint(params: FireMintParams): Promise<FireMintResult> 
   });
 
   return estimateSignAndSend(
-    account, callData, totalCostWei, nonce,
+    chainName, account, callData, totalCostWei, nonce,
     feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER,
     feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER
   );
@@ -536,6 +584,7 @@ export interface FireSignedMintParams {
   mintParams: SignedMintParamsInput;
   salt: bigint;
   signature: `0x${string}`;
+  chain?: ChainName;
 }
 
 /**
@@ -557,6 +606,8 @@ export interface FireSignedMintParams {
  * safe, definite failure, not an ambiguous one.
  */
 export async function fireSignedMint(params: FireSignedMintParams): Promise<FireMintResult> {
+  const chainName: ChainName = params.chain ?? "ethereum";
+  const publicClient = getPublicClient(chainName);
   const account = privateKeyToAccount(params.sessionPrivateKey);
 
   const [allowedFeeRecipients, nonce, feesPerGas] = await Promise.all([
@@ -608,7 +659,7 @@ export async function fireSignedMint(params: FireSignedMintParams): Promise<Fire
   });
 
   return estimateSignAndSend(
-    account, callData, totalCostWei, nonce,
+    chainName, account, callData, totalCostWei, nonce,
     feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER,
     feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER
   );

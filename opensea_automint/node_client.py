@@ -83,7 +83,7 @@ def verify_session_key(session_private_key: str, session_address: str) -> bool:
     return bool(result.get("valid"))
 
 
-def get_public_drop_window(nft_contract_address: str) -> dict | None:
+def get_public_drop_window(nft_contract_address: str, chain: str = "ethereum") -> dict | None:
     """POST to the Node wallet-helper's /eth/public-drop-window route.
 
     Read-only, no-wallet lookup of a collection's real on-chain public mint
@@ -92,8 +92,12 @@ def get_public_drop_window(nft_contract_address: str) -> dict | None:
     error — e.g. allowlist-only collections, or one that hasn't configured
     a public stage yet). Raises RuntimeError only for actual Node-helper-
     level failures (connection refused, timeout, malformed response).
+
+    chain selects which EVM chain to read from ("ethereum" or "robinhood")
+    — see ethClient.ts's ChainName. Defaults to "ethereum" for callers that
+    predate multi-chain support.
     """
-    payload = {"nftContract": nft_contract_address}
+    payload = {"nftContract": nft_contract_address, "chain": chain}
 
     try:
         r = _req.post(
@@ -173,6 +177,7 @@ def fire_mint(
     nft_contract_address: str,
     quantity: int,
     value_cap_wei: str,
+    chain: str = "ethereum",
 ) -> dict:
     """POST to the Node wallet-helper's /eth/fire-mint route.
 
@@ -181,6 +186,11 @@ def fire_mint(
     call and must never persist the plaintext or log it. Fires a direct
     signed transaction from that key's own address — not sponsored through
     any smart account, so that key needs its own ETH balance.
+
+    chain selects which EVM chain to fire on ("ethereum" or "robinhood") —
+    the session key's address is the same on both (same secp256k1 curve),
+    but it needs its own balance on whichever chain it's firing on.
+    Defaults to "ethereum" for callers that predate multi-chain support.
 
     Returns a dict shaped like:
         {"success": bool, "txHash": str|None, "blockNumber": str|None,
@@ -197,6 +207,7 @@ def fire_mint(
         "nftContract": nft_contract_address,
         "quantity": quantity,
         "valueCapWei": value_cap_wei,
+        "chain": chain,
     }
 
     try:
@@ -234,6 +245,7 @@ def fire_signed_mint(
     mint_params: dict,
     salt: str,
     signature: str,
+    chain: str = "ethereum",
 ) -> dict:
     """POST to the Node wallet-helper's /eth/fire-signed-mint route — the
     allowlist/presale counterpart to fire_mint, for SeaDrop's mintSigned().
@@ -261,6 +273,7 @@ def fire_signed_mint(
         "mintParams": mint_params,
         "salt": salt,
         "signature": signature,
+        "chain": chain,
     }
 
     try:

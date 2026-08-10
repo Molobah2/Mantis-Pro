@@ -324,6 +324,7 @@ def track_drop_by_slug(collection_slug: str) -> dict | None:
         mint_page_url=f"https://opensea.io/collection/{collection_slug}",
         source="manual",
         stage_data=json.dumps({"status": status, "status_detail": status_detail, "image_url": None}),
+        chain=details.get("chain") or "ethereum",
     ))
     return store.get_tracked_drop_by_slug(collection_slug)
 

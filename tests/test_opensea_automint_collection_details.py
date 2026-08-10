@@ -212,9 +212,12 @@ def test_fetch_collection_details_via_api_non_string_text_fields_do_not_raise(
     assert result["contract_address"] is None
 
 
-def test_fetch_collection_details_via_api_non_ethereum_chain_yields_none(
+def test_fetch_collection_details_via_api_unsupported_chain_yields_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # polygon is a real EVM chain but this tool has no RPC/firing config for
+    # it — must be treated the same as no contract at all (see
+    # SUPPORTED_MINT_CHAINS), not silently tracked as unfireable.
     response = {
         **_CHEAP_SHOT_API_RESPONSE,
         "contracts": [
@@ -227,6 +230,30 @@ def test_fetch_collection_details_via_api_non_ethereum_chain_yields_none(
 
     assert result is not None
     assert result["contract_address"] is None
+    assert result["chain"] is None
+
+
+def test_fetch_collection_details_via_api_accepts_robinhood_chain_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression test: SHRKS's real OpenSea API response reported its
+    # contract under "chain": "robinhood" — this used to be silently
+    # dropped (treated as "no mint contract"), the actual root cause of
+    # "why don't I see this collection tracked" for any Robinhood Chain
+    # drop, not a discovery-coverage gap.
+    response = {
+        **_CHEAP_SHOT_API_RESPONSE,
+        "contracts": [
+            {"address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23", "chain": "robinhood"},
+        ],
+    }
+    monkeypatch.setattr(collection_details._req, "get", lambda *a, **k: _FakeResponse(200, response))
+
+    result = collection_details.fetch_collection_details_via_api("cheap-shot")
+
+    assert result is not None
+    assert result["contract_address"] == "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23"
+    assert result["chain"] == "robinhood"
 
 
 def test_fetch_collection_details_via_api_returns_none_on_non_200_status(
@@ -394,7 +421,7 @@ def test_fetch_collection_details_live_returns_empty_shape_when_playwright_unava
 
     result = collection_details.fetch_collection_details_live("some-collection")
 
-    assert result == {"description": None, "links": {}, "contract_address": None, "name": None, "mint_schedule": []}
+    assert result == {"description": None, "links": {}, "contract_address": None, "chain": None, "name": None, "mint_schedule": []}
 
 
 def test_fetch_collection_details_live_returns_empty_shape_when_concurrency_limit_exhausted(
@@ -415,7 +442,7 @@ def test_fetch_collection_details_live_returns_empty_shape_when_concurrency_limi
         for _ in range(collection_details._MAX_CONCURRENT_FETCHES):
             collection_details._launch_semaphore.release()
 
-    assert result == {"description": None, "links": {}, "contract_address": None, "name": None, "mint_schedule": []}
+    assert result == {"description": None, "links": {}, "contract_address": None, "chain": None, "name": None, "mint_schedule": []}
 
 
 def test_fetch_collection_details_live_uses_api_description_but_still_calls_playwright_for_schedule(
@@ -430,6 +457,7 @@ def test_fetch_collection_details_live_uses_api_description_but_still_calls_play
         "description": "an API-sourced description",
         "links": {"twitter": "https://x.com/foo"},
         "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
+        "chain": "ethereum",
     }
     monkeypatch.setattr(
         collection_details, "fetch_collection_details_via_api", lambda slug: api_result
@@ -475,6 +503,7 @@ def test_fetch_collection_details_live_falls_back_to_playwright_when_api_fails(
         "description": "scraped description",
         "links": {"website": "https://foo.xyz"},
         "contract_address": None,
+        "chain": None,
         "name": None,
         "mint_schedule": [],
     }
@@ -495,6 +524,7 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
             "description": None,
             "links": {},
             "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
+            "chain": "ethereum",
         },
     )
     monkeypatch.setattr(
@@ -509,6 +539,7 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
         "description": "scraped description",
         "links": {},
         "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
+        "chain": "ethereum",
         "name": "Some Collection",
         "mint_schedule": [],
     }

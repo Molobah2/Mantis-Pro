@@ -7,10 +7,22 @@ import {
   fireSignedMint,
   getPublicDropWindow,
   getRecentPublicDropUpdates,
+  type ChainName,
   type SignedMintParamsInput,
 } from "./ethClient.js";
 
 export const openSeaRouter = Router();
+
+const KNOWN_CHAINS: readonly ChainName[] = ["ethereum", "robinhood"];
+
+// Every route below defaults an omitted/undefined `chain` to "ethereum" —
+// existing callers (Python's node_client.py, before this feature) never
+// sent one, so this keeps them working unchanged.
+function parseChain(raw: unknown): ChainName | null {
+  if (raw === undefined || raw === null) return "ethereum";
+  if (typeof raw !== "string") return null;
+  return (KNOWN_CHAINS as readonly string[]).includes(raw) ? (raw as ChainName) : null;
+}
 
 // POST /eth/verify-owner-signature — authorizes grant/arm/cancel actions.
 // Confirms the caller actually controls ownerAddress before Flask acts on
@@ -82,14 +94,18 @@ openSeaRouter.post("/eth/verify-session-key", (req, res) => {
 // POST /eth/public-drop-window — read-only, no wallet needed. Used by the
 // Python firing watcher to know a drop's real on-chain start/end time.
 openSeaRouter.post("/eth/public-drop-window", async (req, res) => {
-  const { nftContract } = req.body as { nftContract?: string };
+  const { nftContract, chain } = req.body as { nftContract?: string; chain?: string };
 
   if (!nftContract || !isAddress(nftContract)) {
     return res.status(400).json({ error: "Valid nftContract required" });
   }
+  const chainName = parseChain(chain);
+  if (!chainName) {
+    return res.status(400).json({ error: `chain must be one of: ${KNOWN_CHAINS.join(", ")}` });
+  }
 
   try {
-    const window = await getPublicDropWindow(nftContract as Address);
+    const window = await getPublicDropWindow(nftContract as Address, chainName);
     if (!window) {
       return res.json({ available: false });
     }
@@ -139,11 +155,12 @@ openSeaRouter.post("/eth/recent-public-drop-updates", async (req, res) => {
 // sessionPrivateKey here is the DECRYPTED session key — Flask decrypts it
 // just before this call and never persists the plaintext.
 openSeaRouter.post("/eth/fire-mint", async (req, res) => {
-  const { sessionPrivateKey, nftContract, quantity, valueCapWei } = req.body as {
+  const { sessionPrivateKey, nftContract, quantity, valueCapWei, chain } = req.body as {
     sessionPrivateKey?: string;
     nftContract?: string;
     quantity?: number;
     valueCapWei?: string;
+    chain?: string;
   };
 
   if (!sessionPrivateKey || !isHex(sessionPrivateKey) || sessionPrivateKey.length !== 66) {
@@ -164,6 +181,10 @@ openSeaRouter.post("/eth/fire-mint", async (req, res) => {
   if (valueCapWeiBig < 0n) {
     return res.status(400).json({ error: "valueCapWei must be non-negative" });
   }
+  const chainName = parseChain(chain);
+  if (!chainName) {
+    return res.status(400).json({ error: `chain must be one of: ${KNOWN_CHAINS.join(", ")}` });
+  }
 
   try {
     const result = await fireMint({
@@ -171,6 +192,7 @@ openSeaRouter.post("/eth/fire-mint", async (req, res) => {
       nftContract: nftContract as Address,
       quantity: quantity as number,
       valueCapWei: valueCapWeiBig,
+      chain: chainName,
     });
     return res.json(result);
   } catch (err: unknown) {
@@ -218,7 +240,7 @@ function parseMintParams(raw: unknown): SignedMintParamsInput | null {
 // before this call — this route never derives or trusts any of that data
 // itself, only passes it through to the on-chain call.
 openSeaRouter.post("/eth/fire-signed-mint", async (req, res) => {
-  const { sessionPrivateKey, nftContract, quantity, valueCapWei, mintParams, salt, signature } =
+  const { sessionPrivateKey, nftContract, quantity, valueCapWei, mintParams, salt, signature, chain } =
     req.body as {
       sessionPrivateKey?: string;
       nftContract?: string;
@@ -227,6 +249,7 @@ openSeaRouter.post("/eth/fire-signed-mint", async (req, res) => {
       mintParams?: unknown;
       salt?: string;
       signature?: string;
+      chain?: string;
     };
 
   if (!sessionPrivateKey || !isHex(sessionPrivateKey) || sessionPrivateKey.length !== 66) {
@@ -260,6 +283,10 @@ openSeaRouter.post("/eth/fire-signed-mint", async (req, res) => {
   if (!signature || !isHex(signature)) {
     return res.status(400).json({ error: "Valid signature required" });
   }
+  const chainName = parseChain(chain);
+  if (!chainName) {
+    return res.status(400).json({ error: `chain must be one of: ${KNOWN_CHAINS.join(", ")}` });
+  }
 
   try {
     const result = await fireSignedMint({
@@ -270,6 +297,7 @@ openSeaRouter.post("/eth/fire-signed-mint", async (req, res) => {
       mintParams: parsedMintParams,
       salt: saltBig,
       signature: signature as `0x${string}`,
+      chain: chainName,
     });
     return res.json(result);
   } catch (err: unknown) {

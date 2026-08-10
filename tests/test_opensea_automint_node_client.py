@@ -187,7 +187,7 @@ def test_get_public_drop_window_returns_window_when_available(
     }
     url, body, _timeout = calls[0]
     assert url.endswith("/eth/public-drop-window")
-    assert body == {"nftContract": NFT_CONTRACT}
+    assert body == {"nftContract": NFT_CONTRACT, "chain": "ethereum"}
 
 
 def test_get_public_drop_window_returns_none_when_unavailable(
@@ -267,6 +267,7 @@ def test_fire_mint_returns_success_result(monkeypatch: pytest.MonkeyPatch) -> No
         "nftContract": NFT_CONTRACT,
         "quantity": 1,
         "valueCapWei": VALUE_CAP_WEI,
+        "chain": "ethereum",
     }
     assert timeout == 90
 
@@ -361,6 +362,7 @@ def test_fire_signed_mint_returns_success_result(monkeypatch: pytest.MonkeyPatch
         "mintParams": MINT_PARAMS,
         "salt": SALT,
         "signature": SIGNATURE,
+        "chain": "ethereum",
     }
     assert timeout == 90
 

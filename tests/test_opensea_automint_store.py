@@ -171,6 +171,40 @@ def test_get_tracked_drop_returns_none_when_not_found() -> None:
     assert store.get_tracked_drop(999999) is None
 
 
+def test_tracked_drop_chain_defaults_to_ethereum_when_not_specified() -> None:
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="default-chain-drop", name="Default Chain Drop",
+        contract_address="0xContract3",
+        mint_page_url="https://opensea.io/collection/default-chain-drop",
+        source="manual", stage_data="{}",
+    ))
+
+    result = store.get_tracked_drop_by_slug("default-chain-drop")
+
+    assert result is not None
+    assert result["chain"] == "ethereum"
+
+
+def test_tracked_drop_chain_round_trips_for_non_ethereum_chain() -> None:
+    # Regression test: TrackedDropInput.chain used to be silently dropped
+    # by upsert_tracked_drop (the INSERT never included it), so every row
+    # fell back to the DB column's own 'ethereum' default regardless of
+    # what a caller actually passed in — the real bug behind Robinhood
+    # Chain drops never being fireable once tracked.
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="shrkshq", name="SHRKS",
+        contract_address="0xc1f68b93500facaaac4cd841601fbb9e00439d8f",
+        mint_page_url="https://opensea.io/collection/shrkshq",
+        source="manual", stage_data="{}",
+        chain="robinhood",
+    ))
+
+    result = store.get_tracked_drop_by_slug("shrkshq")
+
+    assert result is not None
+    assert result["chain"] == "robinhood"
+
+
 def test_get_tracked_drop_by_contract_address_round_trips() -> None:
     store.upsert_tracked_drop(store.TrackedDropInput(
         collection_slug="gobbozhq", name="GOBBOZ",

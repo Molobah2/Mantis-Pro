@@ -193,6 +193,10 @@ class TrackedDropInput:
     mint_page_url: str
     source: str
     stage_data: str
+    # Which EVM chain contract_address lives on ("ethereum" or "robinhood")
+    # — see wallet-helper/ethClient.ts's ChainName. Defaults to "ethereum"
+    # to match this column's own DB-level default for pre-multi-chain rows.
+    chain: str = "ethereum"
 
 
 @dataclass(frozen=True)
@@ -339,17 +343,18 @@ def upsert_tracked_drop(drop: TrackedDropInput) -> int:
         c.execute("""
             INSERT INTO tracked_drops (
                 collection_slug, name, contract_address, mint_page_url,
-                discovered_at, source, stage_data, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                discovered_at, source, stage_data, updated_at, chain
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(collection_slug) DO UPDATE SET
                 name=excluded.name,
                 contract_address=excluded.contract_address,
                 mint_page_url=excluded.mint_page_url,
                 source=excluded.source,
                 stage_data=excluded.stage_data,
-                updated_at=excluded.updated_at
+                updated_at=excluded.updated_at,
+                chain=excluded.chain
         """, (drop.collection_slug, drop.name, drop.contract_address, drop.mint_page_url,
-              now, drop.source, drop.stage_data, now))
+              now, drop.source, drop.stage_data, now, drop.chain))
         c.commit()
         row = c.execute(
             "SELECT id FROM tracked_drops WHERE collection_slug=?", (drop.collection_slug,)

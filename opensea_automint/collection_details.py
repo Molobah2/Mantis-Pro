@@ -94,6 +94,12 @@ _API_REQUEST_TIMEOUT_S = 10
 
 ETH_ADDR_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 
+# Chains this tool can actually fire a mint on — see wallet-helper/
+# ethClient.ts's ChainName. Kept as its own constant (not inlined into the
+# contract-selection loop below) so adding a new supported chain is a
+# one-line change here, not a scavenger hunt through this function.
+SUPPORTED_MINT_CHAINS = ("ethereum", "robinhood")
+
 
 def classify_external_link(href: str) -> str:
     """
@@ -359,10 +365,14 @@ def fetch_collection_details_via_api(slug: str) -> dict | None:
     Returns None on any failure — request exception, non-200 status,
     non-JSON body, or a JSON body that isn't a dict — never raises, mirroring
     the resilience style used throughout this module. On success returns
-    {"description": ..., "links": {...}, "contract_address": ...}, omitting
-    any link category whose source field was empty/missing/invalid, and
-    contract_address only if a well-formed Ethereum contract address was
-    found among the collection's contracts.
+    {"description": ..., "links": {...}, "contract_address": ..., "chain":
+    ...}, omitting any link category whose source field was empty/missing/
+    invalid, and contract_address/chain only if a well-formed EVM contract
+    address was found among the collection's contracts on a chain this tool
+    actually knows how to fire on (see SUPPORTED_MINT_CHAINS) — a contract
+    on an unsupported chain (e.g. Solana, Polygon) is treated the same as
+    no contract at all, since tracking it with no way to ever fire it would
+    silently mislead the dashboard.
     """
     headers = {"Accept": "application/json"}
     api_key = os.getenv("OPENSEA_API_KEY", "").strip()
@@ -420,12 +430,14 @@ def fetch_collection_details_via_api(slug: str) -> dict | None:
         links["website"] = website_url
 
     contract_address = None
+    contract_chain = None
     for contract in data.get("contracts") or []:
-        if not isinstance(contract, dict) or contract.get("chain") != "ethereum":
+        if not isinstance(contract, dict) or contract.get("chain") not in SUPPORTED_MINT_CHAINS:
             continue
         address = contract.get("address")
         if isinstance(address, str) and ETH_ADDR_RE.match(address):
             contract_address = address
+            contract_chain = contract.get("chain")
             break
 
     return {
@@ -433,6 +445,7 @@ def fetch_collection_details_via_api(slug: str) -> dict | None:
         "description": description,
         "links": links,
         "contract_address": contract_address,
+        "chain": contract_chain,
     }
 
 
@@ -603,6 +616,10 @@ def fetch_collection_details_live(slug: str) -> dict:
     mint_schedule = playwright_result.get("mint_schedule", [])
 
     contract_address = api_result.get("contract_address") if api_result else None
+    # Same reasoning as contract_address immediately above — chain comes
+    # from the same "contracts" entry the address itself was found on, so
+    # it's preserved through both branches identically.
+    chain = api_result.get("chain") if api_result else None
     # Playwright never discovers a collection's display name any more than
     # it discovers a contract_address — the API is the only source for
     # both, so name is preserved the same way regardless of which source's
@@ -610,9 +627,9 @@ def fetch_collection_details_live(slug: str) -> dict:
     name = api_result.get("name") if api_result else None
 
     if api_result and (api_result.get("description") or api_result.get("links")):
-        return {**api_result, "contract_address": contract_address, "name": name, "mint_schedule": mint_schedule}
+        return {**api_result, "contract_address": contract_address, "chain": chain, "name": name, "mint_schedule": mint_schedule}
 
-    return {**playwright_result, "contract_address": contract_address, "name": name, "mint_schedule": mint_schedule}
+    return {**playwright_result, "contract_address": contract_address, "chain": chain, "name": name, "mint_schedule": mint_schedule}
 
 
 def get_collection_details(slug: str) -> dict:

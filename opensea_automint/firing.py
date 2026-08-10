@@ -462,7 +462,9 @@ def _check_and_fire_one(arm: dict, now: float) -> None:
         return
 
     try:
-        window = node_client.get_public_drop_window(drop["contract_address"])
+        window = node_client.get_public_drop_window(
+            drop["contract_address"], drop.get("chain") or "ethereum"
+        )
     except RuntimeError as e:
         logger.warning("[firing] arm request %d: could not read drop window: %s", arm["id"], e)
         return  # transient — try again next tick
@@ -577,6 +579,7 @@ def _fire_one(arm: dict, drop: dict, grant: dict, go_live_at: float | None = Non
             result = node_client.fire_mint(
                 decrypted_approval, drop["contract_address"],
                 arm["quantity"], arm["max_price_wei"],
+                chain=drop.get("chain") or "ethereum",
             )
         except RuntimeError as e:
             # A "timed out" RuntimeError at this layer means the Node
@@ -680,6 +683,7 @@ def _fire_signed_presale(arm: dict, drop: dict, decrypted_approval: str, stage_l
         return node_client.fire_signed_mint(
             decrypted_approval, drop["contract_address"], arm["quantity"], arm["max_price_wei"],
             mint_params, auth.get("salt"), auth.get("signature"),
+            chain=drop.get("chain") or "ethereum",
         )
     except RuntimeError as e:
         # Same ambiguous-vs-definite distinction as the public-mint path —

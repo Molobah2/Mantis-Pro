@@ -642,7 +642,7 @@ def test_fire_signed_presale_calls_fire_signed_mint_with_resolved_authorization(
     )
     calls = []
 
-    def fake_fire_signed_mint(approval, contract, quantity, value_cap_wei, mint_params, salt, signature):
+    def fake_fire_signed_mint(approval, contract, quantity, value_cap_wei, mint_params, salt, signature, chain=None):
         calls.append((approval, contract, quantity, value_cap_wei, mint_params, salt, signature))
         return {"success": True, "txHash": "0x1", "blockNumber": "1", "gasUsed": "1"}
 
@@ -861,7 +861,7 @@ def test_watcher_marks_scheduled_when_window_not_yet_open(monkeypatch: pytest.Mo
     future_start = time.time() + 3600
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": future_start, "endTime": future_start + 3600, "mintPriceWei": "0"},
+        lambda contract, chain=None: {"startTime": future_start, "endTime": future_start + 3600, "mintPriceWei": "0"},
     )
 
     firing.check_and_fire_armed_requests()
@@ -886,7 +886,7 @@ def test_watcher_fires_via_countdown_thread_within_critical_window(
     start_time = time.time() + 0.2  # well inside the 20s critical window
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
     )
     fire_mint_calls = []
     monkeypatch.setattr(
@@ -924,7 +924,7 @@ def test_countdown_thread_refuses_to_fire_if_drop_contract_changes_during_the_wa
     start_time = time.time() + 0.3  # inside the critical window
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
     )
     fire_mint_calls = []
     monkeypatch.setattr(
@@ -965,7 +965,7 @@ def test_countdown_thread_refuses_to_fire_if_grant_is_revoked_during_the_wait(
     start_time = time.time() + 0.3
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
     )
     fire_mint_calls = []
     monkeypatch.setattr(
@@ -996,7 +996,7 @@ def test_watcher_does_not_spawn_duplicate_countdown_on_repeated_ticks(
     start_time = time.time() + 0.3
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
     )
     fire_mint_calls = []
     monkeypatch.setattr(
@@ -1027,7 +1027,7 @@ def test_active_countdowns_cleaned_up_after_firing(monkeypatch: pytest.MonkeyPat
     start_time = time.time() + 0.1
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": start_time, "endTime": start_time + 3600, "mintPriceWei": "50"},
     )
     monkeypatch.setattr(
         firing.node_client, "fire_mint",
@@ -1062,7 +1062,7 @@ def test_watcher_fires_immediately_when_already_past_go_live_without_blocking_ti
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
 
     fire_started = threading.Event()
@@ -1098,7 +1098,7 @@ def test_watcher_expires_when_window_already_closed(monkeypatch: pytest.MonkeyPa
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 7200, "endTime": time.time() - 3600, "mintPriceWei": "0"},
+        lambda contract, chain=None: {"startTime": time.time() - 7200, "endTime": time.time() - 3600, "mintPriceWei": "0"},
     )
 
     firing.check_and_fire_armed_requests()
@@ -1113,7 +1113,7 @@ def test_watcher_does_nothing_when_no_public_window_available(monkeypatch: pytes
         owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
         quantity=1, max_price_wei="0", go_live_at=None,
     ))
-    monkeypatch.setattr(firing.node_client, "get_public_drop_window", lambda contract: None)
+    monkeypatch.setattr(firing.node_client, "get_public_drop_window", lambda contract, chain=None: None)
 
     firing.check_and_fire_armed_requests()
 
@@ -1156,11 +1156,11 @@ def test_watcher_fires_and_records_success_when_window_open(monkeypatch: pytest.
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
     fire_mint_calls = []
 
-    def fake_fire_mint(approval, contract, quantity, value_cap_wei):
+    def fake_fire_mint(approval, contract, quantity, value_cap_wei, chain=None):
         fire_mint_calls.append((approval, contract, quantity, value_cap_wei))
         return {
             "success": True, "txHash": "0xtxhash",
@@ -1248,11 +1248,11 @@ def test_watcher_decrypts_the_stored_session_key_before_firing(monkeypatch: pyte
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
     seen_approvals = []
 
-    def fake_fire_mint(approval, contract, quantity, value_cap_wei):
+    def fake_fire_mint(approval, contract, quantity, value_cap_wei, chain=None):
         seen_approvals.append(approval)
         return {"success": True, "txHash": "0x2", "blockNumber": "1", "gasUsed": "1"}
 
@@ -1275,7 +1275,7 @@ def test_watcher_retries_on_failure_up_to_max_attempts_then_gives_up(
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
     monkeypatch.setattr(
         firing.node_client, "fire_mint",
@@ -1316,7 +1316,7 @@ def test_watcher_never_fires_twice_for_the_same_arm_request(monkeypatch: pytest.
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
     fire_mint_calls = []
 
@@ -1352,7 +1352,7 @@ def test_watcher_records_error_attempt_and_fails_when_decryption_fails(
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
 
     firing.check_and_fire_armed_requests()
@@ -1375,7 +1375,7 @@ def test_watcher_treats_node_helper_runtime_error_as_a_failed_attempt(
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
 
     def raise_runtime_error(*a, **k):
@@ -1411,7 +1411,7 @@ def test_watcher_never_retries_an_ambiguous_outcome(monkeypatch: pytest.MonkeyPa
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
     monkeypatch.setattr(
         firing.node_client, "fire_mint",
@@ -1443,7 +1443,7 @@ def test_watcher_never_retries_after_a_node_helper_timeout(monkeypatch: pytest.M
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "50"},
     )
 
     def raise_timeout(*a, **k):
@@ -1478,7 +1478,7 @@ def test_watcher_fails_when_drop_contract_no_longer_covered_by_grant(
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "0"},
+        lambda contract, chain=None: {"startTime": time.time() - 100, "endTime": time.time() + 3600, "mintPriceWei": "0"},
     )
     fire_mint_calls = []
     monkeypatch.setattr(
@@ -1509,7 +1509,7 @@ def test_check_and_fire_armed_requests_continues_after_one_arm_raises(
     ))
     monkeypatch.setattr(
         firing.node_client, "get_public_drop_window",
-        lambda contract: {"startTime": time.time() + 3600, "endTime": time.time() + 7200, "mintPriceWei": "0"},
+        lambda contract, chain=None: {"startTime": time.time() + 3600, "endTime": time.time() + 7200, "mintPriceWei": "0"},
     )
 
     firing.check_and_fire_armed_requests()  # must not raise
