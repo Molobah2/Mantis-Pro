@@ -904,49 +904,87 @@ def test_sweep_grant_malformed_json_body_returns_400_not_500(client) -> None:
 
 # ── GET /api/opensea/session-grant/active ────────────────────────────────
 
+ACTIVE_GRANT_OWNER = "0x" + "e5" * 20
+ACTIVE_GRANT_CONTRACT = "0x" + "d4" * 20
+
+
+def _active_grant_url(owner: str = ACTIVE_GRANT_OWNER, contract: str = ACTIVE_GRANT_CONTRACT) -> str:
+    return "/api/opensea/session-grant/active?owner=" + owner + "&contract=" + contract
+
+
 def test_active_session_grant_returns_grant_when_one_exists(
     client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    owner = "0x" + "e5" * 20
+    calls = []
     monkeypatch.setattr(
-        store, "get_active_session_grant",
-        lambda addr: {
+        store, "get_latest_session_grant_for_target",
+        lambda owner, contract: calls.append((owner, contract)) or {
             "id": 7, "session_address": "0x" + "b2" * 20,
-            "allowed_targets": json.dumps(["0x" + "d4" * 20]),
+            "allowed_targets": json.dumps([ACTIVE_GRANT_CONTRACT]),
             "value_cap_wei": "50000000000000000", "expires_at": time.time() + 3600,
+            "revoked": 0,
         },
     )
 
-    resp = client.get("/api/opensea/session-grant/active?owner=" + owner)
+    resp = client.get(_active_grant_url())
 
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["grant"]["grantId"] == 7
     assert body["grant"]["sessionAddress"] == "0x" + "b2" * 20
-    assert body["grant"]["nftContract"] == "0x" + "d4" * 20
+    assert body["grant"]["nftContract"] == ACTIVE_GRANT_CONTRACT
     assert body["grant"]["valueCapWei"] == "50000000000000000"
+    assert body["grant"]["revoked"] is False
+    assert calls == [(ACTIVE_GRANT_OWNER, ACTIVE_GRANT_CONTRACT)]
+
+
+def test_active_session_grant_reports_revoked_flag(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        store, "get_latest_session_grant_for_target",
+        lambda owner, contract: {
+            "id": 7, "session_address": "0x" + "b2" * 20,
+            "allowed_targets": json.dumps([ACTIVE_GRANT_CONTRACT]),
+            "value_cap_wei": "50000000000000000", "expires_at": time.time() + 3600,
+            "revoked": 1,
+        },
+    )
+
+    resp = client.get(_active_grant_url())
+
+    assert resp.get_json()["grant"]["revoked"] is True
 
 
 def test_active_session_grant_returns_null_when_none_exists(
     client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    owner = "0x" + "e5" * 20
-    monkeypatch.setattr(store, "get_active_session_grant", lambda addr: None)
+    monkeypatch.setattr(store, "get_latest_session_grant_for_target", lambda owner, contract: None)
 
-    resp = client.get("/api/opensea/session-grant/active?owner=" + owner)
+    resp = client.get(_active_grant_url())
 
     assert resp.status_code == 200
     assert resp.get_json() == {"grant": None}
 
 
 def test_active_session_grant_invalid_owner_returns_400(client) -> None:
-    resp = client.get("/api/opensea/session-grant/active?owner=not-an-address")
+    resp = client.get(_active_grant_url(owner="not-an-address"))
 
     assert resp.status_code == 400
 
 
 def test_active_session_grant_missing_owner_returns_400(client) -> None:
-    resp = client.get("/api/opensea/session-grant/active")
+    resp = client.get("/api/opensea/session-grant/active?contract=" + ACTIVE_GRANT_CONTRACT)
+
+    assert resp.status_code == 400
+
+
+def test_active_session_grant_invalid_contract_returns_400(client) -> None:
+    resp = client.get(_active_grant_url(contract="not-an-address"))
+
+    assert resp.status_code == 400
+
+
+def test_active_session_grant_missing_contract_returns_400(client) -> None:
+    resp = client.get("/api/opensea/session-grant/active?owner=" + ACTIVE_GRANT_OWNER)
 
     assert resp.status_code == 400
 

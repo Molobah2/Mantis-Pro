@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import threading
@@ -278,6 +279,35 @@ def get_active_session_grant(owner_address: str) -> dict | None:
             WHERE owner_address=? AND revoked=0 AND expires_at > ?
             ORDER BY id DESC LIMIT 1
         """, (owner, now)).fetchone()
+    if not row:
+        return None
+    return _session_grant_row_to_dict(row)
+
+
+def get_latest_session_grant_for_target(owner_address: str, nft_contract: str) -> dict | None:
+    """Most recent session grant for this exact owner+contract pair,
+    REGARDLESS of revoked/expired status, or None. Only one grant is ever
+    "active" per owner at a time (see get_active_session_grant — a new
+    grant auto-revokes any prior one) — so once an owner grants a second
+    collection, their first grant becomes unreachable through that lookup
+    even though its key can still hold real, sweepable ETH. This is what
+    the dashboard uses to find a specific contract's grant (revoked or
+    not) so Sweep stays reachable after a newer grant has superseded it.
+
+    A grant's allowed_targets is always a single-element JSON list (one
+    contract per grant — see api_session_grant), so an exact string match
+    against json.dumps([nft_contract.lower()]) is safe and precise."""
+    owner = owner_address.lower()
+    targets_json = json.dumps([nft_contract.lower()])
+    with _lock, closing(_conn()) as c:
+        row = c.execute("""
+            SELECT id, owner_address, session_address, encrypted_session_key,
+                   permission_config, allowed_targets, value_cap_wei, expires_at,
+                   revoked, created_at
+            FROM session_grants
+            WHERE owner_address=? AND allowed_targets=?
+            ORDER BY id DESC LIMIT 1
+        """, (owner, targets_json)).fetchone()
     if not row:
         return None
     return _session_grant_row_to_dict(row)

@@ -338,12 +338,20 @@ def api_sweep_grant(grant_id: int) -> Response:
 
 @opensea_automint_bp.route("/api/opensea/session-grant/active")
 def api_active_session_grant() -> Response:
-    """Read-only lookup of an owner's current active (non-revoked, non-
-    expired) session grant, if any — used by the dashboard to re-render the
-    fund/revoke/sweep box when a modal is reopened or the page is
-    refreshed, instead of that box only ever appearing immediately after a
-    fresh grant call in the same page load (the gap that made Revoke and
-    Sweep look unavailable for an already-granted session after a reload).
+    """Read-only lookup of an owner's most recent session grant for ONE
+    specific contract — active, revoked, or expired — used by the
+    dashboard to re-render the fund/revoke/sweep box when a modal is
+    reopened or the page is refreshed, instead of that box only ever
+    appearing immediately after a fresh grant call in the same page load.
+
+    Deliberately keyed by (owner, contract) rather than just "the owner's
+    one active grant": only one grant is ever active per owner at a time
+    (a new grant auto-revokes any prior one — see api_session_grant), so
+    once an owner grants a second collection, their first grant's fund box
+    would otherwise become unreachable even though its key can still hold
+    real, sweepable ETH. The revoked flag lets the frontend hide the
+    (redundant) Revoke button for an already-revoked grant while still
+    offering Sweep.
 
     No signature required — nothing returned here is sensitive; the
     encrypted session key itself is never included."""
@@ -351,7 +359,11 @@ def api_active_session_grant() -> Response:
     if not isinstance(owner_address, str) or not security.ETH_ADDR_RE.match(owner_address):
         return jsonify({"error": "Valid owner address required"}), 400
 
-    grant = store.get_active_session_grant(owner_address)
+    nft_contract = request.args.get("contract", "")
+    if not isinstance(nft_contract, str) or not security.ETH_ADDR_RE.match(nft_contract):
+        return jsonify({"error": "Valid contract address required"}), 400
+
+    grant = store.get_latest_session_grant_for_target(owner_address, nft_contract)
     if not grant:
         return jsonify({"grant": None})
 
@@ -362,6 +374,7 @@ def api_active_session_grant() -> Response:
         "nftContract": allowed_targets[0] if allowed_targets else None,
         "valueCapWei": grant["value_cap_wei"],
         "expiresAt": grant["expires_at"],
+        "revoked": bool(grant["revoked"]),
     }})
 
 

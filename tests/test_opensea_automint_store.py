@@ -1,3 +1,4 @@
+import json
 import time
 
 import pytest
@@ -120,6 +121,80 @@ def test_get_active_session_grant_excludes_expired_grants() -> None:
     active = store.get_active_session_grant("0xOwner4")
 
     assert active is None
+
+
+def test_get_latest_session_grant_for_target_finds_revoked_grant() -> None:
+    # Regression coverage: get_active_session_grant deliberately excludes
+    # revoked grants (only one grant is ever "active" per owner), but a
+    # revoked grant's key can still hold real, sweepable ETH — this lookup
+    # is what lets the dashboard find it again by contract.
+    grant_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xOwner5",
+        session_address="0xSession5",
+        encrypted_session_key="key",
+        permission_config="{}",
+        allowed_targets=json.dumps(["0xcontract5"]),
+        value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+    store.revoke_session_grant(grant_id)
+
+    result = store.get_latest_session_grant_for_target("0xOwner5", "0xcontract5")
+
+    assert result is not None
+    assert result["id"] == grant_id
+    assert result["revoked"] == 1
+
+
+def test_get_latest_session_grant_for_target_returns_none_for_different_contract() -> None:
+    store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xOwner6",
+        session_address="0xSession6",
+        encrypted_session_key="key",
+        permission_config="{}",
+        allowed_targets=json.dumps(["0xcontract6"]),
+        value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+
+    result = store.get_latest_session_grant_for_target("0xOwner6", "0xsomeothercontract")
+
+    assert result is None
+
+
+def test_get_latest_session_grant_for_target_returns_most_recent_when_multiple_exist() -> None:
+    owner = "0xOwner7"
+    contract = "0xcontract7"
+    store.insert_session_grant(store.SessionGrantInput(
+        owner_address=owner, session_address="0xSessionOld",
+        encrypted_session_key="key", permission_config="{}",
+        allowed_targets=json.dumps([contract]), value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+    newest_id = store.insert_session_grant(store.SessionGrantInput(
+        owner_address=owner, session_address="0xSessionNew",
+        encrypted_session_key="key", permission_config="{}",
+        allowed_targets=json.dumps([contract]), value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+
+    result = store.get_latest_session_grant_for_target(owner, contract)
+
+    assert result["id"] == newest_id
+    assert result["session_address"] == "0xSessionNew"
+
+
+def test_get_latest_session_grant_for_target_case_insensitive() -> None:
+    store.insert_session_grant(store.SessionGrantInput(
+        owner_address="0xowner8", session_address="0xSession8",
+        encrypted_session_key="key", permission_config="{}",
+        allowed_targets=json.dumps(["0xcontract8"]), value_cap_wei="0",
+        expires_at=time.time() + 3600,
+    ))
+
+    result = store.get_latest_session_grant_for_target("0xOWNER8", "0XCONTRACT8")
+
+    assert result is not None
 
 
 # ── Tracked drops ─────────────────────────────────────────────────────

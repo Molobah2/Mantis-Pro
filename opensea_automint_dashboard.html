@@ -516,6 +516,11 @@
     opacity: 0.6;
     cursor: not-allowed;
   }
+  .fund-box-revoked-label {
+    font-size: 11px;
+    color: var(--t2);
+    padding: 6px 10px;
+  }
   .fund-box-note {
     font-size: 11.5px;
     color: var(--t2);
@@ -862,18 +867,19 @@ function renderModalDetails(details, requestedForSlug, drop) {
 // grant made earlier in the SAME page load.
 function initActiveGrantCheck(contractAddress) {
   if (!window.__ethOwnerAddress || !contractAddress) return;
-  fetch('/api/opensea/session-grant/active?owner=' + encodeURIComponent(window.__ethOwnerAddress))
+  fetch('/api/opensea/session-grant/active' +
+      '?owner=' + encodeURIComponent(window.__ethOwnerAddress) +
+      '&contract=' + encodeURIComponent(contractAddress))
     .then(function (res) { return res.json(); })
     .then(function (data) {
       var grant = data && data.grant;
-      if (!grant || !grant.nftContract) return;
-      if (grant.nftContract.toLowerCase() !== contractAddress.toLowerCase()) return;
+      if (!grant) return;
       // The modal may have been closed/switched while this fetch was in flight.
       if (currentModalContractAddress !== contractAddress) return;
       var container = document.getElementById('grant-section-container');
       if (!container) return;
       var maxEthStr = (Number(grant.valueCapWei) / 1e18).toString();
-      container.innerHTML = renderFundBoxHtml(grant.sessionAddress, maxEthStr, grant.grantId);
+      container.innerHTML = renderFundBoxHtml(grant.sessionAddress, maxEthStr, grant.grantId, grant.revoked);
     })
     .catch(function () {}); // best-effort — plain grant form stays visible on failure
 }
@@ -1065,7 +1071,7 @@ async function handleGrantClick(btn) {
       valueCapWei: valueCapWei,
       expiresInSeconds: expiresInSeconds,
     });
-    if (status) status.innerHTML = renderFundBoxHtml(result.sessionAddress, valueCapInput.value, result.grantId);
+    if (status) status.innerHTML = renderFundBoxHtml(result.sessionAddress, valueCapInput.value, result.grantId, false);
     btn.textContent = 'Granted';
     if (document.getElementById('arm-status') && currentModalDrop && currentModalDrop.collection_slug) {
       initArmStatus(currentModalDrop.collection_slug, contractAddress);
@@ -1080,7 +1086,14 @@ async function handleGrantClick(btn) {
 // This session key fires a DIRECT signed transaction from its own address —
 // unlike a sponsored smart account, it must hold its own ETH. Nothing can
 // fire (even after arming) until this address is actually funded.
-function renderFundBoxHtml(sessionAddress, maxEthStr, grantId) {
+function renderFundBoxHtml(sessionAddress, maxEthStr, grantId, revoked) {
+  var revokeButtonHtml = revoked
+    ? '<span class="fund-box-revoked-label">Revoked</span>'
+    : '<button type="button" class="fund-box-revoke" data-grant-id="' + esc(grantId) + '">Revoke Permission</button>';
+  var revokeNoteHtml = revoked
+    ? 'This permission has already been revoked. Use Sweep to send whatever is left back to your connected wallet.'
+    : 'Revoking only stops this app from using the key again — it does not move any ETH already sent to this ' +
+      'address. Use Sweep to send whatever is left back to your connected wallet.';
   return (
     '<div class="fund-box" data-grant-id="' + esc(grantId) + '">' +
       '<div class="fund-box-title">Permission granted — now fund this address</div>' +
@@ -1091,11 +1104,10 @@ function renderFundBoxHtml(sessionAddress, maxEthStr, grantId) {
       '<div class="fund-box-note">Send at least ' + esc(maxEthStr) + ' ETH (your max spend cap) plus a small gas buffer to this address. ' +
       'It signs and broadcasts the mint transaction directly — nothing will fire until it holds real ETH.</div>' +
       '<div class="fund-box-row">' +
-        '<button type="button" class="fund-box-revoke" data-grant-id="' + esc(grantId) + '">Revoke Permission</button>' +
+        revokeButtonHtml +
         '<button type="button" class="fund-box-sweep" data-grant-id="' + esc(grantId) + '">Sweep Remaining Balance</button>' +
       '</div>' +
-      '<div class="fund-box-note">Revoking only stops this app from using the key again — it does not move any ETH ' +
-      'already sent to this address. Use Sweep to send whatever is left back to your connected wallet.</div>' +
+      '<div class="fund-box-note">' + revokeNoteHtml + '</div>' +
     '</div>'
   );
 }
