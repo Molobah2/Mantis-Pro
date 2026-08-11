@@ -297,3 +297,55 @@ def fire_signed_mint(
         raise RuntimeError(error_msg)
 
     return result
+
+
+def sweep_session_key(
+    session_private_key: str,
+    destination_address: str,
+    chain: str = "ethereum",
+) -> dict:
+    """POST to the Node wallet-helper's /eth/sweep route.
+
+    Sends whatever ETH is left in a session key's own address back to
+    destination_address (the owner's connected wallet) — the only way to
+    recover funds left behind after a grant is revoked or superseded, since
+    revoking has zero on-chain effect. session_private_key must already be
+    DECRYPTED plaintext — callers decrypt just before this call and must
+    never persist the plaintext or log it.
+
+    Returns a dict shaped like:
+        {"success": bool, "txHash": str|None, "amountSweptWei": str|None,
+         "error": str|None}
+    A balance too small to be worth sweeping (doesn't exceed the estimated
+    gas cost) comes back as {"success": False, "error": "..."} — a real,
+    non-exceptional outcome, not a Node-helper failure. Raises RuntimeError
+    only for actual Node-helper-level failures (connection refused,
+    timeout, malformed response).
+    """
+    payload = {
+        "sessionPrivateKey": session_private_key,
+        "destinationAddress": destination_address,
+        "chain": chain,
+    }
+
+    try:
+        r = _req.post(f"{_cfg.NODE_HELPER_URL}/eth/sweep", json=payload, timeout=90)
+    except _req.exceptions.ConnectionError:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+    except _req.exceptions.Timeout:
+        raise RuntimeError("Node wallet-helper timed out")
+
+    try:
+        result = r.json()
+    except ValueError:
+        raise RuntimeError(f"Node helper returned a non-JSON response (HTTP {r.status_code})")
+
+    if not isinstance(result, dict):
+        raise RuntimeError("Node helper returned an unexpected response shape")
+
+    if r.status_code != 200:
+        error_msg = result.get("error", f"HTTP {r.status_code}")
+        logger.warning("[node_client] sweep request-level failure: %s", error_msg)
+        raise RuntimeError(error_msg)
+
+    return result

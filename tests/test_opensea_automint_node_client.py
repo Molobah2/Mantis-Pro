@@ -426,6 +426,85 @@ def test_fire_signed_mint_raises_runtime_error_on_non_dict_json(
         )
 
 
+# ── sweep_session_key ────────────────────────────────────────────────────
+
+DESTINATION_ADDRESS = "0x" + "ee" * 20
+
+
+def test_sweep_session_key_returns_success_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    success_result = {"success": True, "txHash": "0x" + "b" * 64, "amountSweptWei": "1200000000000000"}
+
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        calls.append((url, json, timeout))
+        return _FakeResponse(200, success_result)
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    result = node_client.sweep_session_key(SESSION_PRIVATE_KEY, DESTINATION_ADDRESS, "robinhood")
+
+    assert result == success_result
+    url, body, timeout = calls[0]
+    assert url.endswith("/eth/sweep")
+    assert body == {
+        "sessionPrivateKey": SESSION_PRIVATE_KEY,
+        "destinationAddress": DESTINATION_ADDRESS,
+        "chain": "robinhood",
+    }
+    assert timeout == 90
+
+
+def test_sweep_session_key_defaults_chain_to_ethereum(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: calls.append(json) or _FakeResponse(200, {"success": True}),
+    )
+
+    node_client.sweep_session_key(SESSION_PRIVATE_KEY, DESTINATION_ADDRESS)
+
+    assert calls[0]["chain"] == "ethereum"
+
+
+def test_sweep_session_key_returns_nothing_to_sweep_as_a_normal_dict_not_an_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    nothing_to_sweep = {
+        "success": False, "txHash": None, "amountSweptWei": None,
+        "error": "Balance (100 wei) does not exceed the estimated gas cost (21000000000000 wei) — nothing worth sweeping",
+    }
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(200, nothing_to_sweep),
+    )
+
+    result = node_client.sweep_session_key(SESSION_PRIVATE_KEY, DESTINATION_ADDRESS)
+
+    assert result == nothing_to_sweep
+
+
+def test_sweep_session_key_raises_runtime_error_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int):
+        raise node_client._req.exceptions.ConnectionError()
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="Node wallet-helper is not running on port 3456"):
+        node_client.sweep_session_key(SESSION_PRIVATE_KEY, DESTINATION_ADDRESS)
+
+
+def test_sweep_session_key_raises_runtime_error_on_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(500, {"error": "bad request"}),
+    )
+
+    with pytest.raises(RuntimeError, match="bad request"):
+        node_client.sweep_session_key(SESSION_PRIVATE_KEY, DESTINATION_ADDRESS)
+
+
 # ── get_recent_public_drop_updates ───────────────────────────────────────
 
 def test_get_recent_public_drop_updates_returns_result_on_success(

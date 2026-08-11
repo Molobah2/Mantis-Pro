@@ -598,6 +598,98 @@ def test_revoked_grant_can_no_longer_be_armed() -> None:
     assert "error" in result
 
 
+# ── sweep_grant ──────────────────────────────────────────────────────────
+
+def test_sweep_grant_succeeds_for_owners_own_grant(monkeypatch: pytest.MonkeyPatch) -> None:
+    grant_id = _make_grant()
+    calls = []
+
+    def fake_sweep(session_private_key, destination_address, chain):
+        calls.append((session_private_key, destination_address, chain))
+        return {"success": True, "txHash": "0x1", "amountSweptWei": "123"}
+
+    monkeypatch.setattr(firing.node_client, "sweep_session_key", fake_sweep)
+
+    result = firing.sweep_grant(grant_id, OWNER)
+
+    assert result == {"success": True, "txHash": "0x1", "amountSweptWei": "123"}
+    assert len(calls) == 1
+    key, destination, chain = calls[0]
+    assert key == "dummy-serialized-approval"
+    assert destination == OWNER
+    assert chain == "ethereum"  # CONTRACT was never tracked in this test
+
+
+def test_sweep_grant_wrong_owner_returns_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    grant_id = _make_grant()
+    monkeypatch.setattr(firing.node_client, "sweep_session_key", lambda *a, **k: {"success": True})
+
+    result = firing.sweep_grant(grant_id, "0xSomeoneElse0000000000000000000000000000")
+
+    assert "error" in result
+
+
+def test_sweep_grant_unknown_id_returns_error() -> None:
+    result = firing.sweep_grant(999999, OWNER)
+
+    assert "error" in result
+
+
+def test_sweep_grant_works_even_if_already_revoked(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Sweeping must still work after revoke — revoke has zero on-chain
+    # effect, so a revoked grant's key can still hold real, recoverable ETH.
+    grant_id = _make_grant()
+    firing.revoke_grant(grant_id, OWNER)
+    monkeypatch.setattr(
+        firing.node_client, "sweep_session_key",
+        lambda *a, **k: {"success": True, "txHash": "0x1", "amountSweptWei": "1"},
+    )
+
+    result = firing.sweep_grant(grant_id, OWNER)
+
+    assert result.get("success") is True
+
+
+def test_sweep_grant_resolves_chain_from_tracked_drop(monkeypatch: pytest.MonkeyPatch) -> None:
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="robinhood-drop", name="Robinhood Drop", contract_address=CONTRACT,
+        mint_page_url="https://opensea.io/collection/robinhood-drop",
+        source="manual", stage_data="{}", chain="robinhood",
+    ))
+    grant_id = _make_grant(targets=[CONTRACT])
+    calls = []
+    monkeypatch.setattr(
+        firing.node_client, "sweep_session_key",
+        lambda key, dest, chain: calls.append(chain) or {"success": True},
+    )
+
+    firing.sweep_grant(grant_id, OWNER)
+
+    assert calls == ["robinhood"]
+
+
+def test_sweep_grant_decrypt_failure_returns_error() -> None:
+    grant_id = _make_grant(encrypted_session_key="not-valid-ciphertext")
+
+    result = firing.sweep_grant(grant_id, OWNER)
+
+    assert "error" in result
+
+
+def test_sweep_grant_propagates_node_helper_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    grant_id = _make_grant()
+
+    def raise_runtime_error(*a, **k):
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+
+    monkeypatch.setattr(firing.node_client, "sweep_session_key", raise_runtime_error)
+
+    result = firing.sweep_grant(grant_id, OWNER)
+
+    assert "error" in result
+    assert "3456" in result["error"]
+
+
 # ── _fire_signed_presale ─────────────────────────────────────────────────
 
 _AUTH = {

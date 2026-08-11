@@ -83,3 +83,16 @@ def build_revoke_grant_message(grant_id: int, timestamp: int) -> str:
         f"grantId: {grant_id}\n"
         f"timestamp: {timestamp}"
     )
+
+
+def build_sweep_grant_message(grant_id: int, timestamp: int) -> str:
+    """The message an owner's wallet signs to authorize sweeping whatever
+    ETH is left in a session grant's key back to the owner's own connected
+    wallet — the actual fix for revoke's "does not sweep any ETH" gap (see
+    firing.sweep_grant)."""
+    return (
+        "Mantis Pro OpenSea Auto-Mint\n"
+        "action: sweep-grant\n"
+        f"grantId: {grant_id}\n"
+        f"timestamp: {timestamp}"
+    )

@@ -774,6 +774,183 @@ def test_revoke_grant_malformed_json_body_returns_400_not_500(client) -> None:
     assert "error" in resp.get_json()
 
 
+# ── POST /api/opensea/session-grant/<id>/sweep ───────────────────────────
+
+SWEEP_OWNER = "0x" + "e5" * 20
+SWEEP_SIGNATURE = "0x" + "ab" * 65
+
+
+def _valid_sweep_grant_payload() -> dict:
+    return {"ownerAddress": SWEEP_OWNER, "signature": SWEEP_SIGNATURE, "timestamp": time.time()}
+
+
+def _mock_sweep_signature_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(node_client, "verify_owner_signature", lambda *a, **k: True)
+
+
+def test_sweep_grant_valid_request_returns_200(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_sweep_signature_valid(monkeypatch)
+    monkeypatch.setattr(
+        firing, "sweep_grant",
+        lambda grant_id, owner: {"success": True, "txHash": "0x1", "amountSweptWei": "1000"},
+    )
+
+    resp = client.post("/api/opensea/session-grant/5/sweep", json=_valid_sweep_grant_payload())
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"success": True, "txHash": "0x1", "amountSweptWei": "1000"}
+
+
+def test_sweep_grant_firing_error_returns_400(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_sweep_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "sweep_grant", lambda grant_id, owner: {"error": "Session grant not found"})
+
+    resp = client.post("/api/opensea/session-grant/5/sweep", json=_valid_sweep_grant_payload())
+
+    assert resp.status_code == 400
+
+
+def test_sweep_grant_invalid_owner_address_returns_400_without_calling_sweep_grant(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    calls = []
+    monkeypatch.setattr(
+        firing, "sweep_grant", lambda grant_id, owner: calls.append(1) or {"success": True},
+    )
+
+    payload = _valid_sweep_grant_payload()
+    payload["ownerAddress"] = "not-an-address"
+    resp = client.post("/api/opensea/session-grant/5/sweep", json=payload)
+
+    assert resp.status_code == 400
+    assert calls == []
+
+
+def test_sweep_grant_invalid_signature_returns_401_and_never_calls_sweep_grant(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    calls = []
+    monkeypatch.setattr(node_client, "verify_owner_signature", lambda *a, **k: False)
+    monkeypatch.setattr(
+        firing, "sweep_grant", lambda grant_id, owner: calls.append(1) or {"success": True},
+    )
+
+    resp = client.post("/api/opensea/session-grant/5/sweep", json=_valid_sweep_grant_payload())
+
+    assert resp.status_code == 401
+    assert calls == []
+
+
+def test_sweep_grant_stale_signature_timestamp_returns_401(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opensea_automint import firing
+
+    verify_calls = []
+    monkeypatch.setattr(
+        node_client, "verify_owner_signature", lambda *a, **k: verify_calls.append(1) or True,
+    )
+    monkeypatch.setattr(firing, "sweep_grant", lambda grant_id, owner: {"success": True})
+
+    payload = _valid_sweep_grant_payload()
+    payload["timestamp"] = time.time() - firing.SIGNATURE_MAX_AGE_SECONDS - 100
+    resp = client.post("/api/opensea/session-grant/5/sweep", json=payload)
+
+    assert resp.status_code == 401
+    assert verify_calls == []
+
+
+def test_sweep_grant_node_helper_failure_returns_502(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    def raise_runtime_error(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+
+    monkeypatch.setattr(node_client, "verify_owner_signature", raise_runtime_error)
+
+    resp = client.post("/api/opensea/session-grant/5/sweep", json=_valid_sweep_grant_payload())
+
+    assert resp.status_code == 502
+    assert "error" in resp.get_json()
+
+
+def test_sweep_grant_rate_limits_after_threshold(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from opensea_automint import firing
+
+    _mock_sweep_signature_valid(monkeypatch)
+    monkeypatch.setattr(firing, "sweep_grant", lambda grant_id, owner: {"success": True})
+
+    last_resp = None
+    for _ in range(21):
+        last_resp = client.post("/api/opensea/session-grant/5/sweep", json=_valid_sweep_grant_payload())
+
+    assert last_resp.status_code == 429
+
+
+def test_sweep_grant_malformed_json_body_returns_400_not_500(client) -> None:
+    resp = client.post(
+        "/api/opensea/session-grant/5/sweep", data="not-json{{{", content_type="application/json",
+    )
+
+    assert resp.status_code == 400
+    assert "error" in resp.get_json()
+
+
+# ── GET /api/opensea/session-grant/active ────────────────────────────────
+
+def test_active_session_grant_returns_grant_when_one_exists(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owner = "0x" + "e5" * 20
+    monkeypatch.setattr(
+        store, "get_active_session_grant",
+        lambda addr: {
+            "id": 7, "session_address": "0x" + "b2" * 20,
+            "allowed_targets": json.dumps(["0x" + "d4" * 20]),
+            "value_cap_wei": "50000000000000000", "expires_at": time.time() + 3600,
+        },
+    )
+
+    resp = client.get("/api/opensea/session-grant/active?owner=" + owner)
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["grant"]["grantId"] == 7
+    assert body["grant"]["sessionAddress"] == "0x" + "b2" * 20
+    assert body["grant"]["nftContract"] == "0x" + "d4" * 20
+    assert body["grant"]["valueCapWei"] == "50000000000000000"
+
+
+def test_active_session_grant_returns_null_when_none_exists(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owner = "0x" + "e5" * 20
+    monkeypatch.setattr(store, "get_active_session_grant", lambda addr: None)
+
+    resp = client.get("/api/opensea/session-grant/active?owner=" + owner)
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"grant": None}
+
+
+def test_active_session_grant_invalid_owner_returns_400(client) -> None:
+    resp = client.get("/api/opensea/session-grant/active?owner=not-an-address")
+
+    assert resp.status_code == 400
+
+
+def test_active_session_grant_missing_owner_returns_400(client) -> None:
+    resp = client.get("/api/opensea/session-grant/active")
+
+    assert resp.status_code == 400
+
+
 # ── POST /api/opensea/arm ────────────────────────────────────────────────
 
 ARM_OWNER = "0x" + "e5" * 20

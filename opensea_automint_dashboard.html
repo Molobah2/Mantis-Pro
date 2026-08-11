@@ -502,6 +502,20 @@
     opacity: 0.6;
     cursor: not-allowed;
   }
+  .fund-box-sweep {
+    cursor: pointer;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    color: var(--accent);
+    font-size: 11px;
+    padding: 6px 10px;
+    font-family: inherit;
+  }
+  .fund-box-sweep:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
   .fund-box-note {
     font-size: 11.5px;
     color: var(--t2);
@@ -836,7 +850,32 @@ function renderModalDetails(details, requestedForSlug, drop) {
   // the section shows a "connect your wallet" notice instead.
   if (currentModalContractAddress && document.getElementById('grant-expiry')) {
     initGrantExpiry(currentModalContractAddress);
+    initActiveGrantCheck(currentModalContractAddress);
   }
+}
+
+// Swaps the plain "Grant Minting Permission" form for the fund/revoke/
+// sweep box when the connected owner already has an active grant for this
+// exact contract — without this, a page refresh (or reopening the modal)
+// always showed the plain form again even though a grant already existed
+// server-side, making Revoke/Sweep look unavailable for anything but a
+// grant made earlier in the SAME page load.
+function initActiveGrantCheck(contractAddress) {
+  if (!window.__ethOwnerAddress || !contractAddress) return;
+  fetch('/api/opensea/session-grant/active?owner=' + encodeURIComponent(window.__ethOwnerAddress))
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var grant = data && data.grant;
+      if (!grant || !grant.nftContract) return;
+      if (grant.nftContract.toLowerCase() !== contractAddress.toLowerCase()) return;
+      // The modal may have been closed/switched while this fetch was in flight.
+      if (currentModalContractAddress !== contractAddress) return;
+      var container = document.getElementById('grant-section-container');
+      if (!container) return;
+      var maxEthStr = (Number(grant.valueCapWei) / 1e18).toString();
+      container.innerHTML = renderFundBoxHtml(grant.sessionAddress, maxEthStr, grant.grantId);
+    })
+    .catch(function () {}); // best-effort — plain grant form stays visible on failure
 }
 
 // ── Grant permission (session key) ──────────────────────────────────────
@@ -961,6 +1000,7 @@ function refreshGrantSectionIfOpen() {
   container.innerHTML = renderGrantSection(currentModalDrop, currentModalContractAddress);
   if (currentModalContractAddress && document.getElementById('grant-expiry')) {
     initGrantExpiry(currentModalContractAddress);
+    initActiveGrantCheck(currentModalContractAddress);
   }
 
   var armContainer = document.getElementById('arm-section-container');
@@ -1052,9 +1092,10 @@ function renderFundBoxHtml(sessionAddress, maxEthStr, grantId) {
       'It signs and broadcasts the mint transaction directly — nothing will fire until it holds real ETH.</div>' +
       '<div class="fund-box-row">' +
         '<button type="button" class="fund-box-revoke" data-grant-id="' + esc(grantId) + '">Revoke Permission</button>' +
+        '<button type="button" class="fund-box-sweep" data-grant-id="' + esc(grantId) + '">Sweep Remaining Balance</button>' +
       '</div>' +
       '<div class="fund-box-note">Revoking only stops this app from using the key again — it does not move any ETH ' +
-      'already sent to this address. Withdraw any remaining balance yourself once you’re done minting.</div>' +
+      'already sent to this address. Use Sweep to send whatever is left back to your connected wallet.</div>' +
     '</div>'
   );
 }
@@ -1108,6 +1149,57 @@ async function handleRevokeGrantClick(btn) {
   }
 }
 
+// Must build byte-for-byte the same message text as opensea_automint/
+// messages.py's build_sweep_grant_message — same reasoning as
+// buildRevokeGrantMessage above.
+function buildSweepGrantMessage(grantId, timestamp) {
+  return 'Mantis Pro OpenSea Auto-Mint\n' +
+    'action: sweep-grant\n' +
+    'grantId: ' + grantId + '\n' +
+    'timestamp: ' + timestamp;
+}
+
+async function handleSweepGrantClick(btn) {
+  var grantId = btn.getAttribute('data-grant-id');
+  if (!grantId || !window.__ethOwnerAddress || !window.signOwnerMessage) return;
+
+  var box = btn.closest('.fund-box');
+  var timestamp = Math.floor(Date.now() / 1000);
+
+  btn.disabled = true;
+  btn.textContent = 'Sweeping…';
+
+  try {
+    var signature = await window.signOwnerMessage(buildSweepGrantMessage(grantId, timestamp));
+
+    var res = await fetch('/api/opensea/session-grant/' + encodeURIComponent(grantId) + '/sweep', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ownerAddress: window.__ethOwnerAddress,
+        signature: signature,
+        timestamp: timestamp,
+      }),
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok || body.success === false) throw new Error(body.error || ('API ' + res.status));
+
+    if (box) {
+      var note = document.createElement('div');
+      note.className = 'fund-box-note';
+      var ethSwept = body.amountSweptWei ? (Number(body.amountSweptWei) / 1e18) : null;
+      note.textContent = ethSwept
+        ? ('Swept ' + ethSwept + ' ETH back to your wallet. Tx: ' + body.txHash)
+        : 'Swept — see transaction for details.';
+      box.appendChild(note);
+    }
+    btn.textContent = 'Swept';
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Sweep failed: ' + (err && err.message ? err.message : String(err));
+  }
+}
+
 document.addEventListener('click', function (e) {
   var copyBtn = e.target && e.target.closest && e.target.closest('.fund-box-copy');
   if (copyBtn) {
@@ -1123,6 +1215,8 @@ document.addEventListener('click', function (e) {
   }
   var revokeBtn = e.target && e.target.closest && e.target.closest('.fund-box-revoke');
   if (revokeBtn) handleRevokeGrantClick(revokeBtn);
+  var sweepBtn = e.target && e.target.closest && e.target.closest('.fund-box-sweep');
+  if (sweepBtn) handleSweepGrantClick(sweepBtn);
 });
 
 // ── Arm Auto-Mint ──────────────────────────────────────────────────────

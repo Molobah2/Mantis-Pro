@@ -664,3 +664,102 @@ export async function fireSignedMint(params: FireSignedMintParams): Promise<Fire
     feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER
   );
 }
+
+export interface SweepBalanceParams {
+  sessionPrivateKey: `0x${string}`;
+  destinationAddress: Address;
+  chain?: ChainName;
+}
+
+export interface SweepBalanceResult {
+  success: boolean;
+  txHash: string | null;
+  amountSweptWei: string | null;
+  error?: string;
+}
+
+/**
+ * Sends whatever ETH is left in a session key's own address to
+ * destinationAddress (the owner's connected wallet) — the only way to
+ * recover funds left behind after a grant is revoked or superseded, since
+ * revoking itself has zero on-chain effect. Gas is estimated fresh (a
+ * plain transfer to an EOA is normally exactly 21000, but estimated rather
+ * than hardcoded for the same reason fireMint estimates rather than
+ * assumes — chain-specific overhead, e.g. an L1 data-fee component on some
+ * L2s, should never be guessed at).
+ *
+ * Returns {success: false, error: "..."} WITHOUT ever sending when the
+ * balance doesn't exceed the estimated gas cost — a real, non-exceptional
+ * "nothing worth sweeping" outcome, not an error to alarm over.
+ */
+export async function sweepBalance(params: SweepBalanceParams): Promise<SweepBalanceResult> {
+  const chainName: ChainName = params.chain ?? "ethereum";
+  const { chain, rpc } = CHAIN_CONFIGS[chainName];
+  const publicClient = getPublicClient(chainName);
+  const account = privateKeyToAccount(params.sessionPrivateKey);
+
+  const [balance, nonce, feesPerGas] = await Promise.all([
+    publicClient.getBalance({ address: account.address }),
+    publicClient.getTransactionCount({ address: account.address, blockTag: "pending" }),
+    publicClient.estimateFeesPerGas(),
+  ]);
+
+  const maxFeePerGas = feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER;
+  const maxPriorityFeePerGas = feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER;
+
+  let gas: bigint;
+  try {
+    // The gas cost of a plain ETH transfer doesn't depend on the amount —
+    // probe with 1 wei so this works even when balance is tiny.
+    const estimated = await publicClient.estimateGas({
+      account: account.address,
+      to: params.destinationAddress,
+      value: 1n,
+    });
+    gas = (estimated * (100n + GAS_ESTIMATE_BUFFER_PERCENT)) / 100n;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, txHash: null, amountSweptWei: null, error: `Gas estimation failed: ${msg}` };
+  }
+
+  const gasCost = gas * maxFeePerGas;
+  if (balance <= gasCost) {
+    return {
+      success: false, txHash: null, amountSweptWei: null,
+      error: `Balance (${balance} wei) does not exceed the estimated gas cost (${gasCost} wei) — nothing worth sweeping`,
+    };
+  }
+  const amountToSend = balance - gasCost;
+
+  const walletClient = createWalletClient({ account, chain, transport: http(rpc) });
+  let txHash: `0x${string}`;
+  try {
+    txHash = await walletClient.sendTransaction({
+      to: params.destinationAddress,
+      value: amountToSend,
+      nonce,
+      gas,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, txHash: null, amountSweptWei: null, error: msg };
+  }
+
+  try {
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: RECEIPT_TIMEOUT_MS });
+    return {
+      success: receipt.status === "success",
+      txHash,
+      amountSweptWei: receipt.status === "success" ? amountToSend.toString() : null,
+      error: receipt.status === "success" ? undefined : "Transaction included on-chain but reverted",
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false, txHash, amountSweptWei: null,
+      error: `Submitted but receipt not confirmed within timeout: ${msg}`,
+    };
+  }
+}

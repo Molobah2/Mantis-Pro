@@ -288,6 +288,83 @@ def api_revoke_grant(grant_id: int) -> Response:
     return jsonify(result), 200
 
 
+_SWEEP_GRANT_RATE_LIMIT = 20
+_SWEEP_GRANT_RATE_WINDOW_SECONDS = 3600
+_SWEEP_GRANT_RATE_KEY = "sweep-grant"
+
+
+@opensea_automint_bp.route("/api/opensea/session-grant/<int:grant_id>/sweep", methods=["POST"])
+def api_sweep_grant(grant_id: int) -> Response:
+    """Sends whatever ETH is left in a session grant's key back to the
+    owner's own connected wallet — see firing.sweep_grant. This is the
+    actual fix for revoke's "does not sweep any ETH" gap: revoking alone
+    leaves funds stranded at an address the owner never sees the private
+    key for (it's generated client-side and sent to the server exactly
+    once, never displayed or exported).
+
+    Requires the same signature-based proof of ownership as api_revoke_grant
+    — a grant id is a small, sequential, otherwise-guessable integer."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _SWEEP_GRANT_RATE_KEY,
+        limit=_SWEEP_GRANT_RATE_LIMIT, window=_SWEEP_GRANT_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    body = request.get_json(silent=True) or {}
+
+    validation_error = security.validate_sweep_grant_input(body)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    if not firing.is_signature_timestamp_fresh(body["timestamp"]):
+        return jsonify({"error": "Signature has expired — please try again"}), 401
+
+    message = messages.build_sweep_grant_message(grant_id, body["timestamp"])
+    try:
+        signature_valid = node_client.verify_owner_signature(
+            body["ownerAddress"], message, body["signature"],
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    if not signature_valid:
+        return jsonify({"error": "Invalid signature — could not verify wallet ownership"}), 401
+
+    result = firing.sweep_grant(grant_id, body["ownerAddress"])
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
+@opensea_automint_bp.route("/api/opensea/session-grant/active")
+def api_active_session_grant() -> Response:
+    """Read-only lookup of an owner's current active (non-revoked, non-
+    expired) session grant, if any — used by the dashboard to re-render the
+    fund/revoke/sweep box when a modal is reopened or the page is
+    refreshed, instead of that box only ever appearing immediately after a
+    fresh grant call in the same page load (the gap that made Revoke and
+    Sweep look unavailable for an already-granted session after a reload).
+
+    No signature required — nothing returned here is sensitive; the
+    encrypted session key itself is never included."""
+    owner_address = request.args.get("owner", "")
+    if not isinstance(owner_address, str) or not security.ETH_ADDR_RE.match(owner_address):
+        return jsonify({"error": "Valid owner address required"}), 400
+
+    grant = store.get_active_session_grant(owner_address)
+    if not grant:
+        return jsonify({"grant": None})
+
+    allowed_targets = json.loads(grant["allowed_targets"])
+    return jsonify({"grant": {
+        "grantId": grant["id"],
+        "sessionAddress": grant["session_address"],
+        "nftContract": allowed_targets[0] if allowed_targets else None,
+        "valueCapWei": grant["value_cap_wei"],
+        "expiresAt": grant["expires_at"],
+    }})
+
+
 _ARM_RATE_LIMIT = 10
 _ARM_RATE_WINDOW_SECONDS = 3600
 _ARM_RATE_KEY = "arm-drop"

@@ -255,3 +255,23 @@ def validate_revoke_grant_input(body: dict) -> Optional[str]:
         return timestamp_error
 
     return None
+
+
+def validate_sweep_grant_input(body: dict) -> Optional[str]:
+    """Validate a sweep-grant POST body ({ownerAddress, signature,
+    timestamp}) BEFORE any DB touch. Identical shape to
+    validate_revoke_grant_input — the grant id comes from the URL path, not
+    the body — see messages.build_sweep_grant_message."""
+    owner_address = body.get("ownerAddress", "")
+    if not isinstance(owner_address, str) or not ETH_ADDR_RE.match(owner_address):
+        return "Invalid ownerAddress format"
+
+    signature_error = _validate_signature(body.get("signature"))
+    if signature_error:
+        return signature_error
+
+    timestamp_error = _validate_timestamp(body.get("timestamp"))
+    if timestamp_error:
+        return timestamp_error
+
+    return None

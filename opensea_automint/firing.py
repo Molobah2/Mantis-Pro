@@ -299,6 +299,47 @@ def revoke_grant(grant_id: int, owner_address: str) -> dict:
     return {"revoked": True}
 
 
+def sweep_grant(grant_id: int, owner_address: str) -> dict:
+    """Sends whatever ETH is left in a session grant's key back to the
+    owner's own connected wallet — the actual fix for revoke_grant's "does
+    not sweep any ETH" gap. Works whether or not the grant has already been
+    revoked (a superseded/revoked grant's key can still hold real, real-
+    world-recoverable ETH; there's no reason to block sweeping it back).
+
+    chain is resolved from the grant's own target contract (the first entry
+    in allowed_targets — a grant is always scoped to exactly one contract,
+    see api_session_grant) via store.get_tracked_drop_by_contract_address,
+    defaulting to "ethereum" when that contract isn't (or is no longer)
+    tracked, matching every other chain-resolution call site in this file.
+
+    Returns node_client.sweep_session_key's result shape, or {"error": str}
+    for an ownership/lookup/decryption failure before ever touching the
+    key. Never raises for a real, expected outcome — a balance too small to
+    be worth sweeping comes back as a normal {"success": False, "error":
+    "..."} result, not an exception."""
+    grant = store.get_session_grant(grant_id)
+    if not grant or grant["owner_address"] != owner_address.lower():
+        return {"error": "Session grant not found"}
+
+    try:
+        decrypted_key = decrypt_secret(grant["encrypted_session_key"])
+    except ValueError as e:
+        logger.error("[firing] sweep grant %d: could not decrypt session key: %s", grant_id, e)
+        return {"error": "Could not decrypt session key"}
+
+    chain = "ethereum"
+    allowed_targets = json.loads(grant["allowed_targets"])
+    if allowed_targets:
+        tracked = store.get_tracked_drop_by_contract_address(allowed_targets[0])
+        if tracked:
+            chain = tracked.get("chain") or "ethereum"
+
+    try:
+        return node_client.sweep_session_key(decrypted_key, owner_address, chain)
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
 def cancel_arm(arm_id: int, owner_address: str) -> dict:
     """Cancels an arm request — only while it hasn't fired yet, and only
     for the owner who created it. Returns {"cancelled": bool} or

@@ -7,6 +7,7 @@ import {
   fireSignedMint,
   getPublicDropWindow,
   getRecentPublicDropUpdates,
+  sweepBalance,
   type ChainName,
   type SignedMintParamsInput,
 } from "./ethClient.js";
@@ -303,6 +304,42 @@ openSeaRouter.post("/eth/fire-signed-mint", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[opensea:fire-signed-mint]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// POST /eth/sweep — sends whatever ETH is left in a session key's own
+// address back to the owner's connected wallet. Only ever called from
+// Flask's own server-side sweep route (signature-gated there), same trust
+// posture as /eth/fire-mint — this process only listens on loopback.
+openSeaRouter.post("/eth/sweep", async (req, res) => {
+  const { sessionPrivateKey, destinationAddress, chain } = req.body as {
+    sessionPrivateKey?: string;
+    destinationAddress?: string;
+    chain?: string;
+  };
+
+  if (!sessionPrivateKey || !isHex(sessionPrivateKey) || sessionPrivateKey.length !== 66) {
+    return res.status(400).json({ error: "Valid sessionPrivateKey required" });
+  }
+  if (!destinationAddress || !isAddress(destinationAddress)) {
+    return res.status(400).json({ error: "Valid destinationAddress required" });
+  }
+  const chainName = parseChain(chain);
+  if (!chainName) {
+    return res.status(400).json({ error: `chain must be one of: ${KNOWN_CHAINS.join(", ")}` });
+  }
+
+  try {
+    const result = await sweepBalance({
+      sessionPrivateKey: sessionPrivateKey as `0x${string}`,
+      destinationAddress: destinationAddress as Address,
+      chain: chainName,
+    });
+    return res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[opensea:sweep]", msg);
     return res.status(500).json({ error: msg });
   }
 });
