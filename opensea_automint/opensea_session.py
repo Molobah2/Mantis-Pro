@@ -152,25 +152,91 @@ def fetch_drop_eligibility(collection_slug: str, owner_address: str) -> list[dic
 def fetch_signed_mint_authorization(
     collection_slug: str, owner_address: str, stage_index: int
 ) -> dict | None:
-    """NOT YET WIRED. The actual GraphQL operation (name/variables/
-    persisted-query hash) that returns a fireable {mintParams, salt,
-    signature} for a SIGNED_PRESALE stage hasn't been captured yet —
-    OpenSea only reveals it once a stage is actually live and a connected,
-    eligible wallet starts the mint flow client-side (see
-    RESEARCH_NOTES.md). fetch_drop_eligibility (above) only confirms
-    eligibility; it does not carry a signature.
-
-    Always returns None until this is filled in with the real captured
-    request — firing.py treats that identically to "not available this
-    attempt" and fails the arm request with a clear reason, never firing
-    blind. Expected return shape once implemented: {"mintPrice": str,
-    "maxTotalMintableByWallet": str, "startTime": str, "endTime": str,
-    "dropStageIndex": str, "maxTokenSupplyForStage": str, "feeBps": str,
-    "restrictFeeRecipients": bool, "salt": str, "signature": "0x..."}.
-    """
+    """NOT YET WIRED. Superseded by fetch_mint_transaction_data below —
+    kept only because firing.py's _fire_signed_presale still calls it (that
+    caller is being migrated to the new function in the same change that
+    adds it). Always returns None."""
     logger.warning(
         "[opensea_session] fetch_signed_mint_authorization not yet implemented "
         "(collection=%s owner=%s stage=%d) — signed-mint stages cannot fire yet",
         collection_slug, owner_address, stage_index,
     )
     return None
+
+
+# Captured 2026-08-12 from a LIVE, real GTD allowlist mint (NUMBERS on
+# Robinhood Chain) — confirmed working end-to-end: decoding the returned
+# transactionSubmissionData.data against SeaDrop's own mintSigned() ABI
+# byte-for-byte matched the exact fields expected (nftContract,
+# feeRecipient, mintParams, salt, signature). Persisted-query hashes are
+# stable per query TEXT (not per session/user), so this is safe to hardcode
+# and reuse for any collection/wallet — same reasoning as
+# _DROP_ELIGIBILITY_SHA256 above.
+_MINT_ACTION_TIMELINE_SHA256 = "55e2f535d4b2f2ef95cfc4f349632e1f225647d1a6b1c7e652b768d595af16f3"
+
+_NATIVE_TOKEN_PLACEHOLDER_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+
+def fetch_mint_transaction_data(
+    owner_address: str, nft_contract_address: str, quantity: int, chain: str = "ethereum",
+) -> dict | None:
+    """Replays OpenSea's MintActionTimelineQuery for one wallet + collection
+    + quantity — the real request OpenSea's own frontend fires when a
+    connected, ELIGIBLE wallet starts a mint. owner_address here is the
+    wallet whose eligibility gets checked (verified live: it does NOT need
+    to be the wallet that ends up submitting the transaction — the returned
+    calldata's minterIfNotPayer was the zero address, meaning "whoever
+    pays/submits this is the minter"). This is what lets the OWNER's real,
+    allowlisted wallet authorize a mint that the SESSION KEY later fires.
+
+    Unlike fetch_signed_mint_authorization's original plan (return
+    mintParams/salt/signature for OUR OWN ABI encoding), this returns
+    OpenSea's own already-ABI-encoded transaction — {"to": str, "data":
+    "0x...", "valueWei": str} — ready to sign and send as-is. Verified live
+    2026-08-12: decoding that "data" against SeaDrop's mintSigned() ABI
+    matched perfectly, but nothing here or in the caller assumes that
+    specifically — this only ever relays whatever real, OpenSea-authorized
+    transaction the response contains, whatever contract/function it
+    targets.
+
+    Returns None on ANY failure (no session configured, network error,
+    non-200, GraphQL errors, not eligible, or an unexpected response
+    shape) — never raises. A None here is a normal, expected "can't fire
+    this attempt" outcome for firing.py, not a bug."""
+    variables = {
+        "address": owner_address.lower(),
+        "capabilities": {"eip7702": False},
+        "fromAssets": [{"asset": {"chain": chain, "contractAddress": _NATIVE_TOKEN_PLACEHOLDER_ADDRESS}}],
+        "toAssets": [{
+            "asset": {"chain": chain, "contractAddress": nft_contract_address.lower(), "tokenId": "0"},
+            "quantity": str(quantity),
+        }],
+    }
+    data = _persisted_query_get("MintActionTimelineQuery", variables, _MINT_ACTION_TIMELINE_SHA256)
+    if not data:
+        return None
+
+    swap = data.get("swap")
+    if not isinstance(swap, dict):
+        return None
+    if swap.get("errors"):
+        logger.warning("[opensea_session] MintActionTimelineQuery returned swap errors: %s", swap["errors"])
+        return None
+
+    actions = swap.get("actions")
+    if not isinstance(actions, list) or not actions:
+        return None
+    action = actions[0]
+    if not isinstance(action, dict) or action.get("__typename") != "MintAction":
+        return None
+
+    tx_data = action.get("transactionSubmissionData")
+    if not isinstance(tx_data, dict):
+        return None
+    to = tx_data.get("to")
+    call_data = tx_data.get("data")
+    value = tx_data.get("value")
+    if not isinstance(to, str) or not isinstance(call_data, str) or value is None:
+        return None
+
+    return {"to": to, "data": call_data, "valueWei": str(value)}

@@ -9,6 +9,7 @@ import {
   getRecentPublicDropUpdates,
   sweepBalance,
   transferMintedNfts,
+  fireRawTransaction,
   type ChainName,
   type SignedMintParamsInput,
 } from "./ethClient.js";
@@ -387,6 +388,59 @@ openSeaRouter.post("/eth/transfer-minted-nft", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[opensea:transfer-minted-nft]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// POST /eth/fire-raw-transaction — signs and sends a transaction EXACTLY as
+// built by OpenSea's own backend (opensea_session.fetch_mint_transaction_data)
+// — no ABI encoding happens here. Same trust posture as every other spend
+// route in this file: only ever called from Flask's own server-side route
+// over loopback.
+openSeaRouter.post("/eth/fire-raw-transaction", async (req, res) => {
+  const { sessionPrivateKey, to, data, valueWei, chain } = req.body as {
+    sessionPrivateKey?: string;
+    to?: string;
+    data?: string;
+    valueWei?: string;
+    chain?: string;
+  };
+
+  if (!sessionPrivateKey || !isHex(sessionPrivateKey) || sessionPrivateKey.length !== 66) {
+    return res.status(400).json({ error: "Valid sessionPrivateKey required" });
+  }
+  if (!to || !isAddress(to)) {
+    return res.status(400).json({ error: "Valid to address required" });
+  }
+  if (!data || !isHex(data)) {
+    return res.status(400).json({ error: "Valid data required" });
+  }
+  let valueWeiBig: bigint;
+  try {
+    valueWeiBig = BigInt(valueWei ?? "");
+  } catch {
+    return res.status(400).json({ error: "valueWei must be a numeric string" });
+  }
+  if (valueWeiBig < 0n) {
+    return res.status(400).json({ error: "valueWei must be non-negative" });
+  }
+  const chainName = parseChain(chain);
+  if (!chainName) {
+    return res.status(400).json({ error: `chain must be one of: ${KNOWN_CHAINS.join(", ")}` });
+  }
+
+  try {
+    const result = await fireRawTransaction({
+      sessionPrivateKey: sessionPrivateKey as `0x${string}`,
+      to: to as Address,
+      data: data as `0x${string}`,
+      valueWei: valueWeiBig,
+      chain: chainName,
+    });
+    return res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[opensea:fire-raw-transaction]", msg);
     return res.status(500).json({ error: msg });
   }
 });

@@ -732,49 +732,51 @@ def _fire_one(arm: dict, drop: dict, grant: dict, go_live_at: float | None = Non
 
 
 def _fire_signed_presale(arm: dict, drop: dict, decrypted_approval: str, stage_label: str) -> dict:
-    """Fetches a FRESH mint authorization from OpenSea (never cached or
-    reused across attempts — a SeaDrop mintSigned() signature is single-use
-    per its own docs, and mintParams must be exactly what was signed) and,
-    if available, fires it via node_client.fire_signed_mint. Returns the
-    same result shape node_client.fire_mint/fire_signed_mint do.
+    """Fetches a FRESH, ready-to-sign transaction from OpenSea's own
+    backend for this stage (never cached or reused across attempts — the
+    underlying signature is single-use per SeaDrop's own docs) and, if
+    available, fires it via node_client.fire_raw_transaction. Returns the
+    same result shape node_client.fire_mint/fire_raw_transaction do.
 
-    If the authorization can't be fetched for ANY reason (OpenSea session
-    not configured, request failed, feature not yet wired — see
-    opensea_session.fetch_signed_mint_authorization), returns a normal,
-    non-exceptional, retryable failure result — this never fires blind
-    with fabricated or stale signed-mint data."""
-    stage_index = arm.get("stage_index")
-    if stage_index is None:
-        return {
-            "success": False, "txHash": None, "blockNumber": None, "gasUsed": None,
-            "error": f"No on-chain stage index resolved for stage {stage_label!r}",
-        }
+    Unlike the public-mint path, this never builds or ABI-encodes the mint
+    call itself — opensea_session.fetch_mint_transaction_data returns
+    OpenSea's own already-encoded {to, data, valueWei}, verified live
+    2026-08-12 against a real allowlist mint. The owner's own wallet
+    address is what OpenSea checks eligibility against (not the session
+    key's) — see that function's docstring for why that's still safe to
+    fire from the session key.
 
-    auth = opensea_session.fetch_signed_mint_authorization(
-        drop["collection_slug"], arm["owner_address"], stage_index,
+    If a transaction can't be fetched for ANY reason (OpenSea session not
+    configured, request failed, not eligible for this stage), returns a
+    normal, non-exceptional, retryable failure result — this never fires
+    blind with fabricated or stale data. The returned cost is checked
+    against arm's own max_price_wei cap BEFORE ever firing — OpenSea's
+    backend is trusted to build a VALID transaction, but not to enforce
+    what the owner actually authorized THIS APP to spend; that check is
+    this function's job, same as every other spend path in this codebase."""
+    chain = drop.get("chain") or "ethereum"
+
+    tx_data = opensea_session.fetch_mint_transaction_data(
+        arm["owner_address"], drop["contract_address"], arm["quantity"], chain,
     )
-    if not auth:
+    if not tx_data:
         return {
             "success": False, "txHash": None, "blockNumber": None, "gasUsed": None,
-            "error": f"Signed-mint authorization unavailable for stage {stage_label!r} on this attempt",
+            "error": f"Mint transaction unavailable for stage {stage_label!r} on this attempt",
         }
 
-    mint_params = {
-        "mintPrice": auth.get("mintPrice"),
-        "maxTotalMintableByWallet": auth.get("maxTotalMintableByWallet"),
-        "startTime": auth.get("startTime"),
-        "endTime": auth.get("endTime"),
-        "dropStageIndex": auth.get("dropStageIndex"),
-        "maxTokenSupplyForStage": auth.get("maxTokenSupplyForStage"),
-        "feeBps": auth.get("feeBps"),
-        "restrictFeeRecipients": auth.get("restrictFeeRecipients"),
-    }
+    value_wei = int(tx_data["valueWei"])
+    max_price_wei = int(arm["max_price_wei"])
+    if value_wei > max_price_wei:
+        return {
+            "success": False, "txHash": None, "blockNumber": None, "gasUsed": None,
+            "error": f"Real cost ({value_wei} wei) exceeds the granted spend cap "
+                     f"({max_price_wei} wei) — aborted before firing, nothing spent",
+        }
 
     try:
-        return node_client.fire_signed_mint(
-            decrypted_approval, drop["contract_address"], arm["quantity"], arm["max_price_wei"],
-            mint_params, auth.get("salt"), auth.get("signature"),
-            chain=drop.get("chain") or "ethereum",
+        return node_client.fire_raw_transaction(
+            decrypted_approval, tx_data["to"], tx_data["data"], tx_data["valueWei"], chain,
         )
     except RuntimeError as e:
         # Same ambiguous-vs-definite distinction as the public-mint path —

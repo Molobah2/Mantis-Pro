@@ -831,31 +831,21 @@ def test_transfer_minted_nft_propagates_node_helper_runtime_error(monkeypatch: p
 
 # ── _fire_signed_presale ─────────────────────────────────────────────────
 
-_AUTH = {
-    "mintPrice": "1000000000000000", "maxTotalMintableByWallet": "2",
-    "startTime": "1786100000", "endTime": "1786200000", "dropStageIndex": "1",
-    "maxTokenSupplyForStage": "4696", "feeBps": "0", "restrictFeeRecipients": True,
-    "salt": "12345", "signature": "0x" + "cd" * 65,
+_TX_DATA = {
+    "to": "0x00005EA00Ac477B1030CE78506496e8C2dE24bf5",
+    "data": "0x4b61cd6f" + "00" * 32,
+    "valueWei": "1000000000000000",
 }
 
 
-def test_fire_signed_presale_returns_failure_when_stage_index_missing() -> None:
-    arm = {"owner_address": OWNER, "stage_index": None}
-    drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
-
-    result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
-
-    assert result["success"] is False
-    assert "No on-chain stage index" in result["error"]
-
-
-def test_fire_signed_presale_returns_failure_when_authorization_unavailable(
+def test_fire_signed_presale_returns_failure_when_transaction_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        firing.opensea_session, "fetch_signed_mint_authorization", lambda slug, owner, idx: None,
+        firing.opensea_session, "fetch_mint_transaction_data",
+        lambda owner, contract, quantity, chain: None,
     )
-    arm = {"owner_address": OWNER, "stage_index": 1}
+    arm = {"owner_address": OWNER, "quantity": 1, "max_price_wei": "1000000000000000"}
     drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
 
     result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
@@ -864,53 +854,96 @@ def test_fire_signed_presale_returns_failure_when_authorization_unavailable(
     assert "unavailable" in result["error"]
 
 
-def test_fire_signed_presale_calls_fire_signed_mint_with_resolved_authorization(
+def test_fire_signed_presale_calls_fire_raw_transaction_with_fetched_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    fetch_calls = []
     monkeypatch.setattr(
-        firing.opensea_session, "fetch_signed_mint_authorization",
-        lambda slug, owner, idx: _AUTH,
+        firing.opensea_session, "fetch_mint_transaction_data",
+        lambda owner, contract, quantity, chain: fetch_calls.append(
+            (owner, contract, quantity, chain)
+        ) or _TX_DATA,
     )
     calls = []
 
-    def fake_fire_signed_mint(approval, contract, quantity, value_cap_wei, mint_params, salt, signature, chain=None):
-        calls.append((approval, contract, quantity, value_cap_wei, mint_params, salt, signature))
+    def fake_fire_raw_transaction(approval, to, data, value_wei, chain):
+        calls.append((approval, to, data, value_wei, chain))
         return {"success": True, "txHash": "0x1", "blockNumber": "1", "gasUsed": "1"}
 
-    monkeypatch.setattr(firing.node_client, "fire_signed_mint", fake_fire_signed_mint)
+    monkeypatch.setattr(firing.node_client, "fire_raw_transaction", fake_fire_raw_transaction)
 
-    arm = {"owner_address": OWNER, "stage_index": 1, "quantity": 2, "max_price_wei": "2000000000000000"}
+    arm = {"owner_address": OWNER, "quantity": 2, "max_price_wei": "2000000000000000"}
     drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
 
     result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
 
     assert result["success"] is True
+    assert fetch_calls == [(OWNER, CONTRACT, 2, "ethereum")]
     assert len(calls) == 1
-    approval, contract, quantity, value_cap_wei, mint_params, salt, signature = calls[0]
+    approval, to, data, value_wei, chain = calls[0]
     assert approval == "decrypted-key"
-    assert contract == CONTRACT
-    assert quantity == 2
-    assert value_cap_wei == "2000000000000000"
-    assert mint_params["mintPrice"] == _AUTH["mintPrice"]
-    assert mint_params["restrictFeeRecipients"] is True
-    assert salt == _AUTH["salt"]
-    assert signature == _AUTH["signature"]
+    assert to == _TX_DATA["to"]
+    assert data == _TX_DATA["data"]
+    assert value_wei == _TX_DATA["valueWei"]
+    assert chain == "ethereum"
+
+
+def test_fire_signed_presale_refuses_to_fire_when_cost_exceeds_spend_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_mint_transaction_data",
+        lambda owner, contract, quantity, chain: _TX_DATA,  # valueWei = 1_000_000_000_000_000
+    )
+    calls = []
+    monkeypatch.setattr(
+        firing.node_client, "fire_raw_transaction",
+        lambda *a, **k: calls.append(1) or {"success": True},
+    )
+
+    arm = {"owner_address": OWNER, "quantity": 1, "max_price_wei": "1"}  # cap far below real cost
+    drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
+
+    result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
+
+    assert result["success"] is False
+    assert "exceeds the granted spend cap" in result["error"]
+    assert calls == []  # never even attempted — caught before firing
+
+
+def test_fire_signed_presale_resolves_chain_from_drop(monkeypatch: pytest.MonkeyPatch) -> None:
+    fetch_calls = []
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_mint_transaction_data",
+        lambda owner, contract, quantity, chain: fetch_calls.append(chain) or _TX_DATA,
+    )
+    monkeypatch.setattr(
+        firing.node_client, "fire_raw_transaction",
+        lambda *a, **k: {"success": True},
+    )
+
+    arm = {"owner_address": OWNER, "quantity": 1, "max_price_wei": "1000000000000000"}
+    drop = {"collection_slug": "some-drop", "contract_address": CONTRACT, "chain": "robinhood"}
+
+    firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
+
+    assert fetch_calls == ["robinhood"]
 
 
 def test_fire_signed_presale_treats_node_helper_timeout_as_ambiguous(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        firing.opensea_session, "fetch_signed_mint_authorization",
-        lambda slug, owner, idx: _AUTH,
+        firing.opensea_session, "fetch_mint_transaction_data",
+        lambda owner, contract, quantity, chain: _TX_DATA,
     )
 
     def raise_timeout(*a, **k):
         raise RuntimeError("Node wallet-helper timed out")
 
-    monkeypatch.setattr(firing.node_client, "fire_signed_mint", raise_timeout)
+    monkeypatch.setattr(firing.node_client, "fire_raw_transaction", raise_timeout)
 
-    arm = {"owner_address": OWNER, "stage_index": 1, "quantity": 1, "max_price_wei": "1000000000000000"}
+    arm = {"owner_address": OWNER, "quantity": 1, "max_price_wei": "1000000000000000"}
     drop = {"collection_slug": "some-drop", "contract_address": CONTRACT}
 
     result = firing._fire_signed_presale(arm, drop, "decrypted-key", "GTD")
@@ -929,16 +962,16 @@ def test_watcher_fires_signed_presale_stage_when_go_live_passes(
     go_live = time.time() + 0.3
     arm_id = store.create_arm_request(store.ArmRequestInput(
         owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
-        quantity=1, max_price_wei="1000", go_live_at=go_live,
+        quantity=1, max_price_wei="1000000000000000", go_live_at=go_live,
         stage_label="GTD", stage_index=1,
     ))
     monkeypatch.setattr(
-        firing.opensea_session, "fetch_signed_mint_authorization",
-        lambda slug, owner, idx: _AUTH,
+        firing.opensea_session, "fetch_mint_transaction_data",
+        lambda owner, contract, quantity, chain: _TX_DATA,
     )
     fire_calls = []
     monkeypatch.setattr(
-        firing.node_client, "fire_signed_mint",
+        firing.node_client, "fire_raw_transaction",
         lambda *a, **k: fire_calls.append(1) or {
             "success": True, "txHash": "0x1", "blockNumber": "1", "gasUsed": "1",
         },

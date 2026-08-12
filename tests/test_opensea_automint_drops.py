@@ -519,6 +519,22 @@ def test_track_drop_by_slug_persists_with_real_name_and_contract(
     assert result["contract_address"] == CONTRACT_ADDRESS
 
 
+def test_track_drop_by_slug_persists_real_image_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Regression test: stage_data's image_url used to be hardcoded to None
+    # regardless of what collection_details actually found, so every
+    # manually-tracked (or on-chain-discovered) drop showed no thumbnail on
+    # the dashboard grid even when OpenSea's own API had a real image.
+    _mock_details(monkeypatch, {
+        "name": "GOBBOZ", "contract_address": CONTRACT_ADDRESS, "mint_schedule": [],
+        "image_url": "https://i2c.seadn.io/collection/gobbozhq/image.png",
+    })
+
+    drops.track_drop_by_slug("gobbozhq")
+    displayed = drops.to_display_dict(store.get_tracked_drop_by_slug("gobbozhq"))
+
+    assert displayed["image_url"] == "https://i2c.seadn.io/collection/gobbozhq/image.png"
+
+
 def test_track_drop_by_slug_falls_back_to_slug_when_name_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

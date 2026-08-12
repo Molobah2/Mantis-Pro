@@ -154,28 +154,82 @@
     display: flex;
     flex-direction: column;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.11), 0 4px 20px rgba(0,0,0,0.35);
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
   }
   .drop-card:hover {
-    border-color: rgba(200,208,235,0.22);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 34px rgba(0,0,0,0.45);
+    border-color: rgba(200,208,235,0.24);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 16px 40px rgba(0,0,0,0.45);
+    transform: translateY(-3px);
+  }
+  .drop-card:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 3px rgba(120,210,170,0.22);
   }
   .drop-card { cursor: pointer; }
 
+  /* Every card reserves the SAME 5:4 image area, whether it has a real
+     photo, is still loading one, or has none at all — this is what keeps
+     the grid's rows visually even instead of some cards looking "taller"
+     than others just because a thumbnail happened to load. */
   .drop-image-wrap {
+    position: relative;
     width: 100%;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 5 / 4;
     background: rgba(255,255,255,0.03);
     overflow: hidden;
+    flex-shrink: 0;
   }
   .drop-image {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-    transition: transform 0.3s ease;
+    opacity: 0;
+    transition: opacity 0.35s ease, transform 0.3s ease;
   }
+  .drop-image.is-loaded { opacity: 1; }
   .drop-card:hover .drop-image { transform: scale(1.04); }
+
+  /* Shimmer skeleton — shown until the real image loads, then removed
+     entirely (not just faded) so it never fights with the placeholder
+     state underneath. */
+  .drop-image-skeleton {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      rgba(255,255,255,0.035) 30%,
+      rgba(255,255,255,0.09) 50%,
+      rgba(255,255,255,0.035) 70%
+    );
+    background-size: 220% 100%;
+    animation: drop-image-shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes drop-image-shimmer {
+    0% { background-position: 120% 0; }
+    100% { background-position: -20% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .drop-image-skeleton { animation: none; }
+  }
+
+  /* Shown when a collection has no discoverable image, or its image URL
+     failed to load — a tasteful placeholder instead of an empty gap. */
+  .drop-image-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--t1);
+    background: radial-gradient(120% 120% at 30% 20%, rgba(200,208,235,0.09) 0%, rgba(255,255,255,0.02) 55%, rgba(0,0,0,0.08) 100%);
+  }
+  .drop-image-placeholder svg {
+    width: 34px;
+    height: 34px;
+    opacity: 0.28;
+  }
 
   .drop-card-body {
     padding: 16px 20px 20px;
@@ -195,12 +249,13 @@
   .status-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     align-self: flex-start;
-    padding: 4px 10px;
+    height: 26px;
+    padding: 0 11px;
     border-radius: 100px;
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 11.5px;
+    font-weight: 600;
     letter-spacing: 0.02em;
     background: rgba(255,255,255,0.055);
     border: 1px solid rgba(200,208,235,0.14);
@@ -209,14 +264,17 @@
   .status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
   .status-badge.minting_now {
-    background: rgba(120,210,170,0.1);
-    border-color: rgba(120,210,170,0.28);
+    background: rgba(120,210,170,0.12);
+    border-color: rgba(120,210,170,0.32);
     color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(120,210,170,0.06);
   }
+  .status-badge.minting_now .dot { box-shadow: 0 0 6px 1px rgba(120,210,170,0.7); }
   .status-badge.upcoming {
-    background: rgba(230,190,90,0.1);
-    border-color: rgba(230,190,90,0.28);
+    background: rgba(230,190,90,0.12);
+    border-color: rgba(230,190,90,0.32);
     color: var(--upcoming);
+    box-shadow: 0 0 0 3px rgba(230,190,90,0.06);
   }
   .status-badge.not_minting {
     color: var(--t3);
@@ -830,6 +888,53 @@ function escExternalUrl(url) {
 var LINK_LABELS = { twitter: 'X (Twitter)', discord: 'Discord', instagram: 'Instagram', website: 'Website' };
 var activeModalSlug = null; // which drop's modal is currently open, or null if closed
 
+// Tasteful "no image" glyph — shown for a collection with no discoverable
+// image_url, and swapped in by handleDropImageError below when a real URL
+// fails to actually load. Self-contained inline SVG, no external asset.
+var DROP_IMAGE_PLACEHOLDER_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="3" y="3" width="18" height="18" rx="3"></rect>' +
+    '<circle cx="8.5" cy="8.5" r="1.5"></circle>' +
+    '<path d="M21 15l-5-5-4 4-3-3-6 6"></path>' +
+  '</svg>';
+
+// Every drop card reserves the same 5:4 image slot regardless of whether
+// it actually has a usable thumbnail — these two handlers are what make
+// that slot resolve to the right visual state (real image, or placeholder)
+// instead of either an empty gap or a broken-image icon.
+function handleDropImageLoad(img) {
+  img.classList.add('is-loaded');
+  var skeleton = img.parentElement.querySelector('.drop-image-skeleton');
+  if (skeleton) skeleton.remove();
+}
+function handleDropImageError(img) {
+  var wrap = img.parentElement;
+  img.remove();
+  var skeleton = wrap.querySelector('.drop-image-skeleton');
+  if (skeleton) skeleton.remove();
+  var placeholder = wrap.querySelector('.drop-image-placeholder');
+  if (placeholder) placeholder.classList.remove('hidden');
+}
+window.handleDropImageLoad = handleDropImageLoad;
+window.handleDropImageError = handleDropImageError;
+
+function renderDropImageWrapHtml(imageUrl, name) {
+  var placeholderHtml = '<div class="drop-image-placeholder' + (imageUrl ? ' hidden' : '') + '">' +
+    DROP_IMAGE_PLACEHOLDER_SVG + '</div>';
+  if (!imageUrl) {
+    return '<div class="drop-image-wrap">' + placeholderHtml + '</div>';
+  }
+  return (
+    '<div class="drop-image-wrap">' +
+      '<div class="drop-image-skeleton"></div>' +
+      '<img class="drop-image" src="' + imageUrl + '" alt="' + name + '" loading="lazy" ' +
+        'onload="handleDropImageLoad(this)" onerror="handleDropImageError(this)">' +
+      placeholderHtml +
+    '</div>'
+  );
+}
+
 function renderDrops(drops) {
   var grid = document.getElementById('drop-grid');
   var emptyMsg = document.getElementById('empty-msg');
@@ -845,16 +950,14 @@ function renderDrops(drops) {
     var status = drop.status || 'not_minting';
     var name = esc(drop.name || drop.collection_slug || 'Unknown');
     var imageUrl = escImgUrl(drop.image_url);
-    var imageHtml = imageUrl
-      ? '<div class="drop-image-wrap"><img class="drop-image" src="' + imageUrl + '" ' +
-        'alt="' + name + '" loading="lazy" ' +
-        'onerror="this.closest(\'.drop-image-wrap\').style.display=\'none\'"></div>'
-      : '';
 
     var card = document.createElement('div');
     card.className = 'drop-card';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', 'View details for ' + (drop.name || drop.collection_slug || 'collection'));
     card.innerHTML =
-      imageHtml +
+      renderDropImageWrapHtml(imageUrl, name) +
       '<div class="drop-card-body">' +
         '<div class="drop-name">' + name + '</div>' +
         '<span class="status-badge ' + esc(status) + '"><span class="dot"></span>' +
@@ -867,6 +970,13 @@ function renderDrops(drops) {
     card.addEventListener('click', function (e) {
       if (e.target.closest('a')) return; // let the mint link navigate normally
       openModal(drop);
+    });
+    card.addEventListener('keydown', function (e) {
+      if (e.target.closest('a')) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openModal(drop);
+      }
     });
 
     grid.appendChild(card);

@@ -43,7 +43,7 @@ from urllib.parse import urlparse
 
 import requests as _req
 
-from .drops import _USER_AGENT
+from .drops import _USER_AGENT, _validate_image_url
 
 logger = logging.getLogger(__name__)
 
@@ -404,6 +404,7 @@ def fetch_collection_details_via_api(slug: str) -> dict | None:
         return None
 
     name = _as_stripped_str(data.get("name")) or None
+    image_url = _validate_image_url(_as_stripped_str(data.get("image_url")) or None)
 
     description = _as_stripped_str(data.get("description")) or None
     if description:
@@ -444,6 +445,7 @@ def fetch_collection_details_via_api(slug: str) -> dict | None:
 
     return {
         "name": name,
+        "image_url": image_url,
         "description": description,
         "links": links,
         "contract_address": contract_address,
@@ -627,11 +629,19 @@ def fetch_collection_details_live(slug: str) -> dict:
     # both, so name is preserved the same way regardless of which source's
     # description/links end up being used below.
     name = api_result.get("name") if api_result else None
+    # Playwright's scraped card image (drops.py's bulk-listing scrape path)
+    # is a different, independent source than this one — but THIS function
+    # only ever has the API's result to draw an image from, and preserving
+    # it the same way as contract_address/chain/name keeps every field's
+    # source-of-truth story consistent within this function.
+    image_url = api_result.get("image_url") if api_result else None
 
     if api_result and (api_result.get("description") or api_result.get("links")):
-        return {**api_result, "contract_address": contract_address, "chain": chain, "name": name, "mint_schedule": mint_schedule}
+        return {**api_result, "contract_address": contract_address, "chain": chain, "name": name,
+                "image_url": image_url, "mint_schedule": mint_schedule}
 
-    return {**playwright_result, "contract_address": contract_address, "chain": chain, "name": name, "mint_schedule": mint_schedule}
+    return {**playwright_result, "contract_address": contract_address, "chain": chain, "name": name,
+            "image_url": image_url, "mint_schedule": mint_schedule}
 
 
 def get_collection_details(slug: str) -> dict:

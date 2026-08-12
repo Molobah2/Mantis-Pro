@@ -256,6 +256,52 @@ def test_fetch_collection_details_via_api_accepts_robinhood_chain_contract(
     assert result["chain"] == "robinhood"
 
 
+def test_fetch_collection_details_via_api_extracts_trusted_image_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression test: image_url was never extracted from OpenSea's API
+    # response at all — every collection tracked via track_drop_by_slug (the
+    # manual-track and on-chain-discovery paths) got a hardcoded None,
+    # leaving the dashboard grid showing no thumbnail for any of them.
+    response = {**_CHEAP_SHOT_API_RESPONSE, "image_url": "https://i2c.seadn.io/collection/cheap-shot/image.png"}
+    monkeypatch.setattr(collection_details._req, "get", lambda *a, **k: _FakeResponse(200, response))
+
+    result = collection_details.fetch_collection_details_via_api("cheap-shot")
+
+    assert result is not None
+    assert result["image_url"] == "https://i2c.seadn.io/collection/cheap-shot/image.png"
+
+
+def test_fetch_collection_details_via_api_rejects_untrusted_image_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # image_url goes straight into an <img src> on the dashboard — must go
+    # through the same trusted-CDN-prefix check as drops.py's scraped
+    # images, not be trusted blindly just because OpenSea's own API
+    # returned it (defense in depth against a compromised/malformed API
+    # response, same reasoning as _validate_image_url's own docstring).
+    response = {**_CHEAP_SHOT_API_RESPONSE, "image_url": "https://evil.example.com/image.png"}
+    monkeypatch.setattr(collection_details._req, "get", lambda *a, **k: _FakeResponse(200, response))
+
+    result = collection_details.fetch_collection_details_via_api("cheap-shot")
+
+    assert result is not None
+    assert result["image_url"] is None
+
+
+def test_fetch_collection_details_via_api_missing_image_url_yields_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = {**_CHEAP_SHOT_API_RESPONSE}
+    response.pop("image_url", None)
+    monkeypatch.setattr(collection_details._req, "get", lambda *a, **k: _FakeResponse(200, response))
+
+    result = collection_details.fetch_collection_details_via_api("cheap-shot")
+
+    assert result is not None
+    assert result["image_url"] is None
+
+
 def test_fetch_collection_details_via_api_returns_none_on_non_200_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -421,7 +467,7 @@ def test_fetch_collection_details_live_returns_empty_shape_when_playwright_unava
 
     result = collection_details.fetch_collection_details_live("some-collection")
 
-    assert result == {"description": None, "links": {}, "contract_address": None, "chain": None, "name": None, "mint_schedule": []}
+    assert result == {"description": None, "links": {}, "contract_address": None, "chain": None, "name": None, "image_url": None, "mint_schedule": []}
 
 
 def test_fetch_collection_details_live_returns_empty_shape_when_concurrency_limit_exhausted(
@@ -442,7 +488,7 @@ def test_fetch_collection_details_live_returns_empty_shape_when_concurrency_limi
         for _ in range(collection_details._MAX_CONCURRENT_FETCHES):
             collection_details._launch_semaphore.release()
 
-    assert result == {"description": None, "links": {}, "contract_address": None, "chain": None, "name": None, "mint_schedule": []}
+    assert result == {"description": None, "links": {}, "contract_address": None, "chain": None, "name": None, "image_url": None, "mint_schedule": []}
 
 
 def test_fetch_collection_details_live_uses_api_description_but_still_calls_playwright_for_schedule(
@@ -454,6 +500,7 @@ def test_fetch_collection_details_live_uses_api_description_but_still_calls_play
     # whatever Playwright's own (possibly stale/broken) extraction found.
     api_result = {
         "name": "Some Collection",
+        "image_url": "https://i2c.seadn.io/some-image.png",
         "description": "an API-sourced description",
         "links": {"twitter": "https://x.com/foo"},
         "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
@@ -505,6 +552,7 @@ def test_fetch_collection_details_live_falls_back_to_playwright_when_api_fails(
         "contract_address": None,
         "chain": None,
         "name": None,
+        "image_url": None,
         "mint_schedule": [],
     }
 
@@ -521,6 +569,7 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
         "fetch_collection_details_via_api",
         lambda slug: {
             "name": "Some Collection",
+            "image_url": "https://i2c.seadn.io/some-image.png",
             "description": None,
             "links": {},
             "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
@@ -541,6 +590,7 @@ def test_fetch_collection_details_live_keeps_api_contract_address_when_falling_b
         "contract_address": "0x009efe3f8e50bc67831d6fc2edfaf46c8b8ada23",
         "chain": "ethereum",
         "name": "Some Collection",
+        "image_url": "https://i2c.seadn.io/some-image.png",
         "mint_schedule": [],
     }
 

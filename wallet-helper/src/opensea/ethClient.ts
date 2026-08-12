@@ -426,6 +426,7 @@ export interface FireMintResult {
 async function estimateSignAndSend(
   chainName: ChainName,
   account: ReturnType<typeof privateKeyToAccount>,
+  to: Address,
   callData: `0x${string}`,
   valueWei: bigint,
   nonce: number,
@@ -439,7 +440,7 @@ async function estimateSignAndSend(
   try {
     const estimated = await publicClient.estimateGas({
       account: account.address,
-      to: SEADROP_ADDRESS,
+      to,
       data: callData,
       value: valueWei,
     });
@@ -465,7 +466,7 @@ async function estimateSignAndSend(
   let txHash: `0x${string}`;
   try {
     txHash = await walletClient.sendTransaction({
-      to: SEADROP_ADDRESS,
+      to,
       data: callData,
       value: valueWei,
       nonce,
@@ -554,7 +555,7 @@ export async function fireMint(params: FireMintParams): Promise<FireMintResult> 
   });
 
   return estimateSignAndSend(
-    chainName, account, callData, totalCostWei, nonce,
+    chainName, account, SEADROP_ADDRESS, callData, totalCostWei, nonce,
     feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER,
     feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER
   );
@@ -660,7 +661,7 @@ export async function fireSignedMint(params: FireSignedMintParams): Promise<Fire
   });
 
   return estimateSignAndSend(
-    chainName, account, callData, totalCostWei, nonce,
+    chainName, account, SEADROP_ADDRESS, callData, totalCostWei, nonce,
     feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER,
     feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER
   );
@@ -931,4 +932,44 @@ export async function transferMintedNfts(
   }
 
   return { success: transfers.every((t) => t.success), transfers };
+}
+
+export interface FireRawTransactionParams {
+  sessionPrivateKey: `0x${string}`;
+  to: Address;
+  data: `0x${string}`;
+  valueWei: bigint;
+  chain?: ChainName;
+}
+
+/**
+ * Signs and sends a transaction EXACTLY as built by OpenSea's own backend
+ * (opensea_automint/opensea_session.fetch_mint_transaction_data) — no ABI
+ * encoding happens here at all, unlike fireMint/fireSignedMint. Verified
+ * live 2026-08-12 against a real allowlist mint (NUMBERS on Robinhood
+ * Chain): the "data" OpenSea returned decoded byte-for-byte as SeaDrop's
+ * own mintSigned() call, but nothing here assumes that specifically —
+ * this only ever relays a transaction OpenSea's own backend already built
+ * and OpenSea's own signature already authorizes, whatever contract or
+ * function it actually targets.
+ *
+ * Same safety property as every other spend path in this file: gas is
+ * estimated first (a real would-revert call — stale/consumed signature,
+ * stage no longer open, wrong quantity — never reaches sendTransaction).
+ */
+export async function fireRawTransaction(params: FireRawTransactionParams): Promise<FireMintResult> {
+  const chainName: ChainName = params.chain ?? "ethereum";
+  const publicClient = getPublicClient(chainName);
+  const account = privateKeyToAccount(params.sessionPrivateKey);
+
+  const [nonce, feesPerGas] = await Promise.all([
+    publicClient.getTransactionCount({ address: account.address, blockTag: "pending" }),
+    publicClient.estimateFeesPerGas(),
+  ]);
+
+  return estimateSignAndSend(
+    chainName, account, params.to, params.data, params.valueWei, nonce,
+    feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER,
+    feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER
+  );
 }

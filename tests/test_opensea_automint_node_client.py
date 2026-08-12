@@ -666,3 +666,91 @@ def test_get_recent_public_drop_updates_raises_runtime_error_on_non_dict_json(
 
     with pytest.raises(RuntimeError, match="unexpected response shape"):
         node_client.get_recent_public_drop_updates(None)
+
+
+# ── fire_raw_transaction ─────────────────────────────────────────────────
+
+RAW_TX_TO = "0x00005EA00Ac477B1030CE78506496e8C2dE24bf5"
+RAW_TX_DATA = "0x4b61cd6f" + "00" * 32
+RAW_TX_VALUE_WEI = "1000000000000000"
+
+
+def test_fire_raw_transaction_returns_success_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    success_result = {
+        "success": True, "txHash": "0x" + "b" * 64,
+        "blockNumber": "12345", "gasUsed": "210000",
+    }
+
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        calls.append((url, json, timeout))
+        return _FakeResponse(200, success_result)
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    result = node_client.fire_raw_transaction(
+        SESSION_PRIVATE_KEY, RAW_TX_TO, RAW_TX_DATA, RAW_TX_VALUE_WEI, "robinhood",
+    )
+
+    assert result == success_result
+    url, body, timeout = calls[0]
+    assert url.endswith("/eth/fire-raw-transaction")
+    assert body == {
+        "sessionPrivateKey": SESSION_PRIVATE_KEY,
+        "to": RAW_TX_TO,
+        "data": RAW_TX_DATA,
+        "valueWei": RAW_TX_VALUE_WEI,
+        "chain": "robinhood",
+    }
+    assert timeout == 90
+
+
+def test_fire_raw_transaction_defaults_chain_to_ethereum(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: calls.append(json) or _FakeResponse(200, {"success": True}),
+    )
+
+    node_client.fire_raw_transaction(SESSION_PRIVATE_KEY, RAW_TX_TO, RAW_TX_DATA, RAW_TX_VALUE_WEI)
+
+    assert calls[0]["chain"] == "ethereum"
+
+
+def test_fire_raw_transaction_returns_failure_result_as_a_normal_dict_not_an_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failure_result = {
+        "success": False, "txHash": None, "blockNumber": None,
+        "gasUsed": None, "error": "Gas estimation failed (would revert), nothing sent: reverted",
+    }
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(200, failure_result),
+    )
+
+    result = node_client.fire_raw_transaction(SESSION_PRIVATE_KEY, RAW_TX_TO, RAW_TX_DATA, RAW_TX_VALUE_WEI)
+
+    assert result == failure_result
+
+
+def test_fire_raw_transaction_raises_runtime_error_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int):
+        raise node_client._req.exceptions.ConnectionError()
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="Node wallet-helper is not running on port 3456"):
+        node_client.fire_raw_transaction(SESSION_PRIVATE_KEY, RAW_TX_TO, RAW_TX_DATA, RAW_TX_VALUE_WEI)
+
+
+def test_fire_raw_transaction_raises_runtime_error_on_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(500, {"error": "invalid transaction"}),
+    )
+
+    with pytest.raises(RuntimeError, match="invalid transaction"):
+        node_client.fire_raw_transaction(SESSION_PRIVATE_KEY, RAW_TX_TO, RAW_TX_DATA, RAW_TX_VALUE_WEI)

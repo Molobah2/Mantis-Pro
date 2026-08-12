@@ -410,3 +410,60 @@ def transfer_minted_nft(
         raise RuntimeError(error_msg)
 
     return result
+
+
+def fire_raw_transaction(
+    session_private_key: str,
+    to: str,
+    data: str,
+    value_wei: str,
+    chain: str = "ethereum",
+) -> dict:
+    """POST to the Node wallet-helper's /eth/fire-raw-transaction route.
+
+    Signs and sends a transaction EXACTLY as built by OpenSea's own backend
+    (opensea_session.fetch_mint_transaction_data) — no ABI encoding happens
+    on our side at all. session_private_key must already be DECRYPTED
+    plaintext — callers decrypt just before this call and must never
+    persist the plaintext or log it.
+
+    Returns a dict shaped like:
+        {"success": bool, "txHash": str|None, "blockNumber": str|None,
+         "gasUsed": str|None, "error": str|None, "ambiguous": bool|None}
+    A failed/reverted/would-revert call (e.g. the signature was already
+    consumed, the stage closed) comes back as {"success": False, "error":
+    "..."} — a real, non-exceptional outcome, not a Node-helper failure.
+    Raises RuntimeError only for actual Node-helper-level failures
+    (connection refused, timeout, malformed response).
+    """
+    payload = {
+        "sessionPrivateKey": session_private_key,
+        "to": to,
+        "data": data,
+        "valueWei": value_wei,
+        "chain": chain,
+    }
+
+    try:
+        # Mirrors fire_mint's own extended timeout — a transaction
+        # submission + receipt wait can legitimately take a while.
+        r = _req.post(f"{_cfg.NODE_HELPER_URL}/eth/fire-raw-transaction", json=payload, timeout=90)
+    except _req.exceptions.ConnectionError:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+    except _req.exceptions.Timeout:
+        raise RuntimeError("Node wallet-helper timed out")
+
+    try:
+        result = r.json()
+    except ValueError:
+        raise RuntimeError(f"Node helper returned a non-JSON response (HTTP {r.status_code})")
+
+    if not isinstance(result, dict):
+        raise RuntimeError("Node helper returned an unexpected response shape")
+
+    if r.status_code != 200:
+        error_msg = result.get("error", f"HTTP {r.status_code}")
+        logger.warning("[node_client] fire-raw-transaction request-level failure: %s", error_msg)
+        raise RuntimeError(error_msg)
+
+    return result

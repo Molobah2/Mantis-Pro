@@ -175,3 +175,188 @@ def test_fetch_signed_mint_authorization_always_returns_none_for_now(
     monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
     result = opensea_session.fetch_signed_mint_authorization(SLUG, OWNER, 1)
     assert result is None
+
+
+# ── fetch_mint_transaction_data ───────────────────────────────────────────
+
+CONTRACT_ADDRESS = "0x7051bb35ceaa446ef4176544279c72b70c131ac4"
+
+# Shaped exactly like the real response captured live 2026-08-12 from a
+# GTD allowlist mint (NUMBERS on Robinhood Chain) — trimmed to the fields
+# fetch_mint_transaction_data actually reads.
+_REAL_MINT_ACTION_RESPONSE = {
+    "data": {
+        "swap": {
+            "actions": [
+                {
+                    "__typename": "MintAction",
+                    "relayerFulfillment": None,
+                    "transactionSubmissionData": {
+                        "chain": {"networkId": 4663, "identifier": "robinhood"},
+                        "to": "0x00005ea00ac477b1030ce78506496e8c2de24bf5",
+                        "data": "0x4b61cd6f0000000000000000000000007051bb35ceaa446ef4176544279c72b70c131ac4",
+                        "value": "0",
+                    },
+                }
+            ],
+            "errors": [],
+        }
+    }
+}
+
+
+def test_fetch_mint_transaction_data_returns_none_when_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENSEA_SESSION_COOKIE", raising=False)
+    calls = []
+    monkeypatch.setattr(
+        opensea_session._req, "get", lambda *a, **k: calls.append(1) or _FakeResponse()
+    )
+
+    result = opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 2, "robinhood")
+
+    assert result is None
+    assert calls == []
+
+
+def test_fetch_mint_transaction_data_returns_transaction_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+    captured = {}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        captured["url"] = url
+        captured["params"] = params
+        captured["headers"] = headers
+        return _FakeResponse(200, _REAL_MINT_ACTION_RESPONSE)
+
+    monkeypatch.setattr(opensea_session._req, "get", fake_get)
+
+    result = opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 2, "robinhood")
+
+    assert result == {
+        "to": "0x00005ea00ac477b1030ce78506496e8c2de24bf5",
+        "data": "0x4b61cd6f0000000000000000000000007051bb35ceaa446ef4176544279c72b70c131ac4",
+        "valueWei": "0",
+    }
+    assert captured["url"] == opensea_session._GRAPHQL_URL
+    assert captured["params"]["operationName"] == "MintActionTimelineQuery"
+    assert OWNER.lower() in captured["params"]["variables"]
+    assert CONTRACT_ADDRESS in captured["params"]["variables"]
+    assert '"quantity":"2"' in captured["params"]["variables"]
+    assert '"chain":"robinhood"' in captured["params"]["variables"]
+    assert captured["headers"]["cookie"] == "access_token=fake"
+
+
+def test_fetch_mint_transaction_data_lowercases_addresses(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+    captured = {}
+    mixed_case_owner = "0xF24ab4d6b6e151cc9097c82d2f53c5390ced2754"
+    mixed_case_contract = "0x7051BB35cEaa446eF4176544279C72B70c131ac4"
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        captured["params"] = params
+        return _FakeResponse(200, _REAL_MINT_ACTION_RESPONSE)
+
+    monkeypatch.setattr(opensea_session._req, "get", fake_get)
+
+    opensea_session.fetch_mint_transaction_data(mixed_case_owner, mixed_case_contract, 1, "ethereum")
+
+    assert mixed_case_owner not in captured["params"]["variables"]
+    assert mixed_case_contract not in captured["params"]["variables"]
+    assert OWNER.lower() in captured["params"]["variables"]
+    assert CONTRACT_ADDRESS in captured["params"]["variables"]
+
+
+def test_fetch_mint_transaction_data_returns_none_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+
+    def raise_error(*a, **k):
+        raise opensea_session._req.exceptions.ConnectionError()
+
+    monkeypatch.setattr(opensea_session._req, "get", raise_error)
+
+    assert opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 1, "ethereum") is None
+
+
+def test_fetch_mint_transaction_data_returns_none_on_non_200(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+    monkeypatch.setattr(
+        opensea_session._req, "get",
+        lambda *a, **k: _FakeResponse(401, {"error": "unauthorized"}),
+    )
+
+    assert opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 1, "ethereum") is None
+
+
+def test_fetch_mint_transaction_data_returns_none_when_swap_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+    monkeypatch.setattr(
+        opensea_session._req, "get",
+        lambda *a, **k: _FakeResponse(200, {"data": {}}),
+    )
+
+    assert opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 1, "ethereum") is None
+
+
+def test_fetch_mint_transaction_data_returns_none_when_swap_has_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+    monkeypatch.setattr(
+        opensea_session._req, "get",
+        lambda *a, **k: _FakeResponse(200, {
+            "data": {"swap": {"actions": [], "errors": [{"message": "not eligible"}]}},
+        }),
+    )
+
+    assert opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 1, "ethereum") is None
+
+
+def test_fetch_mint_transaction_data_returns_none_when_no_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+    monkeypatch.setattr(
+        opensea_session._req, "get",
+        lambda *a, **k: _FakeResponse(200, {"data": {"swap": {"actions": [], "errors": []}}}),
+    )
+
+    assert opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 1, "ethereum") is None
+
+
+def test_fetch_mint_transaction_data_returns_none_when_action_not_mint_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+    monkeypatch.setattr(
+        opensea_session._req, "get",
+        lambda *a, **k: _FakeResponse(200, {
+            "data": {"swap": {"actions": [{"__typename": "ApprovalAction"}], "errors": []}},
+        }),
+    )
+
+    assert opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 1, "ethereum") is None
+
+
+def test_fetch_mint_transaction_data_returns_none_when_transaction_data_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENSEA_SESSION_COOKIE", "access_token=fake")
+    monkeypatch.setattr(
+        opensea_session._req, "get",
+        lambda *a, **k: _FakeResponse(200, {
+            "data": {"swap": {
+                "actions": [{"__typename": "MintAction", "transactionSubmissionData": None}],
+                "errors": [],
+            }},
+        }),
+    )
+
+    assert opensea_session.fetch_mint_transaction_data(OWNER, CONTRACT_ADDRESS, 1, "ethereum") is None
