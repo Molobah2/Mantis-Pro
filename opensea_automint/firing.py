@@ -340,6 +340,56 @@ def sweep_grant(grant_id: int, owner_address: str) -> dict:
         return {"error": str(e)}
 
 
+def transfer_minted_nft(mint_attempt_id: int, owner_address: str) -> dict:
+    """Sends whatever NFT(s) a session key minted in one specific mint
+    attempt back to the owner's own connected wallet — a session key only
+    ever exists to fire the mint at speed, it was never meant to be where
+    the NFT actually lives.
+
+    Walks mint_attempt -> arm_request -> (session_grant, tracked_drop) to
+    recover the encrypted session key and which contract/chain actually
+    minted it. Ownership is checked against the arm_request's owner (mint
+    attempts don't store an owner directly) — only the wallet that armed
+    and fired this specific mint can move it.
+
+    Returns node_client.transfer_minted_nft's result shape, or {"error":
+    str} for an ownership/lookup/decryption failure before ever touching
+    the key. Never raises for a real, expected outcome."""
+    mint_attempt = store.get_mint_attempt(mint_attempt_id)
+    if not mint_attempt or mint_attempt["status"] != "success" or not mint_attempt["tx_hash"]:
+        return {"error": "Successful mint attempt not found"}
+
+    arm = store.get_arm_request(mint_attempt["arm_request_id"])
+    if not arm or arm["owner_address"] != owner_address.lower():
+        return {"error": "Mint attempt not found"}
+
+    grant = store.get_session_grant(arm["session_grant_id"])
+    if not grant:
+        return {"error": "Session grant for this mint no longer exists"}
+
+    drop = store.get_tracked_drop(arm["drop_id"])
+    if not drop or not drop.get("contract_address"):
+        return {"error": "Collection for this mint no longer exists"}
+
+    try:
+        decrypted_key = decrypt_secret(grant["encrypted_session_key"])
+    except ValueError as e:
+        logger.error(
+            "[firing] transfer nft for mint attempt %d: could not decrypt session key: %s",
+            mint_attempt_id, e,
+        )
+        return {"error": "Could not decrypt session key"}
+
+    chain = drop.get("chain") or "ethereum"
+
+    try:
+        return node_client.transfer_minted_nft(
+            decrypted_key, drop["contract_address"], mint_attempt["tx_hash"], owner_address, chain,
+        )
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
 def cancel_arm(arm_id: int, owner_address: str) -> dict:
     """Cancels an arm request — only while it hasn't fired yet, and only
     for the owner who created it. Returns {"cancelled": bool} or

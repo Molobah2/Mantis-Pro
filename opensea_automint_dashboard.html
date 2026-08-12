@@ -332,6 +332,7 @@
     color: var(--t1);
     font-size: 12.5px;
     font-weight: 500;
+    font-family: inherit;
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
   }
@@ -668,6 +669,24 @@
     font-size: 11.5px;
     color: var(--t2);
   }
+  .history-item-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .history-item-actions .modal-link-btn {
+    cursor: pointer;
+  }
+  .history-item-actions .modal-link-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .history-send-status {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+  .history-send-status:empty { display: none; }
 
   .track-row {
     display: flex;
@@ -1361,6 +1380,8 @@ document.addEventListener('click', function (e) {
   if (revokeBtn) handleRevokeGrantClick(revokeBtn);
   var sweepBtn = e.target && e.target.closest && e.target.closest('.fund-box-sweep');
   if (sweepBtn) handleSweepGrantClick(sweepBtn);
+  var sendToWalletBtn = e.target && e.target.closest && e.target.closest('.history-send-btn');
+  if (sendToWalletBtn) handleSendToWalletClick(sendToWalletBtn);
 });
 
 // ── Arm Auto-Mint ──────────────────────────────────────────────────────
@@ -1752,11 +1773,21 @@ async function handleTrackSlugClick() {
 // (currentModalDrop, activeModalSlug) tied to a specific drop's details
 // that has nothing to do with a cross-drop history list.
 
+// Each chain this tool fires on has its own block explorer — a mint's own
+// "chain" (see store.get_mint_history) picks the right one. Falls back to
+// Ethereum's for any chain not listed here rather than guessing at a URL.
+var EXPLORER_TX_URL_BASE = {
+  ethereum: 'https://etherscan.io/tx/',
+  robinhood: 'https://robinhoodchain.blockscout.com/tx/',
+};
+
 function renderHistoryItemHtml(mint) {
   var openseaUrl = 'https://opensea.io/collection/' + encodeURIComponent(mint.collection_slug || '');
-  var etherscanUrl = mint.tx_hash ? 'https://etherscan.io/tx/' + encodeURIComponent(mint.tx_hash) : null;
+  var explorerBase = EXPLORER_TX_URL_BASE[mint.chain] || EXPLORER_TX_URL_BASE.ethereum;
+  var explorerUrl = mint.tx_hash ? explorerBase + encodeURIComponent(mint.tx_hash) : null;
+  var canSendToWallet = window.__ethOwnerAddress && window.signOwnerMessage;
   return (
-    '<div class="history-item">' +
+    '<div class="history-item" data-mint-id="' + esc(mint.id) + '">' +
       '<div class="history-item-row">' +
         '<a class="history-item-name" href="' + esc(openseaUrl) + '" target="_blank" rel="noopener noreferrer">' +
           esc(mint.name || mint.collection_slug) +
@@ -1765,10 +1796,67 @@ function renderHistoryItemHtml(mint) {
       '</div>' +
       (mint.fired_at ? '<div class="history-item-meta">Fired: ' + esc(formatFiredAtHtml(mint.fired_at)) +
         (mint.latency_ms != null ? ' (' + esc(mint.latency_ms) + 'ms after go-live)' : '') + '</div>' : '') +
-      (etherscanUrl ? '<a class="modal-link-btn" href="' + esc(etherscanUrl) +
-        '" target="_blank" rel="noopener noreferrer">View transaction &rarr;</a>' : '') +
+      '<div class="history-item-actions">' +
+        (explorerUrl ? '<a class="modal-link-btn" href="' + esc(explorerUrl) +
+          '" target="_blank" rel="noopener noreferrer">View transaction &rarr;</a>' : '') +
+        (canSendToWallet ? '<button type="button" class="modal-link-btn history-send-btn" data-mint-id="' +
+          esc(mint.id) + '">Send to My Wallet</button>' : '') +
+      '</div>' +
+      '<div class="history-send-status modal-details-state"></div>' +
     '</div>'
   );
+}
+
+// Must build byte-for-byte the same message text as opensea_automint/
+// messages.py's build_transfer_nft_message — same reasoning as
+// buildRevokeGrantMessage above.
+function buildTransferNftMessage(mintAttemptId, timestamp) {
+  return 'Mantis Pro OpenSea Auto-Mint\n' +
+    'action: transfer-nft\n' +
+    'mintAttemptId: ' + mintAttemptId + '\n' +
+    'timestamp: ' + timestamp;
+}
+
+async function handleSendToWalletClick(btn) {
+  var mintId = btn.getAttribute('data-mint-id');
+  if (!mintId || !window.__ethOwnerAddress || !window.signOwnerMessage) return;
+
+  var item = btn.closest('.history-item');
+  var status = item ? item.querySelector('.history-send-status') : null;
+  var timestamp = Math.floor(Date.now() / 1000);
+
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  if (status) status.textContent = '';
+
+  try {
+    var signature = await window.signOwnerMessage(buildTransferNftMessage(mintId, timestamp));
+
+    var res = await fetch('/api/opensea/mint-history/' + encodeURIComponent(mintId) + '/send-to-wallet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ownerAddress: window.__ethOwnerAddress,
+        signature: signature,
+        timestamp: timestamp,
+      }),
+    });
+    var body = await res.json().catch(function () { return {}; });
+    if (!res.ok || body.success === false) throw new Error(body.error || ('API ' + res.status));
+
+    var transfers = body.transfers || [];
+    var okCount = transfers.filter(function (t) { return t.success; }).length;
+    btn.textContent = 'Sent';
+    if (status) {
+      status.textContent = transfers.length > 1
+        ? ('Sent ' + okCount + ' of ' + transfers.length + ' token(s) to your wallet.')
+        : 'Sent to your wallet.';
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Send to My Wallet';
+    if (status) status.textContent = 'Send failed: ' + (err && err.message ? err.message : String(err));
+  }
 }
 
 async function openHistoryModal() {

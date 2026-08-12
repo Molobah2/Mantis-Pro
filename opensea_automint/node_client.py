@@ -349,3 +349,64 @@ def sweep_session_key(
         raise RuntimeError(error_msg)
 
     return result
+
+
+def transfer_minted_nft(
+    session_private_key: str,
+    nft_contract_address: str,
+    mint_tx_hash: str,
+    destination_address: str,
+    chain: str = "ethereum",
+) -> dict:
+    """POST to the Node wallet-helper's /eth/transfer-minted-nft route.
+
+    Sends every NFT the session key minted in mint_tx_hash to
+    destination_address (the owner's connected wallet) — a session key only
+    ever exists to fire the mint at speed, it was never meant to be where
+    the NFT actually lives. tokenId is never trusted from the caller; the
+    real source of truth is the mint transaction's own Transfer event
+    log(s), read fresh from the chain by wallet-helper every time this
+    runs. session_private_key must already be DECRYPTED plaintext —
+    callers decrypt just before this call and must never persist the
+    plaintext or log it.
+
+    Returns a dict shaped like:
+        {"success": bool, "transfers": [{"tokenId": str, "success": bool,
+         "txHash": str|None, "error": str|None}, ...], "error": str|None}
+    "error" at the top level is set only when NO transfer was ever
+    attempted (e.g. the mint tx has no matching Transfer log) — a real,
+    non-exceptional outcome, not a Node-helper failure. A quantity>1 mint
+    can partially succeed; check each entry in "transfers" rather than
+    just the top-level "success". Raises RuntimeError only for actual
+    Node-helper-level failures (connection refused, timeout, malformed
+    response).
+    """
+    payload = {
+        "sessionPrivateKey": session_private_key,
+        "nftContract": nft_contract_address,
+        "mintTxHash": mint_tx_hash,
+        "destinationAddress": destination_address,
+        "chain": chain,
+    }
+
+    try:
+        r = _req.post(f"{_cfg.NODE_HELPER_URL}/eth/transfer-minted-nft", json=payload, timeout=90)
+    except _req.exceptions.ConnectionError:
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+    except _req.exceptions.Timeout:
+        raise RuntimeError("Node wallet-helper timed out")
+
+    try:
+        result = r.json()
+    except ValueError:
+        raise RuntimeError(f"Node helper returned a non-JSON response (HTTP {r.status_code})")
+
+    if not isinstance(result, dict):
+        raise RuntimeError("Node helper returned an unexpected response shape")
+
+    if r.status_code != 200:
+        error_msg = result.get("error", f"HTTP {r.status_code}")
+        logger.warning("[node_client] transfer-minted-nft request-level failure: %s", error_msg)
+        raise RuntimeError(error_msg)
+
+    return result

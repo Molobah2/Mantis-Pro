@@ -20,6 +20,7 @@ import {
   createWalletClient,
   defineChain,
   encodeFunctionData,
+  parseEventLogs,
   verifyMessage,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -762,4 +763,172 @@ export async function sweepBalance(params: SweepBalanceParams): Promise<SweepBal
       error: `Submitted but receipt not confirmed within timeout: ${msg}`,
     };
   }
+}
+
+const ERC721_TRANSFER_EVENT_ABI = [
+  {
+    type: "event",
+    name: "Transfer",
+    inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "tokenId", type: "uint256", indexed: true },
+    ],
+  },
+] as const;
+
+const ERC721_ABI = [
+  {
+    name: "safeTransferFrom",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "from", type: "address" },
+      { name: "to", type: "address" },
+      { name: "tokenId", type: "uint256" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+export interface TransferMintedNftsParams {
+  sessionPrivateKey: `0x${string}`;
+  nftContract: Address;
+  mintTxHash: `0x${string}`;
+  destinationAddress: Address;
+  chain?: ChainName;
+}
+
+export interface TokenTransferResult {
+  tokenId: string;
+  success: boolean;
+  txHash: string | null;
+  error?: string;
+}
+
+export interface TransferMintedNftsResult {
+  success: boolean;
+  transfers: TokenTransferResult[];
+  error?: string;
+}
+
+/**
+ * Sends every NFT this session key minted in ONE specific transaction
+ * (mintTxHash) to destinationAddress (the owner's connected wallet) — the
+ * session key only ever exists to fire the mint at speed, it was never
+ * meant to be where the NFT actually lives long-term.
+ *
+ * Deliberately does NOT trust a caller-supplied tokenId: the real source
+ * of truth is the mint transaction's own Transfer event log(s), read
+ * fresh from the receipt every time this runs. A quantity>1 mint can
+ * produce multiple Transfer logs (one per token) in a single tx — all of
+ * them, to this session key's own address, get transferred out here, one
+ * ERC721 transfer per token (no native batch-transfer in the base
+ * standard). Transfers run sequentially, not in parallel, so a manually-
+ * tracked nonce never races itself.
+ *
+ * A token this key no longer actually owns (e.g. already sent out by an
+ * earlier call, or a mint that reverted despite being passed in here)
+ * simply fails gas estimation for THAT token — same safe, non-exceptional
+ * "nothing sent" behavior as every other spend path in this file — and
+ * that failure is recorded per-token, never silently dropped or retried
+ * against a different token.
+ */
+export async function transferMintedNfts(
+  params: TransferMintedNftsParams
+): Promise<TransferMintedNftsResult> {
+  const chainName: ChainName = params.chain ?? "ethereum";
+  const { chain, rpc } = CHAIN_CONFIGS[chainName];
+  const publicClient = getPublicClient(chainName);
+  const account = privateKeyToAccount(params.sessionPrivateKey);
+
+  let receipt;
+  try {
+    receipt = await publicClient.getTransactionReceipt({ hash: params.mintTxHash });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, transfers: [], error: `Could not fetch mint transaction receipt: ${msg}` };
+  }
+
+  const transferLogs = parseEventLogs({
+    abi: ERC721_TRANSFER_EVENT_ABI,
+    logs: receipt.logs,
+    eventName: "Transfer",
+  }).filter(
+    (log) =>
+      log.address.toLowerCase() === params.nftContract.toLowerCase() &&
+      log.args.to.toLowerCase() === account.address.toLowerCase()
+  );
+
+  if (transferLogs.length === 0) {
+    return {
+      success: false, transfers: [],
+      error: "No token minted to this session key was found in that transaction",
+    };
+  }
+
+  const feesPerGas = await publicClient.estimateFeesPerGas();
+  const maxFeePerGas = feesPerGas.maxFeePerGas * GAS_PRIORITY_MULTIPLIER;
+  const maxPriorityFeePerGas = feesPerGas.maxPriorityFeePerGas * GAS_PRIORITY_MULTIPLIER;
+  const walletClient = createWalletClient({ account, chain, transport: http(rpc) });
+
+  let nonce = await publicClient.getTransactionCount({ address: account.address, blockTag: "pending" });
+  const transfers: TokenTransferResult[] = [];
+
+  for (const log of transferLogs) {
+    const tokenId = log.args.tokenId;
+    const callData = encodeFunctionData({
+      abi: ERC721_ABI,
+      functionName: "safeTransferFrom",
+      args: [account.address, params.destinationAddress, tokenId],
+    });
+
+    let gas: bigint;
+    try {
+      const estimated = await publicClient.estimateGas({
+        account: account.address,
+        to: params.nftContract,
+        data: callData,
+      });
+      gas = (estimated * (100n + GAS_ESTIMATE_BUFFER_PERCENT)) / 100n;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      transfers.push({
+        tokenId: tokenId.toString(), success: false, txHash: null,
+        error: `Gas estimation failed (would revert), nothing sent: ${msg}`,
+      });
+      continue;
+    }
+
+    let txHash: `0x${string}`;
+    try {
+      txHash = await walletClient.sendTransaction({
+        to: params.nftContract, data: callData, value: 0n,
+        nonce, gas, maxFeePerGas, maxPriorityFeePerGas,
+      });
+      nonce += 1;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      transfers.push({ tokenId: tokenId.toString(), success: false, txHash: null, error: msg });
+      continue;
+    }
+
+    try {
+      const txReceipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: RECEIPT_TIMEOUT_MS });
+      transfers.push({
+        tokenId: tokenId.toString(),
+        success: txReceipt.status === "success",
+        txHash,
+        error: txReceipt.status === "success" ? undefined : "Transaction included on-chain but reverted",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      transfers.push({
+        tokenId: tokenId.toString(), success: false, txHash,
+        error: `Submitted but receipt not confirmed within timeout: ${msg}`,
+      });
+    }
+  }
+
+  return { success: transfers.every((t) => t.success), transfers };
 }

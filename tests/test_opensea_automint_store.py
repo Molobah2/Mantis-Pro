@@ -623,6 +623,24 @@ def test_get_mint_history_returns_a_successful_mint_with_joined_fields() -> None
     assert row["tx_hash"] == "0xHistoryTx"
     assert row["fired_at"] == 1700000000.123
     assert row["latency_ms"] == 500
+    assert row["chain"] == "ethereum"  # _make_history_fixture never sets chain
+
+
+def test_get_mint_attempt_round_trips() -> None:
+    arm_id = _make_history_fixture(slug="history-drop-lookup")
+    mint_attempt_id = store.get_mint_attempts(arm_id)[0]["id"]
+
+    result = store.get_mint_attempt(mint_attempt_id)
+
+    assert result is not None
+    assert result["id"] == mint_attempt_id
+    assert result["arm_request_id"] == arm_id
+    assert result["tx_hash"] == "0xHistoryTx"
+    assert result["status"] == "success"
+
+
+def test_get_mint_attempt_returns_none_when_not_found() -> None:
+    assert store.get_mint_attempt(999999) is None
 
 
 def test_get_mint_history_excludes_failed_attempts() -> None:

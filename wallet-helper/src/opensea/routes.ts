@@ -8,6 +8,7 @@ import {
   getPublicDropWindow,
   getRecentPublicDropUpdates,
   sweepBalance,
+  transferMintedNfts,
   type ChainName,
   type SignedMintParamsInput,
 } from "./ethClient.js";
@@ -340,6 +341,52 @@ openSeaRouter.post("/eth/sweep", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[opensea:sweep]", msg);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+// POST /eth/transfer-minted-nft — sends every NFT the session key minted in
+// one specific transaction to the owner's connected wallet. Same trust
+// posture as /eth/fire-mint and /eth/sweep — only ever called from Flask's
+// own server-side route over loopback.
+openSeaRouter.post("/eth/transfer-minted-nft", async (req, res) => {
+  const { sessionPrivateKey, nftContract, mintTxHash, destinationAddress, chain } = req.body as {
+    sessionPrivateKey?: string;
+    nftContract?: string;
+    mintTxHash?: string;
+    destinationAddress?: string;
+    chain?: string;
+  };
+
+  if (!sessionPrivateKey || !isHex(sessionPrivateKey) || sessionPrivateKey.length !== 66) {
+    return res.status(400).json({ error: "Valid sessionPrivateKey required" });
+  }
+  if (!nftContract || !isAddress(nftContract)) {
+    return res.status(400).json({ error: "Valid nftContract required" });
+  }
+  if (!mintTxHash || !isHex(mintTxHash) || mintTxHash.length !== 66) {
+    return res.status(400).json({ error: "Valid mintTxHash required" });
+  }
+  if (!destinationAddress || !isAddress(destinationAddress)) {
+    return res.status(400).json({ error: "Valid destinationAddress required" });
+  }
+  const chainName = parseChain(chain);
+  if (!chainName) {
+    return res.status(400).json({ error: `chain must be one of: ${KNOWN_CHAINS.join(", ")}` });
+  }
+
+  try {
+    const result = await transferMintedNfts({
+      sessionPrivateKey: sessionPrivateKey as `0x${string}`,
+      nftContract: nftContract as Address,
+      mintTxHash: mintTxHash as `0x${string}`,
+      destinationAddress: destinationAddress as Address,
+      chain: chainName,
+    });
+    return res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[opensea:transfer-minted-nft]", msg);
     return res.status(500).json({ error: msg });
   }
 });

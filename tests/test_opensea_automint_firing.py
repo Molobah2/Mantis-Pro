@@ -690,6 +690,145 @@ def test_sweep_grant_propagates_node_helper_runtime_error(monkeypatch: pytest.Mo
     assert "3456" in result["error"]
 
 
+# ── transfer_minted_nft ──────────────────────────────────────────────────
+
+def _make_successful_mint(
+    contract_address: str = CONTRACT, owner: str = OWNER,
+    tx_hash: str = "0xMintTx", chain: str = "ethereum", slug: str = "mint-drop",
+) -> int:
+    """Sets up a full drop -> grant -> arm -> successful mint_attempt chain
+    and returns the mint_attempt id."""
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug=slug, name="Mint Drop", contract_address=contract_address,
+        mint_page_url="https://opensea.io/collection/" + slug,
+        source="playwright", stage_data="{}", chain=chain,
+    ))
+    drop_id = store.get_tracked_drop_by_slug(slug)["id"]
+    grant_id = _make_grant(owner=owner, targets=[contract_address])
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=owner, drop_id=drop_id, session_grant_id=grant_id,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.record_mint_attempt(store.MintAttemptInput(
+        arm_request_id=arm_id, tx_hash=tx_hash, user_op_hash=None,
+        status="success", error_message=None, gas_used="21000", block_number=1,
+        fired_at=time.time(), latency_ms=100,
+    ))
+    return store.get_mint_attempts(arm_id)[0]["id"]
+
+
+def test_transfer_minted_nft_succeeds_for_owners_own_mint(monkeypatch: pytest.MonkeyPatch) -> None:
+    mint_attempt_id = _make_successful_mint(tx_hash="0xMintTxA")
+    calls = []
+
+    def fake_transfer(session_private_key, contract, tx_hash, destination, chain):
+        calls.append((session_private_key, contract, tx_hash, destination, chain))
+        return {"success": True, "transfers": [{"tokenId": "441", "success": True, "txHash": "0x1"}]}
+
+    monkeypatch.setattr(firing.node_client, "transfer_minted_nft", fake_transfer)
+
+    result = firing.transfer_minted_nft(mint_attempt_id, OWNER)
+
+    assert result["success"] is True
+    assert len(calls) == 1
+    key, contract, tx_hash, destination, chain = calls[0]
+    assert key == "dummy-serialized-approval"
+    assert contract == CONTRACT
+    assert tx_hash == "0xMintTxA"
+    assert destination == OWNER
+    assert chain == "ethereum"
+
+
+def test_transfer_minted_nft_wrong_owner_returns_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    mint_attempt_id = _make_successful_mint(tx_hash="0xMintTxB")
+    monkeypatch.setattr(firing.node_client, "transfer_minted_nft", lambda *a, **k: {"success": True})
+
+    result = firing.transfer_minted_nft(mint_attempt_id, "0xSomeoneElse0000000000000000000000000000")
+
+    assert "error" in result
+
+
+def test_transfer_minted_nft_unknown_id_returns_error() -> None:
+    result = firing.transfer_minted_nft(999999, OWNER)
+
+    assert "error" in result
+
+
+def test_transfer_minted_nft_fails_when_mint_not_successful() -> None:
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="failed-mint-drop", name="Failed Mint Drop", contract_address=CONTRACT,
+        mint_page_url="https://opensea.io/collection/failed-mint-drop",
+        source="playwright", stage_data="{}",
+    ))
+    drop_id = store.get_tracked_drop_by_slug("failed-mint-drop")["id"]
+    grant_id = _make_grant(targets=[CONTRACT])
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=drop_id, session_grant_id=grant_id,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.record_mint_attempt(store.MintAttemptInput(
+        arm_request_id=arm_id, tx_hash=None, user_op_hash=None,
+        status="failed", error_message="reverted", gas_used=None, block_number=None,
+        fired_at=time.time(), latency_ms=None,
+    ))
+    mint_attempt_id = store.get_mint_attempts(arm_id)[0]["id"]
+
+    result = firing.transfer_minted_nft(mint_attempt_id, OWNER)
+
+    assert "error" in result
+
+
+def test_transfer_minted_nft_resolves_chain_from_tracked_drop(monkeypatch: pytest.MonkeyPatch) -> None:
+    mint_attempt_id = _make_successful_mint(tx_hash="0xMintTxC", chain="robinhood")
+    calls = []
+    monkeypatch.setattr(
+        firing.node_client, "transfer_minted_nft",
+        lambda key, contract, tx_hash, destination, chain: calls.append(chain) or {"success": True},
+    )
+
+    firing.transfer_minted_nft(mint_attempt_id, OWNER)
+
+    assert calls == ["robinhood"]
+
+
+def test_transfer_minted_nft_decrypt_failure_returns_error() -> None:
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="decrypt-fail-drop", name="Decrypt Fail Drop", contract_address=CONTRACT,
+        mint_page_url="https://opensea.io/collection/decrypt-fail-drop",
+        source="playwright", stage_data="{}",
+    ))
+    drop_id = store.get_tracked_drop_by_slug("decrypt-fail-drop")["id"]
+    grant_id = _make_grant(targets=[CONTRACT], encrypted_session_key="not-valid-ciphertext")
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=drop_id, session_grant_id=grant_id,
+        quantity=1, max_price_wei="0", go_live_at=None,
+    ))
+    store.record_mint_attempt(store.MintAttemptInput(
+        arm_request_id=arm_id, tx_hash="0xMintTxD", user_op_hash=None,
+        status="success", error_message=None, gas_used="21000", block_number=1,
+        fired_at=time.time(), latency_ms=100,
+    ))
+    mint_attempt_id = store.get_mint_attempts(arm_id)[0]["id"]
+
+    result = firing.transfer_minted_nft(mint_attempt_id, OWNER)
+
+    assert "error" in result
+
+
+def test_transfer_minted_nft_propagates_node_helper_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    mint_attempt_id = _make_successful_mint(tx_hash="0xMintTxE")
+
+    def raise_runtime_error(*a, **k):
+        raise RuntimeError("Node wallet-helper is not running on port 3456")
+
+    monkeypatch.setattr(firing.node_client, "transfer_minted_nft", raise_runtime_error)
+
+    result = firing.transfer_minted_nft(mint_attempt_id, OWNER)
+
+    assert "error" in result
+    assert "3456" in result["error"]
+
+
 # ── _fire_signed_presale ─────────────────────────────────────────────────
 
 _AUTH = {

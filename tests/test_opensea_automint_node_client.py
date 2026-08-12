@@ -505,6 +505,92 @@ def test_sweep_session_key_raises_runtime_error_on_500(monkeypatch: pytest.Monke
         node_client.sweep_session_key(SESSION_PRIVATE_KEY, DESTINATION_ADDRESS)
 
 
+# ── transfer_minted_nft ──────────────────────────────────────────────────
+
+MINT_TX_HASH = "0x" + "aa" * 32
+
+
+def test_transfer_minted_nft_returns_success_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    success_result = {
+        "success": True,
+        "transfers": [{"tokenId": "441", "success": True, "txHash": "0x" + "b" * 64}],
+    }
+
+    def fake_post(url: str, json: dict, timeout: int) -> _FakeResponse:
+        calls.append((url, json, timeout))
+        return _FakeResponse(200, success_result)
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    result = node_client.transfer_minted_nft(
+        SESSION_PRIVATE_KEY, NFT_CONTRACT, MINT_TX_HASH, DESTINATION_ADDRESS, "robinhood",
+    )
+
+    assert result == success_result
+    url, body, timeout = calls[0]
+    assert url.endswith("/eth/transfer-minted-nft")
+    assert body == {
+        "sessionPrivateKey": SESSION_PRIVATE_KEY,
+        "nftContract": NFT_CONTRACT,
+        "mintTxHash": MINT_TX_HASH,
+        "destinationAddress": DESTINATION_ADDRESS,
+        "chain": "robinhood",
+    }
+    assert timeout == 90
+
+
+def test_transfer_minted_nft_defaults_chain_to_ethereum(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: calls.append(json) or _FakeResponse(200, {"success": True, "transfers": []}),
+    )
+
+    node_client.transfer_minted_nft(SESSION_PRIVATE_KEY, NFT_CONTRACT, MINT_TX_HASH, DESTINATION_ADDRESS)
+
+    assert calls[0]["chain"] == "ethereum"
+
+
+def test_transfer_minted_nft_returns_no_token_found_as_a_normal_dict_not_an_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    no_token_found = {
+        "success": False, "transfers": [],
+        "error": "No token minted to this session key was found in that transaction",
+    }
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(200, no_token_found),
+    )
+
+    result = node_client.transfer_minted_nft(SESSION_PRIVATE_KEY, NFT_CONTRACT, MINT_TX_HASH, DESTINATION_ADDRESS)
+
+    assert result == no_token_found
+
+
+def test_transfer_minted_nft_raises_runtime_error_on_connection_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, json: dict, timeout: int):
+        raise node_client._req.exceptions.ConnectionError()
+
+    monkeypatch.setattr(node_client._req, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="Node wallet-helper is not running on port 3456"):
+        node_client.transfer_minted_nft(SESSION_PRIVATE_KEY, NFT_CONTRACT, MINT_TX_HASH, DESTINATION_ADDRESS)
+
+
+def test_transfer_minted_nft_raises_runtime_error_on_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        node_client._req, "post",
+        lambda url, json, timeout: _FakeResponse(500, {"error": "bad request"}),
+    )
+
+    with pytest.raises(RuntimeError, match="bad request"):
+        node_client.transfer_minted_nft(SESSION_PRIVATE_KEY, NFT_CONTRACT, MINT_TX_HASH, DESTINATION_ADDRESS)
+
+
 # ── get_recent_public_drop_updates ───────────────────────────────────────
 
 def test_get_recent_public_drop_updates_returns_result_on_success(

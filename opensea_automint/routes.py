@@ -336,6 +336,53 @@ def api_sweep_grant(grant_id: int) -> Response:
     return jsonify(result), 200
 
 
+_TRANSFER_NFT_RATE_LIMIT = 20
+_TRANSFER_NFT_RATE_WINDOW_SECONDS = 3600
+_TRANSFER_NFT_RATE_KEY = "transfer-nft"
+
+
+@opensea_automint_bp.route("/api/opensea/mint-history/<int:mint_attempt_id>/send-to-wallet", methods=["POST"])
+def api_transfer_minted_nft(mint_attempt_id: int) -> Response:
+    """Sends whatever NFT(s) a session key minted in one specific mint
+    attempt to the owner's own connected wallet — see
+    firing.transfer_minted_nft. A session key only ever exists to fire the
+    mint at speed; it was never meant to be where the NFT actually lives.
+
+    Requires the same signature-based proof of ownership as
+    api_revoke_grant/api_sweep_grant — a mint attempt id is a small,
+    sequential, otherwise-guessable integer."""
+    ip = _sec.get_client_ip(request)
+    if not _sec.rate_limit(
+        ip, _TRANSFER_NFT_RATE_KEY,
+        limit=_TRANSFER_NFT_RATE_LIMIT, window=_TRANSFER_NFT_RATE_WINDOW_SECONDS,
+    ):
+        return jsonify({"error": "Rate limit exceeded — try again later"}), 429
+
+    body = request.get_json(silent=True) or {}
+
+    validation_error = security.validate_transfer_nft_input(body)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    if not firing.is_signature_timestamp_fresh(body["timestamp"]):
+        return jsonify({"error": "Signature has expired — please try again"}), 401
+
+    message = messages.build_transfer_nft_message(mint_attempt_id, body["timestamp"])
+    try:
+        signature_valid = node_client.verify_owner_signature(
+            body["ownerAddress"], message, body["signature"],
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    if not signature_valid:
+        return jsonify({"error": "Invalid signature — could not verify wallet ownership"}), 401
+
+    result = firing.transfer_minted_nft(mint_attempt_id, body["ownerAddress"])
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
 @opensea_automint_bp.route("/api/opensea/session-grant/active")
 def api_active_session_grant() -> Response:
     """Read-only lookup of an owner's most recent session grant for ONE

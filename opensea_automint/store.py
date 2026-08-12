@@ -654,6 +654,21 @@ def get_mint_attempts(arm_request_id: int) -> list[dict]:
     return [_mint_attempt_row_to_dict(r) for r in rows]
 
 
+def get_mint_attempt(mint_attempt_id: int) -> dict | None:
+    """A single mint attempt by id, or None — used by firing.transfer_minted_nft
+    to walk mint_attempt -> arm_request -> (session_grant, tracked_drop) and
+    recover which contract/chain/session-key actually minted it."""
+    with _lock, closing(_conn()) as c:
+        row = c.execute("""
+            SELECT id, arm_request_id, attempted_at, tx_hash, user_op_hash, status,
+                   error_message, gas_used, block_number, fired_at, latency_ms
+            FROM mint_attempts WHERE id=?
+        """, (mint_attempt_id,)).fetchone()
+    if not row:
+        return None
+    return _mint_attempt_row_to_dict(row)
+
+
 def get_mint_history(owner_address: str | None = None, limit: int = 200) -> list[dict]:
     """Every SUCCESSFUL mint this tool has ever fired, newest first — the
     permanent record of "what has this tool actually minted," independent
@@ -680,7 +695,7 @@ def get_mint_history(owner_address: str | None = None, limit: int = 200) -> list
         rows = c.execute(f"""
             SELECT ma.id, ar.owner_address, td.collection_slug, td.name, td.contract_address,
                    ar.quantity, ma.tx_hash, ma.block_number, ma.fired_at, ma.latency_ms,
-                   ma.attempted_at
+                   ma.attempted_at, td.chain
             FROM mint_attempts ma
             JOIN arm_requests ar ON ar.id = ma.arm_request_id
             JOIN tracked_drops td ON td.id = ar.drop_id
@@ -692,7 +707,7 @@ def get_mint_history(owner_address: str | None = None, limit: int = 200) -> list
         {
             "id": r[0], "owner_address": r[1], "collection_slug": r[2], "name": r[3],
             "contract_address": r[4], "quantity": r[5], "tx_hash": r[6], "block_number": r[7],
-            "fired_at": r[8], "latency_ms": r[9], "attempted_at": r[10],
+            "fired_at": r[8], "latency_ms": r[9], "attempted_at": r[10], "chain": r[11],
         }
         for r in rows
     ]

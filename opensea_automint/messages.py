@@ -96,3 +96,16 @@ def build_sweep_grant_message(grant_id: int, timestamp: int) -> str:
         f"grantId: {grant_id}\n"
         f"timestamp: {timestamp}"
     )
+
+
+def build_transfer_nft_message(mint_attempt_id: int, timestamp: int) -> str:
+    """The message an owner's wallet signs to authorize sending an NFT
+    minted by a session key over to the owner's own connected wallet (see
+    firing.transfer_minted_nft) — the session key only ever exists to fire
+    the mint at speed, it was never meant to be where the NFT lives."""
+    return (
+        "Mantis Pro OpenSea Auto-Mint\n"
+        "action: transfer-nft\n"
+        f"mintAttemptId: {mint_attempt_id}\n"
+        f"timestamp: {timestamp}"
+    )
