@@ -25,6 +25,7 @@
     --err: rgba(240,80,80,0.88);
     --accent: rgba(120,210,170,0.9);
     --upcoming: rgba(230,190,90,0.9);
+    --cyan: rgba(96,205,235,0.95);
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -775,10 +776,232 @@
   .track-row button:hover { background: rgba(255,255,255,0.1); }
   .track-row button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+  /* ── VIEW TABS ── */
+  .view-nav {
+    position: sticky;
+    top: 60px;
+    z-index: 90;
+    display: flex;
+    justify-content: center;
+    padding: 10px 24px;
+    background: rgba(8,9,14,0.82);
+    backdrop-filter: blur(28px) saturate(1.8);
+    -webkit-backdrop-filter: blur(28px) saturate(1.8);
+    border-bottom: 1px solid rgba(200,208,235,0.1);
+  }
+  .view-tabs {
+    display: flex;
+    gap: 2px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 3px;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .view-tab {
+    padding: 7px 16px;
+    border-radius: 100px;
+    border: none;
+    background: transparent;
+    color: var(--t2);
+    font-size: 12.5px;
+    font-weight: 500;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+  .view-tab:hover { color: var(--t0); }
+  .view-tab.active {
+    background: var(--surface-hi);
+    color: var(--t0);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .view-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .view-panel { display: none; }
+  .view-panel.active { display: block; }
+
+  /* ── COMMAND CENTER ── */
+  .cc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+  .cc-tile {
+    background: linear-gradient(145deg, rgba(255,255,255,0.062) 0%, rgba(255,255,255,0.022) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 16px 18px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .cc-tile-label {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--t3);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    margin-bottom: 9px;
+  }
+  .cc-tile-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 25px;
+    font-weight: 500;
+    color: var(--t0);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+  .cc-tile-value.accent { color: var(--accent); }
+  .cc-tile-value.cyan { color: var(--cyan); }
+  .cc-tile-value.upcoming { color: var(--upcoming); }
+  .cc-tile-sub {
+    font-size: 11px;
+    color: var(--t3);
+    margin-top: 5px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .cc-section-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--t3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .activity-log {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+  }
+  .activity-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .activity-row:last-child { border-bottom: none; }
+  .activity-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--accent);
+    box-shadow: 0 0 6px 1px rgba(120,210,170,0.6);
+  }
+  .activity-row.is-aborted .activity-dot {
+    background: var(--t3);
+    box-shadow: none;
+  }
+  .activity-main { flex: 1; min-width: 0; }
+  .activity-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--t0);
+    text-decoration: none;
+  }
+  .activity-name:hover { text-decoration: underline; }
+  .activity-meta {
+    font-size: 11.5px;
+    color: var(--t3);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 2px;
+  }
+  .activity-latency {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--cyan);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* ── WATCHLIST TOOLBAR ── */
+  .watchlist-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .watchlist-search {
+    flex: 1 1 180px;
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--border-hi);
+    border-radius: 100px;
+    color: var(--t0);
+    padding: 9px 16px;
+    font-size: 13px;
+    font-family: inherit;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .watchlist-search:focus { outline: none; border-color: var(--accent); background: rgba(255,255,255,0.09); }
+  .filter-chip {
+    padding: 7px 14px;
+    border-radius: 100px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--t2);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .filter-chip:hover { color: var(--t0); }
+  .filter-chip.active {
+    background: rgba(120,210,170,0.12);
+    border-color: rgba(120,210,170,0.35);
+    color: var(--accent);
+  }
+  .sort-select {
+    background: var(--surface);
+    border: 1px solid var(--border-hi);
+    border-radius: 100px;
+    color: var(--t1);
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .sort-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ── LIVE DROPS ── */
+  .live-countdown {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--cyan);
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .live-countdown .sync-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 6px 1px rgba(96,205,235,0.6);
+    flex-shrink: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .live-countdown .sync-dot { animation: sync-pulse 1.8s ease-in-out infinite; }
+  }
+  @keyframes sync-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
   @media (max-width: 600px) {
     header { padding: 0 16px; gap: 12px; }
     main { padding: 32px 16px 60px; }
     .drop-grid { grid-template-columns: 1fr; }
+    .view-nav { padding: 10px 16px; top: 60px; }
+    .cc-grid { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -791,29 +1014,99 @@
   <button id="refresh-btn" class="hidden" type="button">Refresh</button>
 </header>
 
+<nav class="view-nav" aria-label="Dashboard views">
+  <div class="view-tabs" role="tablist">
+    <button class="view-tab active" type="button" role="tab" id="tab-command-center" aria-selected="true" aria-controls="view-command-center" data-view="command-center">Command Center</button>
+    <button class="view-tab" type="button" role="tab" id="tab-watchlist" aria-selected="false" aria-controls="view-watchlist" data-view="watchlist" tabindex="-1">Watchlist</button>
+    <button class="view-tab" type="button" role="tab" id="tab-live-drops" aria-selected="false" aria-controls="view-live-drops" data-view="live-drops" tabindex="-1">Live Drops</button>
+  </div>
+</nav>
+
 <main>
-  <div class="hero-eyebrow">OpenSea Auto-Mint</div>
-  <div class="hero-title">Tracked Drops</div>
-  <div class="hero-subtitle">Public mint status &middot; opensea.io/drops</div>
+  <section id="view-command-center" class="view-panel active" role="tabpanel" aria-labelledby="tab-command-center">
+    <div class="hero-eyebrow">Command Center</div>
+    <div class="hero-title" id="cc-hero-title">All quiet</div>
+    <div class="hero-subtitle" id="cc-hero-subtitle">No drops minting right now.</div>
 
-  <div class="connect-section">
-    <div class="connect-label">Wallet</div>
-    <div id="eth-connect-root"></div>
-  </div>
-
-  <div class="connect-section">
-    <div class="connect-label">Track a collection by slug</div>
-    <div class="track-row">
-      <input type="text" id="track-slug-input" placeholder="e.g. gobbozhq">
-      <button id="track-slug-btn" type="button">Track</button>
+    <div class="cc-grid">
+      <div class="cc-tile">
+        <div class="cc-tile-label">Watchers</div>
+        <div class="cc-tile-value" id="cc-watchers">—</div>
+        <div class="cc-tile-sub">tracked collections</div>
+      </div>
+      <div class="cc-tile">
+        <div class="cc-tile-label">Minting Now</div>
+        <div class="cc-tile-value accent" id="cc-minting-now">—</div>
+        <div class="cc-tile-sub">live this moment</div>
+      </div>
+      <div class="cc-tile">
+        <div class="cc-tile-label">Upcoming</div>
+        <div class="cc-tile-value upcoming" id="cc-upcoming">—</div>
+        <div class="cc-tile-sub">scheduled</div>
+      </div>
+      <div class="cc-tile">
+        <div class="cc-tile-label">Mints Today</div>
+        <div class="cc-tile-value cyan" id="cc-mints-today">—</div>
+        <div class="cc-tile-sub" id="cc-mints-today-sub">confirmed on-chain</div>
+      </div>
+      <div class="cc-tile">
+        <div class="cc-tile-label">Avg. Execution Delay</div>
+        <div class="cc-tile-value" id="cc-avg-latency">—</div>
+        <div class="cc-tile-sub">after go-live, last 20</div>
+      </div>
     </div>
-    <div id="track-status" class="modal-details-state"></div>
-  </div>
 
-  <div id="loading-msg" class="state-msg">Loading drops…</div>
-  <div id="error-msg" class="state-msg hidden"></div>
-  <div id="empty-msg" class="state-msg hidden">No drops found yet.</div>
-  <div id="drop-grid" class="drop-grid"></div>
+    <div class="cc-section-title">Recent Activity</div>
+    <div class="activity-log" id="activity-log">
+      <div class="state-msg">Loading activity…</div>
+    </div>
+  </section>
+
+  <section id="view-watchlist" class="view-panel" role="tabpanel" aria-labelledby="tab-watchlist">
+    <div class="hero-eyebrow">OpenSea Auto-Mint</div>
+    <div class="hero-title">Tracked Drops</div>
+    <div class="hero-subtitle">Public mint status &middot; opensea.io/drops</div>
+
+    <div class="connect-section">
+      <div class="connect-label">Wallet</div>
+      <div id="eth-connect-root"></div>
+    </div>
+
+    <div class="connect-section">
+      <div class="connect-label">Track a collection by slug</div>
+      <div class="track-row">
+        <input type="text" id="track-slug-input" placeholder="e.g. gobbozhq">
+        <button id="track-slug-btn" type="button">Track</button>
+      </div>
+      <div id="track-status" class="modal-details-state"></div>
+    </div>
+
+    <div id="loading-msg" class="state-msg">Loading drops…</div>
+    <div id="error-msg" class="state-msg hidden"></div>
+    <div id="empty-msg" class="state-msg hidden">No drops found yet.</div>
+
+    <div class="watchlist-toolbar" id="watchlist-toolbar">
+      <input type="search" id="watchlist-search" class="watchlist-search" placeholder="Search tracked collections…" aria-label="Search tracked collections">
+      <button class="filter-chip active" type="button" data-filter="all" aria-pressed="true">All</button>
+      <button class="filter-chip" type="button" data-filter="minting_now" aria-pressed="false">Minting now</button>
+      <button class="filter-chip" type="button" data-filter="upcoming" aria-pressed="false">Upcoming</button>
+      <select class="sort-select" id="watchlist-sort" aria-label="Sort tracked collections">
+        <option value="default">Default order</option>
+        <option value="name">Name (A&ndash;Z)</option>
+      </select>
+    </div>
+
+    <div id="drop-grid" class="drop-grid"></div>
+  </section>
+
+  <section id="view-live-drops" class="view-panel" role="tabpanel" aria-labelledby="tab-live-drops">
+    <div class="hero-eyebrow">Right Now</div>
+    <div class="hero-title">Live Drops</div>
+    <div class="hero-subtitle">Minting now, or scheduled and counting down.</div>
+
+    <div id="live-drops-empty" class="state-msg hidden">Nothing live or upcoming right now — check the Watchlist to track more.</div>
+    <div id="live-drop-grid" class="drop-grid"></div>
+  </section>
 </main>
 
 <div id="modal-overlay" class="modal-overlay hidden">
@@ -888,6 +1181,17 @@ function escExternalUrl(url) {
 var LINK_LABELS = { twitter: 'X (Twitter)', discord: 'Discord', instagram: 'Instagram', website: 'Website' };
 var activeModalSlug = null; // which drop's modal is currently open, or null if closed
 
+// ── Cross-view state ──────────────────────────────────────────────────────
+// The three tabs (Command Center / Watchlist / Live Drops) all read from
+// this one drop list fetched by loadDrops/refreshDrops — there's exactly
+// one source of truth for "what's tracked" so the tabs can't drift out of
+// sync with each other.
+var allDrops = [];
+var watchlistState = { search: '', filter: 'all', sort: 'default' };
+var mintHistoryCache = null; // fetched once per page load; mint-history is a heavier query
+var scheduleCache = {}; // collection_slug -> earliest upcoming {name, starts_epoch} stage, or null once fetched-and-none
+var liveCountdownTimer = null;
+
 // Tasteful "no image" glyph — shown for a collection with no discoverable
 // image_url, and swapped in by handleDropImageError below when a real URL
 // fails to actually load. Self-contained inline SVG, no external asset.
@@ -935,51 +1239,351 @@ function renderDropImageWrapHtml(imageUrl, name) {
   );
 }
 
+// Builds one drop card — shared by the Watchlist grid and the Live Drops
+// grid so both stay pixel-identical and only ever have one click/keyboard
+// handling implementation to keep correct. The countdown line is always
+// present but hidden; only renderLiveDrops ever unhides and fills it in.
+function buildDropCardEl(drop) {
+  var status = drop.status || 'not_minting';
+  var name = esc(drop.name || drop.collection_slug || 'Unknown');
+  var imageUrl = escImgUrl(drop.image_url);
+
+  var card = document.createElement('div');
+  card.className = 'drop-card';
+  card.tabIndex = 0;
+  card.setAttribute('role', 'button');
+  card.setAttribute('aria-label', 'View details for ' + (drop.name || drop.collection_slug || 'collection'));
+  card.innerHTML =
+    renderDropImageWrapHtml(imageUrl, name) +
+    '<div class="drop-card-body">' +
+      '<div class="drop-name">' + name + '</div>' +
+      '<span class="status-badge ' + esc(status) + '"><span class="dot"></span>' +
+        esc(statusLabel(status, drop.status_detail)) +
+      '</span>' +
+      (drop.status_detail && status !== 'upcoming' ? '<div class="status-detail">' + esc(drop.status_detail) + '</div>' : '') +
+      '<div class="live-countdown hidden" data-slug="' + esc(drop.collection_slug || '') + '"></div>' +
+      '<a class="drop-link" href="' + escUrl(drop.mint_page_url) + '" target="_blank" rel="noopener">View on OpenSea &rarr;</a>' +
+    '</div>';
+
+  card.addEventListener('click', function (e) {
+    if (e.target.closest('a')) return; // let the mint link navigate normally
+    openModal(drop);
+  });
+  card.addEventListener('keydown', function (e) {
+    if (e.target.closest('a')) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openModal(drop);
+    }
+  });
+
+  return card;
+}
+
+function renderDropsInto(gridEl, drops) {
+  gridEl.innerHTML = '';
+  drops.forEach(function (drop) { gridEl.appendChild(buildDropCardEl(drop)); });
+}
+
+// Entry point called by loadDrops/refreshDrops — the one place that owns
+// the master drop list. Everything downstream (Watchlist filters, Live
+// Drops, Command Center tallies) re-derives from allDrops rather than
+// keeping its own copy.
 function renderDrops(drops) {
+  allDrops = drops || [];
+  var emptyMsg = document.getElementById('empty-msg');
+  if (allDrops.length === 0) {
+    emptyMsg.textContent = 'No drops found yet.';
+    emptyMsg.classList.remove('hidden');
+  }
+  applyWatchlistFilters();
+  renderLiveDrops();
+  renderCommandCenter();
+}
+
+// ── Watchlist: search / status filter / sort ─────────────────────────────
+function applyWatchlistFilters() {
   var grid = document.getElementById('drop-grid');
   var emptyMsg = document.getElementById('empty-msg');
-  grid.innerHTML = '';
+  var q = watchlistState.search.trim().toLowerCase();
 
-  if (!drops || drops.length === 0) {
+  var filtered = allDrops.filter(function (drop) {
+    if (watchlistState.filter !== 'all' && (drop.status || 'not_minting') !== watchlistState.filter) return false;
+    if (q) {
+      var name = (drop.name || drop.collection_slug || '').toLowerCase();
+      if (name.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+
+  if (watchlistState.sort === 'name') {
+    filtered = filtered.slice().sort(function (a, b) {
+      var an = (a.name || a.collection_slug || '').toLowerCase();
+      var bn = (b.name || b.collection_slug || '').toLowerCase();
+      return an < bn ? -1 : an > bn ? 1 : 0;
+    });
+  }
+
+  renderDropsInto(grid, filtered);
+
+  if (allDrops.length > 0) {
+    if (filtered.length === 0) {
+      emptyMsg.textContent = 'No tracked collections match your search or filter.';
+      emptyMsg.classList.remove('hidden');
+    } else {
+      emptyMsg.classList.add('hidden');
+    }
+  }
+}
+
+function initWatchlistToolbar() {
+  var search = document.getElementById('watchlist-search');
+  var sort = document.getElementById('watchlist-sort');
+  var chips = document.querySelectorAll('#watchlist-toolbar .filter-chip');
+
+  search.addEventListener('input', function () {
+    watchlistState.search = search.value;
+    applyWatchlistFilters();
+  });
+  sort.addEventListener('change', function () {
+    watchlistState.sort = sort.value;
+    applyWatchlistFilters();
+  });
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      chips.forEach(function (c) {
+        c.classList.remove('active');
+        c.setAttribute('aria-pressed', 'false');
+      });
+      chip.classList.add('active');
+      chip.setAttribute('aria-pressed', 'true');
+      watchlistState.filter = chip.getAttribute('data-filter');
+      applyWatchlistFilters();
+    });
+  });
+}
+
+// ── Live Drops: minting-now + upcoming, with a server-timed countdown ───
+// The countdown epoch comes from OpenSea's own displayed schedule text,
+// parsed server-side into starts_epoch (see collection_details.py) — real
+// scheduled time, not a guess. That lookup does a live page fetch per
+// collection, so it's only ever requested once per slug per page load and
+// cached here, then ticked locally every second with zero further network
+// calls.
+function renderLiveDrops() {
+  var grid = document.getElementById('live-drop-grid');
+  var emptyMsg = document.getElementById('live-drops-empty');
+  var live = allDrops.filter(function (d) {
+    var s = d.status || 'not_minting';
+    return s === 'minting_now' || s === 'upcoming';
+  });
+
+  if (live.length === 0) {
+    grid.innerHTML = '';
     emptyMsg.classList.remove('hidden');
+    stopLiveCountdownTimer();
     return;
   }
   emptyMsg.classList.add('hidden');
 
-  drops.forEach(function (drop) {
-    var status = drop.status || 'not_minting';
-    var name = esc(drop.name || drop.collection_slug || 'Unknown');
-    var imageUrl = escImgUrl(drop.image_url);
+  // Minting-now first, then upcoming ordered by known start time — drops
+  // whose start time hasn't been resolved yet sort after ones that have.
+  live = live.slice().sort(function (a, b) {
+    var aLive = a.status === 'minting_now' ? 0 : 1;
+    var bLive = b.status === 'minting_now' ? 0 : 1;
+    if (aLive !== bLive) return aLive - bLive;
+    var aStage = scheduleCache[a.collection_slug];
+    var bStage = scheduleCache[b.collection_slug];
+    var aEpoch = aStage && aStage.starts_epoch;
+    var bEpoch = bStage && bStage.starts_epoch;
+    if (aEpoch && bEpoch) return aEpoch - bEpoch;
+    if (aEpoch) return -1;
+    if (bEpoch) return 1;
+    return 0;
+  });
 
-    var card = document.createElement('div');
-    card.className = 'drop-card';
-    card.tabIndex = 0;
-    card.setAttribute('role', 'button');
-    card.setAttribute('aria-label', 'View details for ' + (drop.name || drop.collection_slug || 'collection'));
-    card.innerHTML =
-      renderDropImageWrapHtml(imageUrl, name) +
-      '<div class="drop-card-body">' +
-        '<div class="drop-name">' + name + '</div>' +
-        '<span class="status-badge ' + esc(status) + '"><span class="dot"></span>' +
-          esc(statusLabel(status, drop.status_detail)) +
-        '</span>' +
-        (drop.status_detail && status !== 'upcoming' ? '<div class="status-detail">' + esc(drop.status_detail) + '</div>' : '') +
-        '<a class="drop-link" href="' + escUrl(drop.mint_page_url) + '" target="_blank" rel="noopener">View on OpenSea &rarr;</a>' +
-      '</div>';
+  renderDropsInto(grid, live);
 
-    card.addEventListener('click', function (e) {
-      if (e.target.closest('a')) return; // let the mint link navigate normally
-      openModal(drop);
+  live.forEach(function (drop) {
+    if (drop.status !== 'upcoming' || !drop.collection_slug) return;
+    if (scheduleCache.hasOwnProperty(drop.collection_slug)) return;
+    scheduleCache[drop.collection_slug] = null; // claim it so we never double-fetch
+    fetch('/api/opensea/collection/' + encodeURIComponent(drop.collection_slug))
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        scheduleCache[drop.collection_slug] = findEarliestUpcomingStage(data && data.mint_schedule);
+        tickLiveCountdowns();
+      })
+      .catch(function () { /* leave cached as null — card just shows no countdown */ });
+  });
+
+  tickLiveCountdowns();
+  startLiveCountdownTimer();
+}
+
+function findEarliestUpcomingStage(schedule) {
+  if (!schedule || !schedule.length) return null;
+  var now = Date.now() / 1000;
+  var best = null;
+  schedule.forEach(function (stage) {
+    if (typeof stage.starts_epoch !== 'number' || stage.starts_epoch <= now) return;
+    if (!best || stage.starts_epoch < best.starts_epoch) best = stage;
+  });
+  return best;
+}
+
+function formatCountdown(totalSeconds) {
+  var s = Math.max(0, Math.floor(totalSeconds));
+  var d = Math.floor(s / 86400);
+  var h = Math.floor((s % 86400) / 3600);
+  var m = Math.floor((s % 3600) / 60);
+  var sec = s % 60;
+  if (d > 0) return d + 'd ' + h + 'h';
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm ' + sec + 's';
+}
+
+function tickLiveCountdowns() {
+  var grid = document.getElementById('live-drop-grid');
+  var nodes = grid.querySelectorAll('.live-countdown[data-slug]');
+  var now = Date.now() / 1000;
+  nodes.forEach(function (el) {
+    var stage = scheduleCache[el.getAttribute('data-slug')];
+    if (!stage || typeof stage.starts_epoch !== 'number') {
+      el.classList.add('hidden');
+      return;
+    }
+    var remaining = stage.starts_epoch - now;
+    el.classList.remove('hidden');
+    el.innerHTML = '<span class="sync-dot" aria-hidden="true"></span>' +
+      (remaining > 0
+        ? esc(formatCountdown(remaining)) + ' to ' + esc(stage.name || 'go-live')
+        : 'going live now');
+  });
+}
+
+function startLiveCountdownTimer() {
+  if (liveCountdownTimer) return;
+  liveCountdownTimer = setInterval(tickLiveCountdowns, 1000);
+}
+function stopLiveCountdownTimer() {
+  if (liveCountdownTimer) { clearInterval(liveCountdownTimer); liveCountdownTimer = null; }
+}
+
+// ── Command Center: real tallies + recent activity, no invented metrics ──
+function renderCommandCenter() {
+  var mintingNow = allDrops.filter(function (d) { return d.status === 'minting_now'; }).length;
+  var upcoming = allDrops.filter(function (d) { return d.status === 'upcoming'; }).length;
+
+  document.getElementById('cc-watchers').textContent = allDrops.length;
+  document.getElementById('cc-minting-now').textContent = mintingNow;
+  document.getElementById('cc-upcoming').textContent = upcoming;
+
+  var heroTitle = document.getElementById('cc-hero-title');
+  var heroSubtitle = document.getElementById('cc-hero-subtitle');
+  if (mintingNow > 0) {
+    heroTitle.textContent = mintingNow + ' drop' + (mintingNow === 1 ? '' : 's') + ' minting now';
+    heroSubtitle.textContent = 'Check Live Drops to arm or monitor.';
+  } else if (upcoming > 0) {
+    heroTitle.textContent = upcoming + ' drop' + (upcoming === 1 ? '' : 's') + ' upcoming';
+    heroSubtitle.textContent = 'Nothing minting yet — the next window is scheduled.';
+  } else {
+    heroTitle.textContent = 'All quiet';
+    heroSubtitle.textContent = 'No drops minting or scheduled right now.';
+  }
+
+  loadCommandCenterHistory();
+}
+
+async function loadCommandCenterHistory() {
+  var latencyEl = document.getElementById('cc-avg-latency');
+  var mintsTodayEl = document.getElementById('cc-mints-today');
+  var logEl = document.getElementById('activity-log');
+
+  try {
+    if (!mintHistoryCache) {
+      var res = await fetch('/api/opensea/mint-history');
+      if (!res.ok) throw new Error('API ' + res.status);
+      var data = await res.json();
+      mintHistoryCache = data.mints || [];
+    }
+    var mints = mintHistoryCache;
+    var confirmed = mints.filter(function (m) { return !!m.tx_hash; });
+
+    var startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    var todayCutoff = startOfToday.getTime() / 1000;
+    var today = confirmed.filter(function (m) { return (m.attempted_at || 0) >= todayCutoff; });
+    mintsTodayEl.textContent = today.length;
+
+    var withLatency = confirmed
+      .filter(function (m) { return typeof m.latency_ms === 'number'; })
+      .slice(0, 20);
+    if (withLatency.length > 0) {
+      var avgMs = withLatency.reduce(function (sum, m) { return sum + m.latency_ms; }, 0) / withLatency.length;
+      latencyEl.textContent = (avgMs / 1000).toFixed(2) + 's';
+    } else {
+      latencyEl.textContent = '—';
+    }
+
+    renderActivityLog(mints.slice(0, 6));
+  } catch (err) {
+    logEl.innerHTML = '<div class="state-msg">Could not load recent activity.</div>';
+  }
+}
+
+function relativeTime(epochSeconds) {
+  var diff = Date.now() / 1000 - epochSeconds;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+function renderActivityLog(mints) {
+  var logEl = document.getElementById('activity-log');
+  if (!mints || mints.length === 0) {
+    logEl.innerHTML = '<div class="state-msg">No mint attempts yet.</div>';
+    return;
+  }
+  logEl.innerHTML = mints.map(function (m) {
+    var name = esc(m.name || m.collection_slug || 'Unknown');
+    var isConfirmed = !!m.tx_hash;
+    var latency = typeof m.latency_ms === 'number' ? (m.latency_ms / 1000).toFixed(2) + 's' : '';
+    var whenSeconds = m.fired_at || m.attempted_at;
+    var when = whenSeconds ? relativeTime(whenSeconds) : '';
+    var metaParts = [m.chain, m.quantity ? 'qty ' + m.quantity : null, when].filter(function (v) { return !!v; });
+    var meta = metaParts.join(' · ') + (isConfirmed ? '' : ' · no transaction fired');
+
+    return (
+      '<div class="activity-row' + (isConfirmed ? '' : ' is-aborted') + '">' +
+        '<span class="activity-dot" aria-hidden="true"></span>' +
+        '<div class="activity-main">' +
+          '<div class="activity-name">' + name + '</div>' +
+          '<div class="activity-meta">' + esc(meta) + '</div>' +
+        '</div>' +
+        (latency ? '<div class="activity-latency">' + esc(latency) + '</div>' : '') +
+      '</div>'
+    );
+  }).join('');
+}
+
+// ── View tabs ─────────────────────────────────────────────────────────────
+function initViewTabs() {
+  var tabs = document.querySelectorAll('.view-tab');
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      var view = tab.getAttribute('data-view');
+      tabs.forEach(function (t) {
+        var active = t === tab;
+        t.classList.toggle('active', active);
+        t.setAttribute('aria-selected', active ? 'true' : 'false');
+        t.tabIndex = active ? 0 : -1;
+      });
+      document.querySelectorAll('.view-panel').forEach(function (panel) {
+        panel.classList.toggle('active', panel.id === 'view-' + view);
+      });
     });
-    card.addEventListener('keydown', function (e) {
-      if (e.target.closest('a')) return;
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        openModal(drop);
-      }
-    });
-
-    grid.appendChild(card);
   });
 }
 
@@ -2032,6 +2636,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (e.key === 'Enter') handleTrackSlugClick();
   });
 
+  initViewTabs();
+  initWatchlistToolbar();
   loadDrops();
 });
 
