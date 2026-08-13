@@ -73,6 +73,24 @@ _countdowns_lock = threading.Lock()
 # already exhausted) would otherwise retry forever.
 MAX_FIRE_ATTEMPTS = 3
 
+# Signed-presale stages get a MUCH higher retry budget than the public-mint
+# default above. Verified live 2026-08-13 against a real allowlist mint
+# (Redflags' FLAGGY LOVERS stage, a narrow 20-minute window): all 3 attempts
+# reverted with SeaDrop's own NotActive error, decoded directly from the
+# on-chain revert data — not insufficient funds, not ineligibility, just
+# this free RPC's already-documented inconsistent view of the chain tip
+# (see ethClient.ts's GET_LOGS_CHUNK_BLOCKS comment on the same load-
+# balanced-backend-nodes behavior) never catching up within the ~20-30
+# seconds 3 retries spans. A public-stage sellout genuinely never resolves
+# no matter how many times it's retried, so MAX_FIRE_ATTEMPTS stays low
+# there; an RPC-staleness revert on a presale stage very plausibly WOULD
+# resolve given more attempts, since each retry is a fresh chance to land
+# on a different (hopefully caught-up) backend node behind the load
+# balancer. No funds are ever spent on a failed attempt either way (gas
+# estimation catches a would-revert call before ever sending) — the only
+# cost of a higher budget here is time, not risk.
+SIGNED_PRESALE_MAX_FIRE_ATTEMPTS = 15
+
 # How long after a signed-presale stage's (scraped, not on-chain) go-live
 # time this module keeps trying to fire before giving up and marking the
 # arm request expired. There's no on-chain endTime getter for a presale
@@ -733,7 +751,8 @@ def _fire_one(arm: dict, drop: dict, grant: dict, go_live_at: float | None = Non
 
     logger.warning("[firing] arm request %d: attempt failed: %s", arm["id"], result.get("error"))
     attempts = store.get_mint_attempts(arm["id"])
-    if len(attempts) >= MAX_FIRE_ATTEMPTS:
+    max_attempts = SIGNED_PRESALE_MAX_FIRE_ATTEMPTS if arm.get("stage_label") else MAX_FIRE_ATTEMPTS
+    if len(attempts) >= max_attempts:
         store.update_arm_request_status(arm["id"], "failed")
     else:
         # Back to 'armed' so the next tick (still within the drop's public

@@ -1587,6 +1587,48 @@ def test_watcher_retries_on_failure_up_to_max_attempts_then_gives_up(
     assert len(store.get_mint_attempts(arm_id)) == firing.MAX_FIRE_ATTEMPTS
 
 
+def test_watcher_retries_signed_presale_up_to_higher_max_attempts_then_gives_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression test: verified live 2026-08-13 that a real allowlist mint
+    # (Redflags) exhausted the public path's MAX_FIRE_ATTEMPTS (3) within
+    # ~20-30 seconds, all reverting with SeaDrop's own NotActive error -
+    # not a real ineligibility/sellout, just this project's free RPC's
+    # already-documented inconsistent view of the chain tip. Signed-presale
+    # stages get a much higher budget (SIGNED_PRESALE_MAX_FIRE_ATTEMPTS) so
+    # a short allowlist window has a real chance to outlast that.
+    slug = _make_drop()
+    grant_id = _make_grant()
+    arm_id = store.create_arm_request(store.ArmRequestInput(
+        owner_address=OWNER, drop_id=_drop_db_id(slug), session_grant_id=grant_id,
+        quantity=1, max_price_wei="1000", go_live_at=time.time() - 100,
+        stage_label="GTD", stage_index=1,
+    ))
+    monkeypatch.setattr(
+        firing.opensea_session, "fetch_mint_transaction_data",
+        lambda owner, contract, quantity, chain: _TX_DATA,
+    )
+    monkeypatch.setattr(
+        firing.node_client, "fire_raw_transaction",
+        lambda *a, **k: {
+            "success": False, "txHash": None, "blockNumber": None,
+            "gasUsed": None, "error": "simulated NotActive revert",
+        },
+    )
+
+    deadline = time.time() + 5.0
+    arm = store.get_arm_request(arm_id)
+    while arm["status"] != "failed" and time.time() < deadline:
+        firing.check_and_fire_armed_requests()
+        time.sleep(0.05)
+        arm = store.get_arm_request(arm_id)
+
+    assert arm["status"] == "failed"
+    attempt_count = len(store.get_mint_attempts(arm_id))
+    assert attempt_count == firing.SIGNED_PRESALE_MAX_FIRE_ATTEMPTS
+    assert attempt_count > firing.MAX_FIRE_ATTEMPTS
+
+
 def test_watcher_never_fires_twice_for_the_same_arm_request(monkeypatch: pytest.MonkeyPatch) -> None:
     # Regression test for the double-fire guard: even if _fire_one were
     # somehow invoked twice in a row for the same already-armed request
