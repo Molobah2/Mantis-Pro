@@ -493,6 +493,27 @@ def test_arm_drop_stage_label_fails_when_not_eligible(monkeypatch: pytest.Monkey
     assert "eligible" in result["error"].lower()
 
 
+def test_arm_drop_stage_label_succeeds_when_eligibility_is_null(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression test: DropEligibilityQuery's isEligible often comes back
+    # null (not true/false) due to an OpenSea-side "Active address was not
+    # provided" auth quirk on that specific query - verified live
+    # 2026-08-13 for a wallet that WAS genuinely eligible per OpenSea's own
+    # page. Only an explicit False should block arming; null must not.
+    slug = _make_drop()
+    _make_grant()
+    _mock_gtd_schedule(monkeypatch, slug)
+    _mock_eligibility(monkeypatch, [
+        {"stageType": "SIGNED_PRESALE", "stageIndex": 1, "isEligible": None},
+        {"stageType": "PUBLIC_SALE", "stageIndex": 0, "isEligible": None},
+    ])
+
+    result = firing.arm_drop(OWNER, slug, quantity=1, max_price_wei="0", stage_label="GTD")
+
+    assert "armId" in result
+
+
 def test_arm_drop_stage_label_fails_when_position_is_actually_public(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

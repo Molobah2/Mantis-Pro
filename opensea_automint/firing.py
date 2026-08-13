@@ -138,7 +138,18 @@ def _resolve_signed_presale_stage(collection_slug: str, owner_address: str, stag
     stage = eligibility_stages[position]
     if stage.get("stageType") != "SIGNED_PRESALE":
         return {"error": f"Stage {stage_label!r} is not a signed-presale stage"}
-    if not stage.get("isEligible"):
+    # Verified live 2026-08-13: DropEligibilityQuery's isEligible often
+    # comes back null (not true/false) with an "Active address was not
+    # provided" auth note in the response — an OpenSea-side quirk of this
+    # specific query, not a real "ineligible" signal (the SAME wallet
+    # resolved correctly through MintActionTimelineQuery for a live
+    # allowlist mint the same night). Only an EXPLICIT False is treated as
+    # disqualifying here; null/missing just means "unknown at arm time" —
+    # the real, reliable eligibility gate is fetch_mint_transaction_data at
+    # FIRE time (opensea_session.fetch_mint_transaction_data), which
+    # returns None for a genuinely ineligible wallet and fails the arm
+    # attempt safely, without ever spending anything.
+    if stage.get("isEligible") is False:
         return {"error": f"This wallet is not eligible for stage {stage_label!r}"}
 
     stage_index = stage.get("stageIndex")
