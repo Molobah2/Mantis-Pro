@@ -132,28 +132,26 @@ def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFon
     return lines
 
 
-_THUMB_LETTERBOX = (255, 255, 255, 16)  # same subtle fill as the placeholder tile
-
-
 def _rounded_thumbnail(img: Image.Image, size: tuple[int, int], radius: int) -> Image.Image:
-    """Contain-fits img inside size (the whole NFT visible, nothing cropped
-    off — matches how OpenSea's own grid thumbnails behave), centered on a
-    subtle neutral fill for any leftover space rather than cropping to fill
-    the cell."""
+    """Cover-fits img to completely fill size, no padding/letterbox bars —
+    matches how OpenSea's own grid thumbnails fill their cells. Cells this
+    is called with are always square (see _square_cell_size), and most NFT
+    art is itself square-ish, so in practice little to nothing gets cropped;
+    this only crops the excess on collections whose art genuinely isn't
+    square."""
     img = img.convert("RGBA")
     src_w, src_h = img.size
     target_w, target_h = size
-    scale = min(target_w / src_w, target_h / src_h)
-    new_w, new_h = max(1, round(src_w * scale)), max(1, round(src_h * scale))
-    resized = img.resize((new_w, new_h), Image.LANCZOS)
-
-    tile = Image.new("RGBA", size, _THUMB_LETTERBOX)
-    tile.alpha_composite(resized, ((target_w - new_w) // 2, (target_h - new_h) // 2))
+    scale = max(target_w / src_w, target_h / src_h)
+    resized = img.resize((max(1, round(src_w * scale)), max(1, round(src_h * scale))), Image.LANCZOS)
+    left = (resized.width - target_w) // 2
+    top = (resized.height - target_h) // 2
+    cropped = resized.crop((left, top, left + target_w, top + target_h))
 
     mask = Image.new("L", size, 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, target_w, target_h), radius=radius, fill=255)
     out = Image.new("RGBA", size, (0, 0, 0, 0))
-    out.paste(tile, (0, 0), mask)
+    out.paste(cropped, (0, 0), mask)
     return out
 
 
@@ -252,6 +250,16 @@ def _thin_gap(span: int) -> int:
     return max(2, round(span * 0.003))
 
 
+def _square_cell_size(available_w: int, available_h: int, cols: int, rows: int, gap: int) -> int:
+    """Cells are always forced square (not just height-capped) — a
+    non-square cell is what forced cover-fit to crop off large chunks of
+    tall/wide NFT art. Square cells + typically-square NFT art means
+    cover-fit rarely needs to crop anything at all."""
+    w_limited = (available_w - gap * (cols - 1)) // cols
+    h_limited = (available_h - gap * (rows - 1)) // rows
+    return max(1, min(w_limited, h_limited))
+
+
 def _draw_grid(
     canvas: Image.Image,
     token_ids: tuple[int, ...],
@@ -264,17 +272,18 @@ def _draw_grid(
         return
 
     gap = _thin_gap(right - left)
-    cell_w = (right - left - gap * (cols - 1)) // cols
-    cell_h = (bottom - top - gap * (rows - 1)) // rows
-    cell_h = min(cell_h, cell_w)  # keep thumbnails from stretching too tall
-    radius = round(cell_w * 0.06)
+    cell = _square_cell_size(right - left, bottom - top, cols, rows, gap)
+    radius = round(cell * 0.06)
+
+    grid_w = cols * cell + gap * (cols - 1)
+    left += (right - left - grid_w) // 2  # center horizontally in any leftover space
 
     for i, token_id in enumerate(token_ids):
         col, row = i % cols, i // cols
-        x = left + col * (cell_w + gap)
-        y = top + row * (cell_h + gap)
+        x = left + col * (cell + gap)
+        y = top + row * (cell + gap)
         img = nft_images.get(token_id)
-        tile = _rounded_thumbnail(img, (cell_w, cell_h), radius) if img else _placeholder_tile((cell_w, cell_h), radius)
+        tile = _rounded_thumbnail(img, (cell, cell), radius) if img else _placeholder_tile((cell, cell), radius)
         canvas.alpha_composite(tile, (x, y))
 
 
@@ -288,27 +297,27 @@ def _draw_bento_grid(
     cols, rows, other_positions = bento_layout(len(backdrop_token_ids))
 
     gap = _thin_gap(right - left)
-    cell_w = (right - left - gap * (cols - 1)) // cols
-    cell_h = (bottom - top - gap * (rows - 1)) // rows
-    cell_h = min(cell_h, cell_w)
-    radius = round(cell_w * 0.08)
+    cell = _square_cell_size(right - left, bottom - top, cols, rows, gap)
+    radius = round(cell * 0.08)
 
-    hero_w = cell_w * _BENTO_HERO_SPAN + gap * (_BENTO_HERO_SPAN - 1)
-    hero_h = cell_h * _BENTO_HERO_SPAN + gap * (_BENTO_HERO_SPAN - 1)
+    grid_w = cols * cell + gap * (cols - 1)
+    left += (right - left - grid_w) // 2  # center horizontally in any leftover space
+
+    hero_size = cell * _BENTO_HERO_SPAN + gap * (_BENTO_HERO_SPAN - 1)
     hero_img = nft_images.get(hero_token_id)
     hero_tile = (
-        _rounded_thumbnail(hero_img, (hero_w, hero_h), radius) if hero_img
-        else _placeholder_tile((hero_w, hero_h), radius)
+        _rounded_thumbnail(hero_img, (hero_size, hero_size), radius) if hero_img
+        else _placeholder_tile((hero_size, hero_size), radius)
     )
     canvas.alpha_composite(hero_tile, (left, top))
 
-    small_radius = round(cell_w * 0.06)
+    small_radius = round(cell * 0.06)
     for (row, col), token_id in zip(other_positions, backdrop_token_ids):
-        x = left + col * (cell_w + gap)
-        y = top + row * (cell_h + gap)
+        x = left + col * (cell + gap)
+        y = top + row * (cell + gap)
         img = nft_images.get(token_id)
         tile = (
-            _rounded_thumbnail(img, (cell_w, cell_h), small_radius) if img
-            else _placeholder_tile((cell_w, cell_h), small_radius)
+            _rounded_thumbnail(img, (cell, cell), small_radius) if img
+            else _placeholder_tile((cell, cell), small_radius)
         )
         canvas.alpha_composite(tile, (x, y))
