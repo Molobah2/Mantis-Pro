@@ -80,6 +80,15 @@ def litany_dashboard():
     from flask import Response
     return Response(html, mimetype="text/html")
 
+@app.route("/insights")
+def nft_insights_dashboard():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "nft_insights_dashboard.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    from flask import Response
+    return Response(html, mimetype="text/html")
+
 @app.route("/litany/scanner")
 def litany_scanner():
     import os
@@ -1823,6 +1832,12 @@ app.after_request(_sec.security_headers)
 # opensea_automint/routes.py for the actual route definitions.
 from opensea_automint.routes import opensea_automint_bp
 app.register_blueprint(opensea_automint_bp)
+
+# ── NFT MARKET INTELLIGENCE ─────────────────────────────────────────
+# Same self-contained-package-as-Blueprint shape as opensea_automint/ above.
+# See nft_insights/routes.py for the actual route definitions.
+from nft_insights.routes import nft_insights_bp
+app.register_blueprint(nft_insights_bp)
 
 # Background refresh: the public GET /api/opensea/drops route deliberately
 # never triggers a live scrape itself (that's admin-gated on the /refresh
