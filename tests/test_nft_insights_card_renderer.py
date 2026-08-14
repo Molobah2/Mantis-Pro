@@ -7,8 +7,10 @@ from nft_insights import card_renderer
 from nft_insights.insights import Insight
 
 
-def _insight(type_: str, data: dict, nft_token_ids=()) -> Insight:
-    return Insight(id=type_, type=type_, data=data, nft_token_ids=nft_token_ids, score=0.5)
+def _insight(type_: str, data: dict, nft_token_ids=(), hero_token_id=None) -> Insight:
+    return Insight(
+        id=type_, type=type_, data=data, nft_token_ids=nft_token_ids, score=0.5, hero_token_id=hero_token_id,
+    )
 
 
 def _tiny_png_bytes() -> bytes:
@@ -30,6 +32,72 @@ def test_grid_layout_matches_spec_table(n, expected) -> None:
 def test_grid_layout_falls_back_to_near_square_for_uncommon_counts() -> None:
     cols, rows = card_renderer.grid_layout(20)
     assert cols * rows >= 20
+
+
+# ── bento_layout ──────────────────────────────────────────────────────────
+
+def test_bento_layout_hero_block_never_overlaps_others() -> None:
+    for other_count in [0, 1, 3, 5, 8, 11]:
+        cols, rows, positions = card_renderer.bento_layout(other_count)
+        hero_cells = {(r, c) for r in range(card_renderer._BENTO_HERO_SPAN) for c in range(card_renderer._BENTO_HERO_SPAN)}
+        assert not (set(positions) & hero_cells)
+        assert len(positions) == other_count
+        assert rows >= card_renderer._BENTO_HERO_SPAN
+
+
+def test_bento_layout_zero_others_still_fits_hero() -> None:
+    cols, rows, positions = card_renderer.bento_layout(0)
+    assert positions == []
+    assert rows >= card_renderer._BENTO_HERO_SPAN
+    assert cols >= card_renderer._BENTO_HERO_SPAN
+
+
+def test_bento_layout_positions_are_unique_and_within_grid_bounds() -> None:
+    cols, rows, positions = card_renderer.bento_layout(11)
+    assert len(set(positions)) == len(positions)
+    for r, c in positions:
+        assert 0 <= r < rows
+        assert 0 <= c < cols
+
+
+# ── render with a hero (bento layout) ────────────────────────────────────
+
+def test_render_with_hero_produces_valid_png() -> None:
+    hero_img = Image.new("RGBA", (300, 300), (200, 50, 50, 255))
+    insight = _insight(
+        "rarest_listed_nft",
+        {"token_id": 1, "rank": 1, "total": 100, "price": 1.0, "currency": "ETH"},
+        nft_token_ids=(1, 2, 3, 4),
+        hero_token_id=1,
+    )
+    png_bytes = card_renderer.render(insight, "Boonies", {1: hero_img}, format_key="16:9")
+    img = Image.open(io.BytesIO(png_bytes))
+    assert img.format == "PNG"
+    assert img.size == (1600, 900)
+
+
+def test_render_with_hero_and_no_backdrop_still_succeeds() -> None:
+    insight = _insight(
+        "rarest_listed_nft",
+        {"token_id": 1, "rank": 1, "total": 100, "price": 1.0, "currency": "ETH"},
+        nft_token_ids=(1,),
+        hero_token_id=1,
+    )
+    png_bytes = card_renderer.render(insight, "Boonies", {})
+    assert Image.open(io.BytesIO(png_bytes)).format == "PNG"
+
+
+def test_render_hero_not_in_token_ids_falls_back_to_uniform_grid() -> None:
+    """Defensive: if hero_token_id somehow isn't among nft_token_ids, don't
+    crash — just render the uniform grid instead."""
+    insight = _insight(
+        "rarest_listed_nft",
+        {"token_id": 1, "rank": 1, "total": 100, "price": 1.0, "currency": "ETH"},
+        nft_token_ids=(2, 3),
+        hero_token_id=999,
+    )
+    png_bytes = card_renderer.render(insight, "Boonies", {})
+    assert Image.open(io.BytesIO(png_bytes)).format == "PNG"
 
 
 # ── render (pure composition, no network) ────────────────────────────────

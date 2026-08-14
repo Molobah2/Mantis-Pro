@@ -86,7 +86,10 @@ def test_rarest_listed_nft_picks_lowest_rank_among_listed() -> None:
     assert rarest is not None
     # token 1 is rarest overall but unlisted; among listed (2,3) they tie -> either could be picked deterministically (min by rank)
     assert rarest.data["token_id"] in (2, 3)
-    assert rarest.nft_token_ids == (rarest.data["token_id"],)
+    # hero (the rarest) plus the other currently-listed token as backdrop
+    assert rarest.hero_token_id == rarest.data["token_id"]
+    assert rarest.nft_token_ids[0] == rarest.hero_token_id
+    assert set(rarest.nft_token_ids) == {2, 3}
     assert rarest.data["price_vs_floor_multiple"] is not None
 
 
@@ -94,6 +97,55 @@ def test_rarest_listed_nft_none_when_no_nft_data() -> None:
     scan = {"collection": {}, "stats": {}, "listings": [_listing(1, 0.1)], "nfts": []}
     result = insights.generate(scan)
     assert all(i.type != "rarest_listed_nft" for i in result)
+
+
+def test_rarest_listed_nft_shows_backdrop_of_other_listed_nfts_rarest_first() -> None:
+    nfts = [
+        _nft(1, Eyes="Normal"),   # freq 1 -> rarest, will be hero
+        _nft(2, Eyes="Uncommon"),  # freq 1 among the rest -> next rarest
+        _nft(3, Eyes="Common"),
+        _nft(4, Eyes="Common"),
+        _nft(5, Eyes="Common"),
+    ]
+    scan = {
+        "collection": {"total_supply": 5},
+        "stats": {},
+        "listings": [_listing(i, 0.1) for i in (1, 2, 3, 4, 5)],
+        "nfts": nfts,
+    }
+    result = insights.generate(scan)
+    rarest = next(i for i in result if i.type == "rarest_listed_nft")
+    assert rarest.hero_token_id == 1
+    assert rarest.nft_token_ids[0] == 1
+    # backdrop excludes the hero itself and is ordered rarest-first
+    assert 1 not in rarest.nft_token_ids[1:]
+    assert rarest.nft_token_ids[1] == 2
+
+
+def test_rarest_listed_nft_backdrop_capped_at_max_grid_tokens() -> None:
+    nfts = [_nft(i, Eyes=f"trait-{i}") for i in range(1, 20)]  # every trait unique -> all rank ties broken by insertion
+    scan = {
+        "collection": {"total_supply": 19},
+        "stats": {},
+        "listings": [_listing(i, 0.1) for i in range(1, 20)],
+        "nfts": nfts,
+    }
+    result = insights.generate(scan)
+    rarest = next(i for i in result if i.type == "rarest_listed_nft")
+    assert len(rarest.nft_token_ids) <= 12  # hero + up to 11 backdrop
+
+
+def test_other_insight_types_have_no_hero() -> None:
+    scan = {
+        "collection": {"total_supply": 4},
+        "stats": {"floor_price": 0.1},
+        "listings": [_listing(1, 0.5), _listing(2, 0.1), _listing(3, 0.1), _listing(4, 0.1)],
+        "nfts": [_nft(1, Hat="Crown"), _nft(2, Hat="Cap"), _nft(3, Hat="Cap"), _nft(4, Hat="Cap")],
+    }
+    result = insights.generate(scan)
+    for insight in result:
+        if insight.type != "rarest_listed_nft":
+            assert insight.hero_token_id is None
 
 
 def test_rarity_insights_skipped_when_supply_exceeds_max_scan_cap(monkeypatch) -> None:

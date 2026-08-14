@@ -53,6 +53,26 @@ def grid_layout(n: int) -> tuple[int, int]:
     return (cols, rows)
 
 
+# "Bento" layout for a single-subject insight (e.g. rarest_listed_nft): one
+# hero tile spans a HERO_SPAN x HERO_SPAN block of a COLS-wide grid, and the
+# backdrop NFTs fill the remaining cells at 1x1 in reading order.
+_BENTO_COLS = 4
+_BENTO_HERO_SPAN = 2
+
+
+def bento_layout(other_count: int) -> tuple[int, int, list[tuple[int, int]]]:
+    """Returns (cols, rows, other_cell_positions) — other_cell_positions is
+    a list of (row, col) in reading order, skipping the hero's block at the
+    top-left. Always at least HERO_SPAN rows tall, even with zero others,
+    so the hero block always fits."""
+    cols = _BENTO_COLS
+    hero_cells = _BENTO_HERO_SPAN * _BENTO_HERO_SPAN
+    rows = max(_BENTO_HERO_SPAN, math.ceil((hero_cells + other_count) / cols))
+    occupied = {(r, c) for r in range(_BENTO_HERO_SPAN) for c in range(_BENTO_HERO_SPAN)}
+    positions = [(r, c) for r in range(rows) for c in range(cols) if (r, c) not in occupied]
+    return cols, rows, positions[:other_count]
+
+
 def fetch_nft_image(url: str | None) -> Image.Image | None:
     """Fetches and decodes one NFT thumbnail. Returns None on any failure —
     untrusted host, network error, non-200, oversized body, undecodable
@@ -185,7 +205,13 @@ def render(
         cursor_y += round(stat_size * 1.6)
 
     grid_top = cursor_y + round(headline_size * 0.4)
-    _draw_grid(canvas, insight.nft_token_ids, nft_images, margin, grid_top, w - margin, h - margin)
+    if insight.hero_token_id is not None and insight.hero_token_id in insight.nft_token_ids:
+        backdrop_ids = tuple(tid for tid in insight.nft_token_ids if tid != insight.hero_token_id)
+        _draw_bento_grid(
+            canvas, insight.hero_token_id, backdrop_ids, nft_images, margin, grid_top, w - margin, h - margin,
+        )
+    else:
+        _draw_grid(canvas, insight.nft_token_ids, nft_images, margin, grid_top, w - margin, h - margin)
 
     buf = io.BytesIO()
     canvas.convert("RGB").save(buf, format="PNG")
@@ -235,4 +261,40 @@ def _draw_grid(
         y = top + row * (cell_h + gap)
         img = nft_images.get(token_id)
         tile = _rounded_thumbnail(img, (cell_w, cell_h), radius) if img else _placeholder_tile((cell_w, cell_h), radius)
+        canvas.alpha_composite(tile, (x, y))
+
+
+def _draw_bento_grid(
+    canvas: Image.Image,
+    hero_token_id: int,
+    backdrop_token_ids: tuple[int, ...],
+    nft_images: dict[int, Image.Image | None],
+    left: int, top: int, right: int, bottom: int,
+) -> None:
+    cols, rows, other_positions = bento_layout(len(backdrop_token_ids))
+
+    gap = round((right - left) * 0.015)
+    cell_w = (right - left - gap * (cols - 1)) // cols
+    cell_h = (bottom - top - gap * (rows - 1)) // rows
+    cell_h = min(cell_h, cell_w)
+    radius = round(cell_w * 0.08)
+
+    hero_w = cell_w * _BENTO_HERO_SPAN + gap * (_BENTO_HERO_SPAN - 1)
+    hero_h = cell_h * _BENTO_HERO_SPAN + gap * (_BENTO_HERO_SPAN - 1)
+    hero_img = nft_images.get(hero_token_id)
+    hero_tile = (
+        _rounded_thumbnail(hero_img, (hero_w, hero_h), radius) if hero_img
+        else _placeholder_tile((hero_w, hero_h), radius)
+    )
+    canvas.alpha_composite(hero_tile, (left, top))
+
+    small_radius = round(cell_w * 0.06)
+    for (row, col), token_id in zip(other_positions, backdrop_token_ids):
+        x = left + col * (cell_w + gap)
+        y = top + row * (cell_h + gap)
+        img = nft_images.get(token_id)
+        tile = (
+            _rounded_thumbnail(img, (cell_w, cell_h), small_radius) if img
+            else _placeholder_tile((cell_w, cell_h), small_radius)
+        )
         canvas.alpha_composite(tile, (x, y))

@@ -46,6 +46,7 @@ def _serialize_insight(insight, collection_name: str, images: dict[int, dict]) -
         "type": insight.type,
         "score": insight.score,
         "is_best": insight.is_best,
+        "hero_token_id": insight.hero_token_id,
         "data": insight.data,
         "headline": captions.headline(insight, collection_name),
         "captions": captions.caption_options(insight, collection_name),

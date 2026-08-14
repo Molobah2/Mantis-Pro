@@ -34,6 +34,11 @@ class Insight:
     nft_token_ids: tuple[int, ...]
     score: float
     is_best: bool = field(default=False, compare=False)
+    # When set, this token id is one of nft_token_ids and should render
+    # larger than the rest — e.g. rarest_listed_nft shown bigger amongst a
+    # backdrop of other currently-listed NFTs, not just alone. None means
+    # "uniform grid, no single subject" (e.g. cheap_listings).
+    hero_token_id: int | None = None
 
 
 def _cheapest_price_by_token(listings: list[dict]) -> dict[int, dict]:
@@ -106,12 +111,24 @@ def _rarest_listed_nft(nfts: list[dict], listings: list[dict], stats: dict) -> I
         data["price_vs_floor_multiple"] = round(listing["price"] / floor, 2) if floor else None
     # Rarer (lower rank / total) -> higher score.
     rarity_fraction = 1 - (rarest.rank - 1) / max(total - 1, 1)
+
+    # Show the rarest listed NFT bigger amongst a backdrop of the OTHER
+    # currently-listed NFTs (rarest-first), instead of alone — proves it's
+    # rare relative to what's actually available right now, not just an
+    # isolated claim. Backdrop count capped the same as every other grid.
+    other_listed_ranked = sorted(
+        (r for r in listed_ranked if r.token_id != rarest.token_id),
+        key=lambda r: r.rank,
+    )
+    backdrop_ids = tuple(r.token_id for r in other_listed_ranked[: _MAX_GRID_TOKENS - 1])
+
     return Insight(
         id="rarest_listed_nft",
         type="rarest_listed_nft",
         data=data,
-        nft_token_ids=(rarest.token_id,),
+        nft_token_ids=(rarest.token_id, *backdrop_ids),
         score=0.5 + 0.4 * rarity_fraction,
+        hero_token_id=rarest.token_id,
     )
 
 
