@@ -132,20 +132,28 @@ def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFon
     return lines
 
 
+_THUMB_LETTERBOX = (255, 255, 255, 16)  # same subtle fill as the placeholder tile
+
+
 def _rounded_thumbnail(img: Image.Image, size: tuple[int, int], radius: int) -> Image.Image:
+    """Contain-fits img inside size (the whole NFT visible, nothing cropped
+    off — matches how OpenSea's own grid thumbnails behave), centered on a
+    subtle neutral fill for any leftover space rather than cropping to fill
+    the cell."""
     img = img.convert("RGBA")
     src_w, src_h = img.size
     target_w, target_h = size
-    scale = max(target_w / src_w, target_h / src_h)
-    resized = img.resize((max(1, round(src_w * scale)), max(1, round(src_h * scale))), Image.LANCZOS)
-    left = (resized.width - target_w) // 2
-    top = (resized.height - target_h) // 2
-    cropped = resized.crop((left, top, left + target_w, top + target_h))
+    scale = min(target_w / src_w, target_h / src_h)
+    new_w, new_h = max(1, round(src_w * scale)), max(1, round(src_h * scale))
+    resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+    tile = Image.new("RGBA", size, _THUMB_LETTERBOX)
+    tile.alpha_composite(resized, ((target_w - new_w) // 2, (target_h - new_h) // 2))
 
     mask = Image.new("L", size, 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, target_w, target_h), radius=radius, fill=255)
     out = Image.new("RGBA", size, (0, 0, 0, 0))
-    out.paste(cropped, (0, 0), mask)
+    out.paste(tile, (0, 0), mask)
     return out
 
 
@@ -238,6 +246,12 @@ def _stat_lines(insight: Insight) -> list[str]:
     return []
 
 
+def _thin_gap(span: int) -> int:
+    """A hairline separator between grid tiles — present enough to read as
+    intentional spacing, not so wide it reads as a gap."""
+    return max(2, round(span * 0.003))
+
+
 def _draw_grid(
     canvas: Image.Image,
     token_ids: tuple[int, ...],
@@ -249,7 +263,7 @@ def _draw_grid(
     if cols == 0:
         return
 
-    gap = round((right - left) * 0.02)
+    gap = _thin_gap(right - left)
     cell_w = (right - left - gap * (cols - 1)) // cols
     cell_h = (bottom - top - gap * (rows - 1)) // rows
     cell_h = min(cell_h, cell_w)  # keep thumbnails from stretching too tall
@@ -273,7 +287,7 @@ def _draw_bento_grid(
 ) -> None:
     cols, rows, other_positions = bento_layout(len(backdrop_token_ids))
 
-    gap = round((right - left) * 0.015)
+    gap = _thin_gap(right - left)
     cell_w = (right - left - gap * (cols - 1)) // cols
     cell_h = (bottom - top - gap * (rows - 1)) // rows
     cell_h = min(cell_h, cell_w)
