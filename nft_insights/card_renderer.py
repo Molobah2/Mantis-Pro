@@ -38,13 +38,6 @@ _PANEL = (255, 255, 255, 15)
 # "designed" card element.
 _GRID_RADIUS = 0
 
-# n -> (cols, rows), matching the product spec's adaptive grid (4->2x2,
-# 6->3x2, 9->3x3, 12->4x3); other counts fall back to a near-square grid.
-_GRID_TABLE = {
-    1: (1, 1), 2: (2, 1), 3: (3, 1), 4: (2, 2), 5: (3, 2), 6: (3, 2),
-    7: (3, 3), 8: (3, 3), 9: (3, 3), 10: (4, 3), 11: (4, 3), 12: (4, 3),
-}
-
 # Hard cap on rows: a grid that grows tall instead of wide makes a bad X
 # post (long images get squashed/cropped in-feed). Once a near-square
 # arrangement would need more than this many rows, widen instead — more,
@@ -52,19 +45,27 @@ _GRID_TABLE = {
 _MAX_GRID_ROWS = 3
 
 
-def grid_layout(n: int) -> tuple[int, int]:
-    """Returns (cols, rows) for n images, never more than _MAX_GRID_ROWS
-    rows. (0, 0) for n <= 0."""
+def _choose_rows(n: int) -> int:
+    """Near-square row count for n items, capped at _MAX_GRID_ROWS."""
     if n <= 0:
-        return (0, 0)
-    if n in _GRID_TABLE:
-        return _GRID_TABLE[n]
+        return 0
     cols = math.ceil(math.sqrt(n))
     rows = math.ceil(n / cols)
-    if rows > _MAX_GRID_ROWS:
-        rows = _MAX_GRID_ROWS
-        cols = math.ceil(n / rows)
-    return (cols, rows)
+    return min(rows, _MAX_GRID_ROWS)
+
+
+def justified_row_counts(n: int) -> list[int]:
+    """Splits n items across up to _MAX_GRID_ROWS rows as evenly as
+    possible (earlier rows absorb any remainder), e.g. 28 -> [10, 9, 9].
+    Every row — and so the grid as a whole — always ends up completely
+    filled: there's never a half-empty trailing row, because each row gets
+    its own cell size (see _draw_justified_grid) sized to exactly fill the
+    available width for however many items landed in it. [] for n <= 0."""
+    rows = _choose_rows(n)
+    if rows == 0:
+        return []
+    base, extra = divmod(n, rows)
+    return [base + 1] * extra + [base] * (rows - extra)
 
 
 # "Bento" layout for a single-subject insight (e.g. rarest_listed_nft): one
@@ -79,7 +80,7 @@ def bento_layout(other_count: int) -> tuple[int, int, list[tuple[int, int]]]:
     a list of (row, col) in reading order, skipping the hero's block at the
     top-left. Always at least HERO_SPAN rows tall, even with zero others,
     so the hero block always fits; never more than _MAX_GRID_ROWS (widens
-    instead — see grid_layout)."""
+    instead of growing taller)."""
     hero_cells = _BENTO_HERO_SPAN * _BENTO_HERO_SPAN
     total = hero_cells + other_count
     cols = _BENTO_COLS
@@ -236,7 +237,7 @@ def render(
         backdrop_ids = tuple(tid for tid in insight.nft_token_ids if tid != insight.hero_token_id)
         _draw_bento_grid(canvas, insight.hero_token_id, backdrop_ids, nft_images, 0, grid_top, w, h)
     else:
-        _draw_grid(canvas, insight.nft_token_ids, nft_images, 0, grid_top, w, h)
+        _draw_justified_grid(canvas, insight.nft_token_ids, nft_images, 0, grid_top, w, h)
 
     buf = io.BytesIO()
     canvas.convert("RGB").save(buf, format="PNG")
@@ -279,30 +280,42 @@ def _square_cell_size(available_w: int, available_h: int, cols: int, rows: int, 
     return max(1, min(w_limited, h_limited))
 
 
-def _draw_grid(
+def _draw_justified_grid(
     canvas: Image.Image,
     token_ids: tuple[int, ...],
     nft_images: dict[int, Image.Image | None],
     left: int, top: int, right: int, bottom: int,
 ) -> None:
-    n = len(token_ids)
-    cols, rows = grid_layout(n)
-    if cols == 0:
+    """Every row is packed edge-to-edge with no leftover cells — a row with
+    fewer items just gets bigger cells (see justified_row_counts) instead
+    of leaving unused space. Only the whole block is centered/scaled if it
+    doesn't fit the available height."""
+    row_counts = justified_row_counts(len(token_ids))
+    if not row_counts:
         return
 
-    gap = _thin_gap(right - left)
-    cell = _square_cell_size(right - left, bottom - top, cols, rows, gap)
+    available_w = right - left
+    gap = _thin_gap(available_w)
+    row_cells = [(available_w - gap * (count - 1)) // count for count in row_counts]
 
-    grid_w = cols * cell + gap * (cols - 1)
-    left += (right - left - grid_w) // 2  # center horizontally in any leftover space
+    total_h = sum(row_cells) + gap * (len(row_counts) - 1)
+    available_h = bottom - top
+    if total_h > available_h > 0:
+        scale = available_h / total_h
+        row_cells = [max(1, int(cell * scale)) for cell in row_cells]
 
-    for i, token_id in enumerate(token_ids):
-        col, row = i % cols, i // cols
-        x = left + col * (cell + gap)
-        y = top + row * (cell + gap)
-        img = nft_images.get(token_id)
-        tile = _rounded_thumbnail(img, (cell, cell), _GRID_RADIUS) if img else _placeholder_tile((cell, cell), _GRID_RADIUS)
-        canvas.alpha_composite(tile, (x, y))
+    token_iter = iter(token_ids)
+    y = top
+    for count, cell in zip(row_counts, row_cells):
+        row_w = cell * count + gap * (count - 1)
+        x = left + (available_w - row_w) // 2  # center this row if it came out narrower after scaling
+        for _ in range(count):
+            token_id = next(token_iter)
+            img = nft_images.get(token_id)
+            tile = _rounded_thumbnail(img, (cell, cell), _GRID_RADIUS) if img else _placeholder_tile((cell, cell), _GRID_RADIUS)
+            canvas.alpha_composite(tile, (x, y))
+            x += cell + gap
+        y += cell + gap
 
 
 def _draw_bento_grid(

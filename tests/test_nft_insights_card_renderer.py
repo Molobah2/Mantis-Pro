@@ -20,33 +20,39 @@ def _tiny_png_bytes() -> bytes:
     return buf.getvalue()
 
 
-# ── grid_layout ───────────────────────────────────────────────────────────
+# ── justified_row_counts ─────────────────────────────────────────────────
+
+def test_justified_row_counts_empty_for_zero_or_negative() -> None:
+    assert card_renderer.justified_row_counts(0) == []
+    assert card_renderer.justified_row_counts(-1) == []
+
 
 @pytest.mark.parametrize("n,expected", [
-    (0, (0, 0)), (1, (1, 1)), (2, (2, 1)), (4, (2, 2)), (6, (3, 2)), (9, (3, 3)), (12, (4, 3)),
+    (1, [1]), (2, [2]), (4, [2, 2]), (6, [3, 3]), (9, [3, 3, 3]),
 ])
-def test_grid_layout_matches_spec_table(n, expected) -> None:
-    assert card_renderer.grid_layout(n) == expected
+def test_justified_row_counts_small_n(n, expected) -> None:
+    assert card_renderer.justified_row_counts(n) == expected
 
 
-def test_grid_layout_falls_back_to_near_square_for_uncommon_counts() -> None:
-    cols, rows = card_renderer.grid_layout(20)
-    assert cols * rows >= 20
+@pytest.mark.parametrize("n", [1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 20, 25, 26, 28, 50, 60])
+def test_justified_row_counts_always_sums_to_n_with_no_leftover_cells(n) -> None:
+    """This is the whole point: every row is exactly full, so summing the
+    per-row counts must land exactly on n — never more (empty trailing
+    cells) or less (dropped items)."""
+    counts = card_renderer.justified_row_counts(n)
+    assert sum(counts) == n
+    assert all(c > 0 for c in counts)
 
 
-@pytest.mark.parametrize("n", [13, 20, 25, 26, 50, 60])
-def test_grid_layout_never_exceeds_max_rows(n) -> None:
-    cols, rows = card_renderer.grid_layout(n)
-    assert rows <= card_renderer._MAX_GRID_ROWS
-    assert cols * rows >= n
+@pytest.mark.parametrize("n", [13, 20, 25, 26, 28, 50, 60])
+def test_justified_row_counts_never_exceeds_max_rows(n) -> None:
+    counts = card_renderer.justified_row_counts(n)
+    assert len(counts) <= card_renderer._MAX_GRID_ROWS
 
 
-def test_grid_layout_widens_instead_of_growing_taller() -> None:
-    # 25 near-square would naturally be 5x5 (5 rows) -> capped grid should
-    # instead widen to fit within 3 rows.
-    cols, rows = card_renderer.grid_layout(25)
-    assert rows == 3
-    assert cols >= 9
+def test_justified_row_counts_front_loads_remainder() -> None:
+    # 28 over 3 rows: base 9, remainder 1 -> first row gets the extra item.
+    assert card_renderer.justified_row_counts(28) == [10, 9, 9]
 
 
 # ── bento_layout ──────────────────────────────────────────────────────────
