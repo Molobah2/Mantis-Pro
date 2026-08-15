@@ -35,6 +35,26 @@ def test_market_snapshot_omits_supply_pct_when_supply_unknown() -> None:
     assert "floor_price" not in snapshot.data
 
 
+def test_market_snapshot_includes_a_sample_of_listed_nfts_for_the_grid() -> None:
+    scan = {
+        "collection": {"total_supply": 10000},
+        "stats": {},
+        "listings": [_listing(i, 0.05) for i in range(200)],
+        "nfts": [],
+    }
+    result = insights.generate(scan)
+    snapshot = next(i for i in result if i.type == "market_snapshot")
+    assert len(snapshot.nft_token_ids) == 50  # capped sample, not all 200
+    assert snapshot.hero_token_id is None
+
+
+def test_market_snapshot_grid_empty_when_nothing_is_listed() -> None:
+    scan = {"collection": {"total_supply": 100}, "stats": {}, "listings": [], "nfts": []}
+    result = insights.generate(scan)
+    snapshot = next(i for i in result if i.type == "market_snapshot")
+    assert snapshot.nft_token_ids == ()
+
+
 # ── listing scarcity ─────────────────────────────────────────────────────
 
 def test_listing_scarcity_emitted_when_below_threshold() -> None:
@@ -48,6 +68,7 @@ def test_listing_scarcity_emitted_when_below_threshold() -> None:
     scarcity = next((i for i in result if i.type == "listing_scarcity"), None)
     assert scarcity is not None
     assert scarcity.data["listed_pct"] == 0.5
+    assert len(scarcity.nft_token_ids) == 50  # sample of the 50 listed, all shown since under the cap
 
 
 def test_listing_scarcity_not_emitted_when_supply_unknown() -> None:

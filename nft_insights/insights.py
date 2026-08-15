@@ -25,6 +25,14 @@ _CHEAP_LISTING_FLOOR_MULTIPLES = (1.1, 1.25, 1.5, 2.0, 3.0)
 _MIN_CHEAP_LISTINGS = 3
 _MAX_GRID_TOKENS = 12
 
+# market_snapshot/listing_scarcity aren't claiming "these specific N are the
+# ones that matter" the way cheap_listings or rarest_listed_trait are —
+# they're just illustrating "here's proof this collection has real, current
+# listings." A collection can have hundreds of listings; showing all of them
+# isn't useful, but showing none (the previous behavior) left the card
+# looking broken. A larger, purely illustrative sample fits that role.
+_SNAPSHOT_SAMPLE_SIZE = 50
+
 
 @dataclass(frozen=True)
 class Insight:
@@ -66,7 +74,8 @@ def _market_snapshot(collection: dict, listings: list[dict], stats: dict, listin
         data["floor_price_symbol"] = stats.get("floor_price_symbol", "ETH")
     # Always emitted as the baseline story — modest score so a sharper
     # insight (rarity, scarcity, a price threshold) outranks it when found.
-    return Insight(id="market_snapshot", type="market_snapshot", data=data, nft_token_ids=(), score=0.2)
+    sample_ids = tuple(_cheapest_price_by_token(listings))[:_SNAPSHOT_SAMPLE_SIZE]
+    return Insight(id="market_snapshot", type="market_snapshot", data=data, nft_token_ids=sample_ids, score=0.2)
 
 
 def _listing_scarcity(collection: dict, listings: list[dict], listings_complete: bool) -> Insight | None:
@@ -78,11 +87,12 @@ def _listing_scarcity(collection: dict, listings: list[dict], listings_complete:
     if listed_pct > _SCARCITY_THRESHOLD_PCT:
         return None
     score = 0.4 + 0.4 * (1 - listed_pct / _SCARCITY_THRESHOLD_PCT)
+    sample_ids = tuple(_cheapest_price_by_token(listings))[:_SNAPSHOT_SAMPLE_SIZE]
     return Insight(
         id="listing_scarcity",
         type="listing_scarcity",
         data={"listed": listed, "supply": supply, "listed_pct": round(listed_pct, 2)},
-        nft_token_ids=(),
+        nft_token_ids=sample_ids,
         score=score,
     )
 
