@@ -45,27 +45,46 @@ _GRID_RADIUS = 0
 _MAX_GRID_ROWS = 3
 
 
-def _choose_rows(n: int) -> int:
-    """Near-square row count for n items, capped at _MAX_GRID_ROWS."""
-    if n <= 0:
-        return 0
-    cols = math.ceil(math.sqrt(n))
-    rows = math.ceil(n / cols)
-    return min(rows, _MAX_GRID_ROWS)
-
-
-def justified_row_counts(n: int) -> list[int]:
-    """Splits n items across up to _MAX_GRID_ROWS rows as evenly as
-    possible (earlier rows absorb any remainder), e.g. 28 -> [10, 9, 9].
-    Every row — and so the grid as a whole — always ends up completely
-    filled: there's never a half-empty trailing row, because each row gets
-    its own cell size (see _draw_justified_grid) sized to exactly fill the
-    available width for however many items landed in it. [] for n <= 0."""
-    rows = _choose_rows(n)
-    if rows == 0:
+def justified_row_counts(n: int, rows: int) -> list[int]:
+    """Splits n items across exactly `rows` rows as evenly as possible
+    (earlier rows absorb any remainder), e.g. (28, 3) -> [10, 9, 9]. Every
+    row — and so the grid as a whole — always ends up completely filled:
+    there's never a half-empty trailing row, because each row gets its own
+    cell size (see _draw_justified_grid) sized to exactly fill the
+    available width for however many items landed in it. [] if n <= 0 or
+    rows <= 0."""
+    if n <= 0 or rows <= 0:
         return []
     base, extra = divmod(n, rows)
     return [base + 1] * extra + [base] * (rows - extra)
+
+
+def _best_justified_layout(
+    n: int, available_w: int, available_h: int, gap: int,
+) -> tuple[list[int], list[int]]:
+    """Picks whichever row count (1..min(n, _MAX_GRID_ROWS)) fills
+    available_h most completely without exceeding it, given each row
+    always fully uses available_w (see justified_row_counts). This ties
+    the grid's shape to the actual card being rendered instead of a fixed
+    n-only heuristic — so a small n on a tall canvas (4:5, 1:1) doesn't
+    leave a blank strip below the grid the way a fixed 'near-square' row
+    count would. Returns (row_counts, row_cell_sizes). Falls back to the
+    max row count (scaled down by the caller) if even one row would
+    overflow available_h."""
+    best_counts: list[int] = []
+    best_cells: list[int] = []
+    best_h = -1
+    max_rows = max(1, min(n, _MAX_GRID_ROWS))
+    for rows in range(1, max_rows + 1):
+        counts = justified_row_counts(n, rows)
+        cells = [(available_w - gap * (c - 1)) // c for c in counts]
+        total_h = sum(cells) + gap * (rows - 1)
+        if total_h <= available_h and total_h > best_h:
+            best_counts, best_cells, best_h = counts, cells, total_h
+    if not best_counts:
+        best_counts = justified_row_counts(n, max_rows)
+        best_cells = [(available_w - gap * (c - 1)) // c for c in best_counts]
+    return best_counts, best_cells
 
 
 # "Bento" layout for a single-subject insight (e.g. rarest_listed_nft): one
@@ -288,18 +307,19 @@ def _draw_justified_grid(
 ) -> None:
     """Every row is packed edge-to-edge with no leftover cells — a row with
     fewer items just gets bigger cells (see justified_row_counts) instead
-    of leaving unused space. Only the whole block is centered/scaled if it
-    doesn't fit the available height."""
-    row_counts = justified_row_counts(len(token_ids))
-    if not row_counts:
+    of leaving unused space. The row count itself is chosen per-render to
+    best fill the available height (see _best_justified_layout), so a
+    small n on a tall canvas doesn't leave a blank strip below the grid."""
+    n = len(token_ids)
+    if n <= 0:
         return
 
     available_w = right - left
+    available_h = bottom - top
     gap = _thin_gap(available_w)
-    row_cells = [(available_w - gap * (count - 1)) // count for count in row_counts]
+    row_counts, row_cells = _best_justified_layout(n, available_w, available_h, gap)
 
     total_h = sum(row_cells) + gap * (len(row_counts) - 1)
-    available_h = bottom - top
     if total_h > available_h > 0:
         scale = available_h / total_h
         row_cells = [max(1, int(cell * scale)) for cell in row_cells]

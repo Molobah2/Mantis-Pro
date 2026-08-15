@@ -22,37 +22,56 @@ def _tiny_png_bytes() -> bytes:
 
 # ── justified_row_counts ─────────────────────────────────────────────────
 
-def test_justified_row_counts_empty_for_zero_or_negative() -> None:
-    assert card_renderer.justified_row_counts(0) == []
-    assert card_renderer.justified_row_counts(-1) == []
+def test_justified_row_counts_empty_for_zero_or_negative_inputs() -> None:
+    assert card_renderer.justified_row_counts(0, 3) == []
+    assert card_renderer.justified_row_counts(-1, 3) == []
+    assert card_renderer.justified_row_counts(10, 0) == []
 
 
-@pytest.mark.parametrize("n,expected", [
-    (1, [1]), (2, [2]), (4, [2, 2]), (6, [3, 3]), (9, [3, 3, 3]),
+@pytest.mark.parametrize("n,rows,expected", [
+    (1, 1, [1]), (2, 1, [2]), (4, 2, [2, 2]), (9, 3, [3, 3, 3]), (28, 3, [10, 9, 9]),
 ])
-def test_justified_row_counts_small_n(n, expected) -> None:
-    assert card_renderer.justified_row_counts(n) == expected
+def test_justified_row_counts_matches_expected_split(n, rows, expected) -> None:
+    assert card_renderer.justified_row_counts(n, rows) == expected
 
 
-@pytest.mark.parametrize("n", [1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 20, 25, 26, 28, 50, 60])
-def test_justified_row_counts_always_sums_to_n_with_no_leftover_cells(n) -> None:
+@pytest.mark.parametrize("n,rows", [(1, 1), (5, 2), (13, 3), (28, 3), (50, 3), (60, 3)])
+def test_justified_row_counts_always_sums_to_n_with_no_leftover_cells(n, rows) -> None:
     """This is the whole point: every row is exactly full, so summing the
     per-row counts must land exactly on n — never more (empty trailing
     cells) or less (dropped items)."""
-    counts = card_renderer.justified_row_counts(n)
+    counts = card_renderer.justified_row_counts(n, rows)
     assert sum(counts) == n
     assert all(c > 0 for c in counts)
-
-
-@pytest.mark.parametrize("n", [13, 20, 25, 26, 28, 50, 60])
-def test_justified_row_counts_never_exceeds_max_rows(n) -> None:
-    counts = card_renderer.justified_row_counts(n)
-    assert len(counts) <= card_renderer._MAX_GRID_ROWS
+    assert len(counts) == rows
 
 
 def test_justified_row_counts_front_loads_remainder() -> None:
     # 28 over 3 rows: base 9, remainder 1 -> first row gets the extra item.
-    assert card_renderer.justified_row_counts(28) == [10, 9, 9]
+    assert card_renderer.justified_row_counts(28, 3) == [10, 9, 9]
+
+
+# ── _best_justified_layout ───────────────────────────────────────────────
+
+def test_best_justified_layout_never_exceeds_max_rows() -> None:
+    counts, cells = card_renderer._best_justified_layout(60, 1600, 900, 3)
+    assert len(counts) <= card_renderer._MAX_GRID_ROWS
+    assert sum(counts) == 60
+
+
+def test_best_justified_layout_picks_more_rows_when_height_allows_it() -> None:
+    """Same 10 items, same width, but a much taller available_h — should
+    use more rows (bigger cells stacked deeper) to better fill the frame
+    instead of always defaulting to the same near-square row count."""
+    counts_short, _ = card_renderer._best_justified_layout(10, 1080, 250, 3)
+    counts_tall, _ = card_renderer._best_justified_layout(10, 1080, 2000, 3)
+    assert len(counts_tall) >= len(counts_short)
+
+
+def test_best_justified_layout_falls_back_when_nothing_fits_available_height() -> None:
+    counts, cells = card_renderer._best_justified_layout(10, 1080, 1, 3)
+    assert sum(counts) == 10
+    assert len(cells) == len(counts)
 
 
 # ── bento_layout ──────────────────────────────────────────────────────────
