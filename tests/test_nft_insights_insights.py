@@ -207,6 +207,20 @@ def test_rarest_listed_trait_finds_lowest_frequency_listed_trait() -> None:
     assert trait.nft_token_ids == (1,)
 
 
+def test_rarest_listed_trait_shows_every_listed_match_not_capped_at_twelve() -> None:
+    nfts = [_nft(i, Hat="Common") for i in range(20)]
+    scan = {
+        "collection": {"total_supply": 20},
+        "stats": {},
+        "listings": [_listing(i, 0.1) for i in range(20)],
+        "nfts": nfts,
+    }
+    result = insights.generate(scan)
+    trait = next(i for i in result if i.type == "rarest_listed_trait")
+    assert trait.data["listed_count"] == 20
+    assert len(trait.nft_token_ids) == 20
+
+
 # ── cheap listings ───────────────────────────────────────────────────────
 
 def test_cheap_listings_picks_tightest_multiple_with_enough_matches() -> None:
@@ -247,6 +261,35 @@ def test_cheap_listings_falls_back_to_min_price_anchor_without_floor() -> None:
     cheap = next((i for i in result if i.type == "cheap_listings"), None)
     assert cheap is not None
     assert cheap.data["anchor_is_floor"] is False
+
+
+def test_cheap_listings_shows_every_match_not_capped_at_twelve() -> None:
+    """Regression: the grid used to hard-cap at 12 tiles even when the
+    headline claimed a larger matched_count (e.g. 26), leaving the claim
+    only partially illustrated and wasted space in the rendered card."""
+    scan = {
+        "collection": {},
+        "stats": {"floor_price": 0.1},
+        "listings": [_listing(i, 0.1) for i in range(26)],
+        "nfts": [],
+    }
+    result = insights.generate(scan)
+    cheap = next(i for i in result if i.type == "cheap_listings")
+    assert cheap.data["matched_count"] == 26
+    assert len(cheap.nft_token_ids) == 26
+
+
+def test_cheap_listings_caps_at_proof_grid_limit_for_very_loose_thresholds() -> None:
+    scan = {
+        "collection": {},
+        "stats": {"floor_price": 0.1},
+        "listings": [_listing(i, 0.1) for i in range(200)],
+        "nfts": [],
+    }
+    result = insights.generate(scan)
+    cheap = next(i for i in result if i.type == "cheap_listings")
+    assert cheap.data["matched_count"] == 200  # headline/caption stay honest about the true count
+    assert len(cheap.nft_token_ids) == 60  # grid still bounded for sanity
 
 
 # ── ranking / best story ─────────────────────────────────────────────────

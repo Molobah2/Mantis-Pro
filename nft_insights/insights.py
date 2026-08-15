@@ -23,7 +23,19 @@ _SCARCITY_THRESHOLD_PCT = 25.0
 # _MIN_CHEAP_LISTINGS wins.
 _CHEAP_LISTING_FLOOR_MULTIPLES = (1.1, 1.25, 1.5, 2.0, 3.0)
 _MIN_CHEAP_LISTINGS = 3
+
+# rarest_listed_nft's bento backdrop is a hero shown AMONGST a sample of
+# other listings, not a claim about all of them — a small backdrop keeps
+# the hero visually dominant, so this stays a tight cap.
 _MAX_GRID_TOKENS = 12
+
+# cheap_listings and rarest_listed_trait's headline ("every X under $Y" /
+# "N have this trait") IS a claim about the full matched set — capping the
+# grid well below the real count (e.g. showing 12 of 26 matches) makes the
+# card look broken (unfilled space) and understates its own claim. Show
+# everything that matched, up to a generous safety cap for the pathological
+# case of a very loose threshold matching hundreds of listings.
+_MAX_PROOF_TOKENS = 60
 
 # market_snapshot/listing_scarcity aren't claiming "these specific N are the
 # ones that matter" the way cheap_listings or rarest_listed_trait are —
@@ -165,7 +177,7 @@ def _rarest_listed_trait(nfts: list[dict], listings: list[dict]) -> Insight | No
         id="rarest_listed_trait",
         type="rarest_listed_trait",
         data=data,
-        nft_token_ids=tuple(listed_ids[:_MAX_GRID_TOKENS]),
+        nft_token_ids=tuple(listed_ids[:_MAX_PROOF_TOKENS]),
         score=0.45 + 0.4 * rarity_fraction,
     )
 
@@ -187,7 +199,7 @@ def _cheap_listings(listings: list[dict], stats: dict, listings_complete: bool) 
         matches = [listing for listing in ordered if listing["price"] <= threshold]
         if len(matches) >= _MIN_CHEAP_LISTINGS:
             currency = matches[0]["currency"]
-            token_ids = tuple(listing["token_id"] for listing in matches[:_MAX_GRID_TOKENS])
+            token_ids = tuple(listing["token_id"] for listing in matches[:_MAX_PROOF_TOKENS])
             # Tighter multiple (closer to floor) is the more striking claim.
             tightness = 1 - (multiple - _CHEAP_LISTING_FLOOR_MULTIPLES[0]) / (
                 _CHEAP_LISTING_FLOOR_MULTIPLES[-1] - _CHEAP_LISTING_FLOOR_MULTIPLES[0]
