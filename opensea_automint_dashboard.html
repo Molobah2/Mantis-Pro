@@ -538,6 +538,13 @@
     gap: 14px;
     overflow-wrap: anywhere;
   }
+  /* A revoked or expired grant — still shown so its leftover balance stays
+     sweepable, but visually distinct from a live, fundable grant so it
+     doesn't read as "ready to fund" at a glance. */
+  .fund-box.is-dead {
+    border-color: var(--border-hi);
+    background: linear-gradient(160deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+  }
   .fund-box-header {
     display: flex;
     align-items: center;
@@ -556,12 +563,33 @@
     font-size: 12px;
     line-height: 1;
   }
+  .fund-box.is-dead .fund-box-header-icon {
+    background: var(--surface-hi);
+    color: var(--t2);
+  }
   .fund-box-title {
     font-size: 12.5px;
     font-weight: 600;
     color: var(--accent);
     letter-spacing: -0.1px;
   }
+  .fund-box.is-dead .fund-box-title { color: var(--t1); }
+
+  .fund-box-new-grant {
+    align-self: flex-start;
+    cursor: pointer;
+    padding: 8px 16px;
+    background: var(--surface-hi);
+    border: 1px solid var(--border-hi);
+    border-radius: 10px;
+    color: var(--t0);
+    font-size: 12.5px;
+    font-weight: 500;
+    font-family: inherit;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .fund-box-new-grant:hover { background: rgba(255,255,255,0.14); }
+  .fund-box-new-grant:active { transform: scale(0.98); }
 
   .fund-box-field-label {
     font-size: 10.5px;
@@ -1770,7 +1798,8 @@ function initActiveGrantCheck(contractAddress) {
       var container = document.getElementById('grant-section-container');
       if (!container) return;
       var maxEthStr = (Number(grant.valueCapWei) / 1e18).toString();
-      container.innerHTML = renderFundBoxHtml(grant.sessionAddress, maxEthStr, grant.grantId, grant.revoked);
+      var expired = !grant.revoked && !!grant.expiresAt && grant.expiresAt * 1000 < Date.now();
+      container.innerHTML = renderFundBoxHtml(grant.sessionAddress, maxEthStr, grant.grantId, grant.revoked, expired);
     })
     .catch(function () {}); // best-effort — plain grant form stays visible on failure
 }
@@ -1977,19 +2006,46 @@ async function handleGrantClick(btn) {
 // This session key fires a DIRECT signed transaction from its own address —
 // unlike a sponsored smart account, it must hold its own ETH. Nothing can
 // fire (even after arming) until this address is actually funded.
-function renderFundBoxHtml(sessionAddress, maxEthStr, grantId, revoked) {
+//
+// revoked/expired grants still render this box (rather than disappearing)
+// so a leftover balance stays reachable via Sweep — but a dead grant also
+// gets its own "Grant a New Permission" escape hatch, since without it the
+// only way back to a fresh grant form was reloading and hoping, which is
+// exactly what silently blocked arming a mint before this fix.
+function renderFundBoxHtml(sessionAddress, maxEthStr, grantId, revoked, expired) {
+  var dead = !!(revoked || expired);
+
+  var headerText = revoked
+    ? 'Permission revoked'
+    : expired
+      ? 'Permission expired'
+      : 'Permission granted — now fund this address';
+
   var revokeButtonHtml = revoked
     ? '<span class="fund-box-revoked-label">Revoked</span>'
     : '<button type="button" class="fund-box-revoke" data-grant-id="' + esc(grantId) + '">Revoke Permission</button>';
+
   var revokeNoteHtml = revoked
-    ? 'This permission has already been revoked. Use Sweep to send whatever is left back to your connected wallet.'
-    : 'Revoking only stops this app from using the key again — it does not move any ETH already sent to this ' +
-      'address. Use Sweep to send whatever is left back to your connected wallet.';
+    ? 'This permission has already been revoked — it can no longer arm or fire a mint. Use Sweep to recover any leftover balance, then grant a new one.'
+    : expired
+      ? 'This permission has expired — it can no longer arm or fire a mint. Use Sweep to recover any leftover balance, then grant a new one.'
+      : 'Revoking only stops this app from using the key again — it does not move any ETH already sent to this ' +
+        'address. Use Sweep to send whatever is left back to your connected wallet.';
+
+  var hintHtml = dead
+    ? 'This session key can no longer be used to arm or fire a mint.'
+    : 'Send at least ' + esc(maxEthStr) + ' ETH (your max spend cap) plus a small gas buffer to this address. ' +
+      'It signs and broadcasts the mint transaction directly — nothing will fire until it holds real ETH.';
+
+  var newGrantHtml = dead
+    ? '<button type="button" class="fund-box-new-grant">Grant a New Permission</button>'
+    : '';
+
   return (
-    '<div class="fund-box" data-grant-id="' + esc(grantId) + '">' +
+    '<div class="fund-box' + (dead ? ' is-dead' : '') + '" data-grant-id="' + esc(grantId) + '">' +
       '<div class="fund-box-header">' +
-        '<span class="fund-box-header-icon">&#10003;</span>' +
-        '<span class="fund-box-title">Permission granted — now fund this address</span>' +
+        '<span class="fund-box-header-icon">' + (dead ? '&#8635;' : '&#10003;') + '</span>' +
+        '<span class="fund-box-title">' + esc(headerText) + '</span>' +
       '</div>' +
       '<div>' +
         '<div class="fund-box-field-label">Session address</div>' +
@@ -1998,14 +2054,14 @@ function renderFundBoxHtml(sessionAddress, maxEthStr, grantId, revoked) {
           '<button type="button" class="fund-box-copy" data-copy="' + esc(sessionAddress) + '" title="Copy address" aria-label="Copy address">&#10697;</button>' +
         '</div>' +
       '</div>' +
-      '<div class="fund-box-hint">Send at least ' + esc(maxEthStr) + ' ETH (your max spend cap) plus a small gas buffer to this address. ' +
-      'It signs and broadcasts the mint transaction directly — nothing will fire until it holds real ETH.</div>' +
+      '<div class="fund-box-hint">' + hintHtml + '</div>' +
       '<div class="fund-box-divider"></div>' +
       '<div class="fund-box-actions">' +
         revokeButtonHtml +
         '<button type="button" class="fund-box-sweep" data-grant-id="' + esc(grantId) + '">Sweep Remaining Balance</button>' +
       '</div>' +
       '<div class="fund-box-note">' + revokeNoteHtml + '</div>' +
+      newGrantHtml +
     '</div>'
   );
 }
@@ -2047,11 +2103,20 @@ async function handleRevokeGrantClick(btn) {
     if (!res.ok) throw new Error(body.error || ('API ' + res.status));
 
     if (box) {
+      box.classList.add('is-dead');
       var note = document.createElement('div');
       note.className = 'fund-box-result';
       note.innerHTML = '<span class="fund-box-result-icon">&#10003;</span>' +
         '<span>Revoked — this key can no longer be used to arm or fire a mint.</span>';
       box.appendChild(note);
+
+      // Without this, the only way back to a fresh grant form was reloading
+      // the page and hoping — see renderFundBoxHtml's comment.
+      var newGrantBtn = document.createElement('button');
+      newGrantBtn.type = 'button';
+      newGrantBtn.className = 'fund-box-new-grant';
+      newGrantBtn.textContent = 'Grant a New Permission';
+      box.appendChild(newGrantBtn);
     }
     btn.textContent = 'Revoked';
   } catch (err) {
@@ -2140,9 +2205,23 @@ document.addEventListener('click', function (e) {
   if (revokeBtn) handleRevokeGrantClick(revokeBtn);
   var sweepBtn = e.target && e.target.closest && e.target.closest('.fund-box-sweep');
   if (sweepBtn) handleSweepGrantClick(sweepBtn);
+  var newGrantBtn = e.target && e.target.closest && e.target.closest('.fund-box-new-grant');
+  if (newGrantBtn) handleGrantANewPermissionClick();
   var sendToWalletBtn = e.target && e.target.closest && e.target.closest('.history-send-btn');
   if (sendToWalletBtn) handleSendToWalletClick(sendToWalletBtn);
 });
+
+// Swaps a dead (revoked/expired) fund box back for the plain "Grant Minting
+// Permission" form. Deliberately does NOT call initActiveGrantCheck right
+// after — that would immediately re-fetch the same dead grant record and
+// collapse this fresh form straight back into the box the user just asked
+// to get past.
+function handleGrantANewPermissionClick() {
+  var container = document.getElementById('grant-section-container');
+  if (!container || !currentModalDrop || !currentModalContractAddress) return;
+  container.innerHTML = renderGrantSection(currentModalDrop, currentModalContractAddress);
+  initGrantExpiry(currentModalContractAddress);
+}
 
 // ── Arm Auto-Mint ──────────────────────────────────────────────────────
 // Fires automatically once the drop's real on-chain public stage opens —
