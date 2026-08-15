@@ -1370,6 +1370,13 @@ function initWatchlistToolbar() {
 // collection, so it's only ever requested once per slug per page load and
 // cached here, then ticked locally every second with zero further network
 // calls.
+// Pure render — never triggers a network request. Schedule lookups (which
+// hit the same rate-limited endpoint the detail modal depends on to arm a
+// mint) only ever happen from prefetchLiveSchedules, called when the
+// visitor actually opens the Live Drops tab. Firing them from here would
+// mean every background page load/refresh silently spends part of that
+// shared 30-requests/hour budget — which can starve the modal of the one
+// request it needs at the moment you're trying to arm something.
 function renderLiveDrops() {
   var grid = document.getElementById('live-drop-grid');
   var emptyMsg = document.getElementById('live-drops-empty');
@@ -1403,22 +1410,60 @@ function renderLiveDrops() {
   });
 
   renderDropsInto(grid, live);
+  tickLiveCountdowns();
+  startLiveCountdownTimer();
+}
 
-  live.forEach(function (drop) {
+// Looks up each upcoming drop's real go-live time — only called when the
+// Live Drops tab is actually opened (see initViewTabs). Never re-asks for a
+// slug already known: scheduleCache is checked first, and is itself warmed
+// from sessionStorage on page load so a reload doesn't reset that memory
+// and re-spend the budget for collections we already resolved minutes ago.
+function prefetchLiveSchedules() {
+  allDrops.forEach(function (drop) {
     if (drop.status !== 'upcoming' || !drop.collection_slug) return;
     if (scheduleCache.hasOwnProperty(drop.collection_slug)) return;
     scheduleCache[drop.collection_slug] = null; // claim it so we never double-fetch
     fetch('/api/opensea/collection/' + encodeURIComponent(drop.collection_slug))
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
-        scheduleCache[drop.collection_slug] = findEarliestUpcomingStage(data && data.mint_schedule);
-        tickLiveCountdowns();
+        var stage = findEarliestUpcomingStage(data && data.mint_schedule);
+        scheduleCache[drop.collection_slug] = stage;
+        persistScheduleCacheEntry(drop.collection_slug, stage);
+        renderLiveDrops(); // re-sort now that a start time is known
       })
       .catch(function () { /* leave cached as null — card just shows no countdown */ });
   });
+}
 
-  tickLiveCountdowns();
-  startLiveCountdownTimer();
+// ── Schedule cache persistence (sessionStorage) ──────────────────────────
+// Mirrors the server's own 30-minute per-slug cache (collection_details.py)
+// so a page reload doesn't forget what was already resolved this session.
+var SCHEDULE_CACHE_STORAGE_KEY = 'mantis_schedule_cache_v1';
+var SCHEDULE_CACHE_TTL_SECONDS = 1800;
+
+function loadScheduleCacheFromStorage() {
+  try {
+    var raw = sessionStorage.getItem(SCHEDULE_CACHE_STORAGE_KEY);
+    if (!raw) return;
+    var stored = JSON.parse(raw);
+    var now = Date.now() / 1000;
+    Object.keys(stored).forEach(function (slug) {
+      var entry = stored[slug];
+      if (entry && (now - entry.cachedAt) < SCHEDULE_CACHE_TTL_SECONDS) {
+        scheduleCache[slug] = entry.stage;
+      }
+    });
+  } catch (e) { /* sessionStorage unavailable/corrupt — just start fresh */ }
+}
+
+function persistScheduleCacheEntry(slug, stage) {
+  try {
+    var raw = sessionStorage.getItem(SCHEDULE_CACHE_STORAGE_KEY);
+    var stored = raw ? JSON.parse(raw) : {};
+    stored[slug] = { stage: stage, cachedAt: Date.now() / 1000 };
+    sessionStorage.setItem(SCHEDULE_CACHE_STORAGE_KEY, JSON.stringify(stored));
+  } catch (e) { /* best-effort only */ }
 }
 
 function findEarliestUpcomingStage(schedule) {
@@ -1583,6 +1628,7 @@ function initViewTabs() {
       document.querySelectorAll('.view-panel').forEach(function (panel) {
         panel.classList.toggle('active', panel.id === 'view-' + view);
       });
+      if (view === 'live-drops') prefetchLiveSchedules();
     });
   });
 }
@@ -2638,6 +2684,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   initViewTabs();
   initWatchlistToolbar();
+  loadScheduleCacheFromStorage();
   loadDrops();
 });
 
