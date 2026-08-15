@@ -34,6 +34,21 @@ def test_grid_layout_falls_back_to_near_square_for_uncommon_counts() -> None:
     assert cols * rows >= 20
 
 
+@pytest.mark.parametrize("n", [13, 20, 25, 26, 50, 60])
+def test_grid_layout_never_exceeds_max_rows(n) -> None:
+    cols, rows = card_renderer.grid_layout(n)
+    assert rows <= card_renderer._MAX_GRID_ROWS
+    assert cols * rows >= n
+
+
+def test_grid_layout_widens_instead_of_growing_taller() -> None:
+    # 25 near-square would naturally be 5x5 (5 rows) -> capped grid should
+    # instead widen to fit within 3 rows.
+    cols, rows = card_renderer.grid_layout(25)
+    assert rows == 3
+    assert cols >= 9
+
+
 # ── bento_layout ──────────────────────────────────────────────────────────
 
 def test_bento_layout_hero_block_never_overlaps_others() -> None:
@@ -58,6 +73,12 @@ def test_bento_layout_positions_are_unique_and_within_grid_bounds() -> None:
     for r, c in positions:
         assert 0 <= r < rows
         assert 0 <= c < cols
+
+
+def test_bento_layout_never_exceeds_max_rows() -> None:
+    cols, rows, positions = card_renderer.bento_layout(11)  # max backdrop size
+    assert rows <= card_renderer._MAX_GRID_ROWS
+    assert len(positions) == 11
 
 
 # ── render with a hero (bento layout) ────────────────────────────────────

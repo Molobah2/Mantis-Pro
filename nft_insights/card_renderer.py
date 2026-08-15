@@ -45,15 +45,25 @@ _GRID_TABLE = {
     7: (3, 3), 8: (3, 3), 9: (3, 3), 10: (4, 3), 11: (4, 3), 12: (4, 3),
 }
 
+# Hard cap on rows: a grid that grows tall instead of wide makes a bad X
+# post (long images get squashed/cropped in-feed). Once a near-square
+# arrangement would need more than this many rows, widen instead — more,
+# smaller columns rather than a taller image.
+_MAX_GRID_ROWS = 3
+
 
 def grid_layout(n: int) -> tuple[int, int]:
-    """Returns (cols, rows) for n images. (0, 0) for n <= 0."""
+    """Returns (cols, rows) for n images, never more than _MAX_GRID_ROWS
+    rows. (0, 0) for n <= 0."""
     if n <= 0:
         return (0, 0)
     if n in _GRID_TABLE:
         return _GRID_TABLE[n]
     cols = math.ceil(math.sqrt(n))
     rows = math.ceil(n / cols)
+    if rows > _MAX_GRID_ROWS:
+        rows = _MAX_GRID_ROWS
+        cols = math.ceil(n / rows)
     return (cols, rows)
 
 
@@ -68,10 +78,15 @@ def bento_layout(other_count: int) -> tuple[int, int, list[tuple[int, int]]]:
     """Returns (cols, rows, other_cell_positions) — other_cell_positions is
     a list of (row, col) in reading order, skipping the hero's block at the
     top-left. Always at least HERO_SPAN rows tall, even with zero others,
-    so the hero block always fits."""
-    cols = _BENTO_COLS
+    so the hero block always fits; never more than _MAX_GRID_ROWS (widens
+    instead — see grid_layout)."""
     hero_cells = _BENTO_HERO_SPAN * _BENTO_HERO_SPAN
-    rows = max(_BENTO_HERO_SPAN, math.ceil((hero_cells + other_count) / cols))
+    total = hero_cells + other_count
+    cols = _BENTO_COLS
+    rows = max(_BENTO_HERO_SPAN, math.ceil(total / cols))
+    if rows > _MAX_GRID_ROWS:
+        rows = _MAX_GRID_ROWS
+        cols = max(_BENTO_HERO_SPAN, math.ceil(total / rows))
     occupied = {(r, c) for r in range(_BENTO_HERO_SPAN) for c in range(_BENTO_HERO_SPAN)}
     positions = [(r, c) for r in range(rows) for c in range(cols) if (r, c) not in occupied]
     return cols, rows, positions[:other_count]
