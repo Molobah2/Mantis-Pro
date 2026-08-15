@@ -34,6 +34,10 @@ _TEXT_MUTED = (150, 150, 165)
 _ACCENT = (124, 140, 255)
 _PANEL = (255, 255, 255, 15)
 
+# Pure flat grid, no rounded corners — a plain tiled photo-grid, not a
+# "designed" card element.
+_GRID_RADIUS = 0
+
 # n -> (cols, rows), matching the product spec's adaptive grid (4->2x2,
 # 6->3x2, 9->3x3, 12->4x3); other counts fall back to a near-square grid.
 _GRID_TABLE = {
@@ -210,14 +214,14 @@ def render(
         draw.text((margin, cursor_y), line, font=stat_font, fill=_ACCENT)
         cursor_y += round(stat_size * 1.6)
 
+    # Pure grid, edge-to-edge (no inset, no rounded corners) — only the
+    # headline/stat text above gets the card's margin treatment.
     grid_top = cursor_y + round(headline_size * 0.4)
     if insight.hero_token_id is not None and insight.hero_token_id in insight.nft_token_ids:
         backdrop_ids = tuple(tid for tid in insight.nft_token_ids if tid != insight.hero_token_id)
-        _draw_bento_grid(
-            canvas, insight.hero_token_id, backdrop_ids, nft_images, margin, grid_top, w - margin, h - margin,
-        )
+        _draw_bento_grid(canvas, insight.hero_token_id, backdrop_ids, nft_images, 0, grid_top, w, h)
     else:
-        _draw_grid(canvas, insight.nft_token_ids, nft_images, margin, grid_top, w - margin, h - margin)
+        _draw_grid(canvas, insight.nft_token_ids, nft_images, 0, grid_top, w, h)
 
     buf = io.BytesIO()
     canvas.convert("RGB").save(buf, format="PNG")
@@ -273,7 +277,6 @@ def _draw_grid(
 
     gap = _thin_gap(right - left)
     cell = _square_cell_size(right - left, bottom - top, cols, rows, gap)
-    radius = round(cell * 0.06)
 
     grid_w = cols * cell + gap * (cols - 1)
     left += (right - left - grid_w) // 2  # center horizontally in any leftover space
@@ -283,7 +286,7 @@ def _draw_grid(
         x = left + col * (cell + gap)
         y = top + row * (cell + gap)
         img = nft_images.get(token_id)
-        tile = _rounded_thumbnail(img, (cell, cell), radius) if img else _placeholder_tile((cell, cell), radius)
+        tile = _rounded_thumbnail(img, (cell, cell), _GRID_RADIUS) if img else _placeholder_tile((cell, cell), _GRID_RADIUS)
         canvas.alpha_composite(tile, (x, y))
 
 
@@ -298,7 +301,6 @@ def _draw_bento_grid(
 
     gap = _thin_gap(right - left)
     cell = _square_cell_size(right - left, bottom - top, cols, rows, gap)
-    radius = round(cell * 0.08)
 
     grid_w = cols * cell + gap * (cols - 1)
     left += (right - left - grid_w) // 2  # center horizontally in any leftover space
@@ -306,18 +308,17 @@ def _draw_bento_grid(
     hero_size = cell * _BENTO_HERO_SPAN + gap * (_BENTO_HERO_SPAN - 1)
     hero_img = nft_images.get(hero_token_id)
     hero_tile = (
-        _rounded_thumbnail(hero_img, (hero_size, hero_size), radius) if hero_img
-        else _placeholder_tile((hero_size, hero_size), radius)
+        _rounded_thumbnail(hero_img, (hero_size, hero_size), _GRID_RADIUS) if hero_img
+        else _placeholder_tile((hero_size, hero_size), _GRID_RADIUS)
     )
     canvas.alpha_composite(hero_tile, (left, top))
 
-    small_radius = round(cell * 0.06)
     for (row, col), token_id in zip(other_positions, backdrop_token_ids):
         x = left + col * (cell + gap)
         y = top + row * (cell + gap)
         img = nft_images.get(token_id)
         tile = (
-            _rounded_thumbnail(img, (cell, cell), small_radius) if img
-            else _placeholder_tile((cell, cell), small_radius)
+            _rounded_thumbnail(img, (cell, cell), _GRID_RADIUS) if img
+            else _placeholder_tile((cell, cell), _GRID_RADIUS)
         )
         canvas.alpha_composite(tile, (x, y))
