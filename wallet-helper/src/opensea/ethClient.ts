@@ -15,9 +15,12 @@
 import {
   http,
   type Address,
+  BaseError,
   type Chain,
   createPublicClient,
   createWalletClient,
+  decodeErrorResult,
+  decodeFunctionData,
   defineChain,
   encodeFunctionData,
   parseEventLogs,
@@ -194,6 +197,84 @@ const SEADROP_ABI = [
       },
     ],
   },
+  {
+    name: "getPayerIsAllowed",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "nftContract", type: "address" },
+      { name: "payer", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  // Every custom error SeaDrop.sol can revert with, verified byte-for-byte
+  // against ProjectOpenSea/seadrop's canonical SeaDropErrorsAndEvents.sol
+  // on GitHub (2026-08-15) — without these, viem has nothing to decode a
+  // revert against and every failure collapses into the same unhelpful
+  // "execution reverted for an unknown reason", which is exactly what
+  // masked the real cause of the EchoWoven First Thread failures (see
+  // describeRevertReason below). A wrong/outdated entry here is harmless
+  // (its 4-byte selector just won't match anything and decoding falls
+  // through to the generic message) — there's no downside to listing all
+  // of them.
+  { name: "NotActive", type: "error", inputs: [
+    { name: "currentTimestamp", type: "uint256" },
+    { name: "startTimestamp", type: "uint256" },
+    { name: "endTimestamp", type: "uint256" },
+  ] },
+  { name: "MintQuantityCannotBeZero", type: "error", inputs: [] },
+  { name: "MintQuantityExceedsMaxMintedPerWallet", type: "error", inputs: [
+    { name: "total", type: "uint256" }, { name: "allowed", type: "uint256" },
+  ] },
+  { name: "MintQuantityExceedsMaxSupply", type: "error", inputs: [
+    { name: "total", type: "uint256" }, { name: "maxSupply", type: "uint256" },
+  ] },
+  { name: "MintQuantityExceedsMaxTokenSupplyForStage", type: "error", inputs: [
+    { name: "total", type: "uint256" }, { name: "maxTokenSupplyForStage", type: "uint256" },
+  ] },
+  { name: "FeeRecipientCannotBeZeroAddress", type: "error", inputs: [] },
+  { name: "FeeRecipientNotPresent", type: "error", inputs: [] },
+  { name: "InvalidFeeBps", type: "error", inputs: [{ name: "feeBps", type: "uint256" }] },
+  { name: "DuplicateFeeRecipient", type: "error", inputs: [] },
+  { name: "FeeRecipientNotAllowed", type: "error", inputs: [] },
+  { name: "CreatorPayoutAddressCannotBeZeroAddress", type: "error", inputs: [] },
+  { name: "IncorrectPayment", type: "error", inputs: [
+    { name: "got", type: "uint256" }, { name: "want", type: "uint256" },
+  ] },
+  { name: "InvalidProof", type: "error", inputs: [] },
+  { name: "SignerCannotBeZeroAddress", type: "error", inputs: [] },
+  { name: "InvalidSignature", type: "error", inputs: [{ name: "recoveredSigner", type: "address" }] },
+  { name: "SignerNotPresent", type: "error", inputs: [] },
+  { name: "PayerNotPresent", type: "error", inputs: [] },
+  { name: "DuplicatePayer", type: "error", inputs: [] },
+  // The one this incident turned out to be: SeaDrop unconditionally
+  // requires msg.sender to be an allowlisted payer whenever it isn't also
+  // the recorded minter (SeaDrop.sol, every mint*() variant) — a
+  // collection-owner-only permission (updatePayer) this app can never
+  // grant itself. See fireRawTransaction's minterIfNotPayer pre-check.
+  { name: "PayerNotAllowed", type: "error", inputs: [] },
+  { name: "PayerCannotBeZeroAddress", type: "error", inputs: [] },
+  { name: "OnlyINonFungibleSeaDropToken", type: "error", inputs: [{ name: "sender", type: "address" }] },
+  { name: "InvalidSignedMintPrice", type: "error", inputs: [
+    { name: "got", type: "uint256" }, { name: "minimum", type: "uint256" },
+  ] },
+  { name: "InvalidSignedMaxTotalMintableByWallet", type: "error", inputs: [
+    { name: "got", type: "uint256" }, { name: "maximum", type: "uint256" },
+  ] },
+  { name: "InvalidSignedStartTime", type: "error", inputs: [
+    { name: "got", type: "uint256" }, { name: "minimum", type: "uint256" },
+  ] },
+  { name: "InvalidSignedEndTime", type: "error", inputs: [
+    { name: "got", type: "uint256" }, { name: "maximum", type: "uint256" },
+  ] },
+  { name: "InvalidSignedMaxTokenSupplyForStage", type: "error", inputs: [
+    { name: "got", type: "uint256" }, { name: "maximum", type: "uint256" },
+  ] },
+  { name: "InvalidSignedFeeBps", type: "error", inputs: [
+    { name: "got", type: "uint256" }, { name: "minimumOrMaximum", type: "uint256" },
+  ] },
+  { name: "SignedMintsMustRestrictFeeRecipients", type: "error", inputs: [] },
+  { name: "SignatureAlreadyUsed", type: "error", inputs: [] },
 ] as const;
 
 const RECEIPT_TIMEOUT_MS = 60_000;
@@ -416,6 +497,37 @@ export interface FireMintResult {
  * thrown, so callers can log it as a real (non-exceptional) outcome.
  */
 /**
+ * Turns a would-revert estimateGas error into the actual on-chain reason
+ * instead of viem's generic "execution reverted for an unknown reason"
+ * fallback. estimateGas is never given an ABI to decode against, but the
+ * raw revert bytes are still buried somewhere in the error's cause chain —
+ * this walks it looking for them, then decodes against SEADROP_ABI's own
+ * error list. Falls back to the plain error message on anything that
+ * isn't a decodable SeaDrop error (a different contract, a non-revert
+ * failure, an RPC-level error) — never throws itself.
+ */
+function describeRevertReason(err: unknown): string {
+  const fallback = err instanceof Error ? err.message : String(err);
+  if (!(err instanceof BaseError)) return fallback;
+
+  const withRevertData = err.walk((e) => {
+    const candidate = e as { data?: unknown };
+    return typeof candidate?.data === "string" && candidate.data.startsWith("0x") && candidate.data.length > 2;
+  }) as { data?: `0x${string}` } | null;
+
+  const revertData = withRevertData?.data;
+  if (!revertData) return fallback;
+
+  try {
+    const decoded = decodeErrorResult({ abi: SEADROP_ABI, data: revertData });
+    const args = decoded.args && decoded.args.length > 0 ? `(${decoded.args.join(", ")})` : "()";
+    return `${decoded.errorName}${args}`;
+  } catch {
+    return fallback; // revert data didn't match any known SeaDrop error
+  }
+}
+
+/**
  * Shared tail end of both fireMint and fireSignedMint: estimate gas (the
  * one and only pre-flight safety check — see fireMint's docstring for why
  * this replaces the ERC-4337 bundler's simulation), sign, broadcast, and
@@ -451,13 +563,13 @@ async function estimateSignAndSend(
     // the signature/salt/mintParams don't match what the signer actually
     // authorized. Nothing was ever sent; this is a safe, definite
     // (non-ambiguous) failure.
-    const msg = err instanceof Error ? err.message : String(err);
+    const reason = describeRevertReason(err);
     return {
       success: false,
       txHash: null,
       blockNumber: null,
       gasUsed: null,
-      error: `Gas estimation failed (would revert), nothing sent: ${msg}`,
+      error: `Gas estimation failed (would revert), nothing sent: ${reason}`,
     };
   }
 
@@ -957,10 +1069,48 @@ export interface FireRawTransactionParams {
  * estimated first (a real would-revert call — stale/consumed signature,
  * stage no longer open, wrong quantity — never reaches sendTransaction).
  */
+const ZERO_ADDRESS: Address = "0x0000000000000000000000000000000000000000";
+
 export async function fireRawTransaction(params: FireRawTransactionParams): Promise<FireMintResult> {
   const chainName: ChainName = params.chain ?? "ethereum";
   const publicClient = getPublicClient(chainName);
   const account = privateKeyToAccount(params.sessionPrivateKey);
+
+  // OpenSea's own backend decides who "minter" is for this signed
+  // authorization (opensea_automint/opensea_session.fetch_mint_transaction_
+  // data) — usually the zero address, meaning "whoever pays is the
+  // minter," which is what let a session key fire this at all. When it's
+  // pinned to a specific wallet instead (verified live 2026-08-15 against
+  // EchoWoven's "First Thread" stage — see SeaDrop.sol: `if (minter !=
+  // msg.sender) { if (!_allowedPayers[nftContract][msg.sender]) revert
+  // PayerNotAllowed(); }`), the payer must be on that NFT contract's own
+  // allowed-payers list — a permission only the collection's OWNER can
+  // grant via updatePayer, never something this app can satisfy itself.
+  // Caught here, before ever calling estimateGas, so a structurally
+  // unfireable stage fails with a specific, actionable reason on the
+  // first attempt instead of burning the full signed-presale retry budget
+  // on what's actually a 100%-certain revert every single time.
+  try {
+    const decoded = decodeFunctionData({ abi: SEADROP_ABI, data: params.data });
+    if (decoded.functionName === "mintSigned" || decoded.functionName === "mintPublic") {
+      const minterIfNotPayer = decoded.args[2] as Address;
+      if (
+        minterIfNotPayer.toLowerCase() !== ZERO_ADDRESS &&
+        minterIfNotPayer.toLowerCase() !== account.address.toLowerCase()
+      ) {
+        return {
+          success: false, txHash: null, blockNumber: null, gasUsed: null,
+          error: `This stage's signed authorization requires the payer to be ${minterIfNotPayer} ` +
+            "(SeaDrop's PayerNotAllowed restriction) — this session key isn't on that collection's " +
+            "allowed-payers list and never can be from this app. Not retryable.",
+        };
+      }
+    }
+  } catch {
+    // Couldn't decode against SEADROP_ABI (unexpected shape/different
+    // contract) — fall through to the normal estimate/sign/send path,
+    // which still catches a would-revert call safely either way.
+  }
 
   const [nonce, feesPerGas] = await Promise.all([
     publicClient.getTransactionCount({ address: account.address, blockTag: "pending" }),
