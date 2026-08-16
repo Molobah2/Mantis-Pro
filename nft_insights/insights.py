@@ -11,7 +11,7 @@ or estimates a number that wasn't derived from real API data.
 """
 from dataclasses import dataclass, field, replace
 
-from . import config, rarity
+from . import config, rarity, sales_history
 
 # Below this listed-of-supply percentage, scarcity is worth calling out on
 # its own; above it, the number isn't surprising enough to be a second
@@ -221,6 +221,109 @@ def _cheap_listings(listings: list[dict], stats: dict, listings_complete: bool) 
     return None
 
 
+def _pct_change(old: float, new: float) -> float | None:
+    """None (not a fabricated number) when old is 0 — "+inf%" from a
+    zero baseline isn't a real percentage; callers keep the raw before/
+    after values regardless so a 0 -> N story isn't lost, just not
+    expressed as a %."""
+    if not old:
+        return None
+    return round((new - old) / old * 100, 2)
+
+
+def _period_performance(scan: dict) -> Insight | None:
+    """This-period-vs-last-period comparison (config.PERIOD_PERFORMANCE_WINDOW_S,
+    currently 7 days). Sales/volume come from sales_history's retroactive
+    OpenSea /events query — real on the very first scan, no waiting.
+    Floor/listed-count deltas only appear once history.py has an actual
+    snapshot from ~a week ago for this collection (scan.py's
+    "snapshot_week_ago"); until then they're omitted, never estimated —
+    same no-fabrication rule as every other insight here. Emits nothing at
+    all if neither side of the comparison has anything to report."""
+    if not scan.get("sales_this_period_complete", True) or not scan.get("sales_last_period_complete", True):
+        return None
+
+    sales_this = scan.get("sales_this_period") or []
+    sales_last = scan.get("sales_last_period") or []
+    this_summary = sales_history.summarize_sales(sales_this)
+    last_summary = sales_history.summarize_sales(sales_last)
+
+    data: dict = {}
+
+    if this_summary["count"] or last_summary["count"]:
+        data["sales_this"] = this_summary["count"]
+        data["sales_last"] = last_summary["count"]
+        sales_pct = _pct_change(last_summary["count"], this_summary["count"])
+        if sales_pct is not None:
+            data["sales_change_pct"] = sales_pct
+        data["volume_this"] = this_summary["volume_eth"]
+        data["volume_last"] = last_summary["volume_eth"]
+        volume_pct = _pct_change(last_summary["volume_eth"], this_summary["volume_eth"])
+        if volume_pct is not None:
+            data["volume_change_pct"] = volume_pct
+        # Only meaningful when both windows actually had priced (ETH/WETH)
+        # sales — summarize_sales returns None for either otherwise.
+        if this_summary["avg_price_eth"] is not None and last_summary["avg_price_eth"] is not None:
+            data["avg_price_this"] = this_summary["avg_price_eth"]
+            data["avg_price_last"] = last_summary["avg_price_eth"]
+            avg_price_pct = _pct_change(last_summary["avg_price_eth"], this_summary["avg_price_eth"])
+            if avg_price_pct is not None:
+                data["avg_price_change_pct"] = avg_price_pct
+
+    snapshot_week_ago = scan.get("snapshot_week_ago")
+    stats = scan.get("stats") or {}
+    floor_now = stats.get("floor_price")
+    if snapshot_week_ago and snapshot_week_ago.get("floor_price") and floor_now:
+        floor_pct = _pct_change(snapshot_week_ago["floor_price"], floor_now)
+        if floor_pct is not None:
+            data["floor_this"] = floor_now
+            data["floor_last"] = snapshot_week_ago["floor_price"]
+            data["floor_change_pct"] = floor_pct
+
+    listings = scan.get("listings") or []
+    if (
+        scan.get("listings_complete", True) and snapshot_week_ago
+        and snapshot_week_ago.get("listed_count") is not None
+    ):
+        # listed_count can genuinely be 0 (unlike floor_price) — _pct_change
+        # returns None from a 0 baseline, but the raw before/after values
+        # (e.g. "0 -> 5 listed") are still a real, non-fabricated finding
+        # and must not be dropped just because there's no defined %.
+        data["listed_this"] = len(listings)
+        data["listed_last"] = snapshot_week_ago["listed_count"]
+        listed_pct = _pct_change(snapshot_week_ago["listed_count"], len(listings))
+        if listed_pct is not None:
+            data["listed_change_pct"] = listed_pct
+
+    has_comparison = any(
+        k in data for k in ("sales_this", "floor_this", "listed_this")
+    )
+    if not has_comparison:
+        return None
+
+    data["days_tracked"] = round(scan.get("days_tracked", 0.0), 1)
+
+    magnitudes = [
+        abs(data[k]) for k in (
+            "sales_change_pct", "volume_change_pct", "avg_price_change_pct",
+            "floor_change_pct", "listed_change_pct",
+        )
+        if k in data
+    ]
+    strength = min(max(magnitudes, default=0.0) / 100, 1.0)
+    score = 0.5 + strength * 0.4
+
+    # Proof grid: recently-sold NFTs from this period; if none sold, fall
+    # back to a sample of what's currently listed rather than an empty grid.
+    token_ids = tuple(dict.fromkeys(
+        s["token_id"] for s in sales_this if s.get("token_id") is not None
+    ))[:_MAX_PROOF_TOKENS]
+    if not token_ids:
+        token_ids = tuple(_cheapest_price_by_token(listings))[:_SNAPSHOT_SAMPLE_SIZE]
+
+    return Insight(id="period_performance", type="period_performance", data=data, nft_token_ids=token_ids, score=score)
+
+
 def generate(scan: dict) -> list[Insight]:
     """scan: {"collection": {...}, "stats": {...}, "listings": [...], "nfts": [...]}
     as produced by scan.run_scan. Returns insights ranked highest-score
@@ -247,6 +350,7 @@ def generate(scan: dict) -> list[Insight]:
         _market_snapshot(collection, listings, stats, listings_complete),
         _listing_scarcity(collection, listings, listings_complete),
         _cheap_listings(listings, stats, listings_complete),
+        _period_performance(scan),
     ]
     if rarity_usable:
         candidates.append(_rarest_listed_nft(nfts, listings, stats))

@@ -189,10 +189,53 @@ def test_render_never_raises_for_every_insight_type() -> None:
             "threshold_price": 0.1, "multiple": 1.1, "currency": "ETH",
             "matched_count": 3, "total_listed": 10, "anchor_is_floor": True,
         }, (1, 2, 3)),
+        _insight("period_performance", {
+            "sales_this": 880, "sales_last": 620, "sales_change_pct": 41.94,
+            "volume_this": 21.88, "volume_last": 15.2, "volume_change_pct": 44.0,
+            "floor_this": 0.024, "floor_last": 0.018, "floor_change_pct": 33.3,
+            "listed_this": 184, "listed_last": 312, "listed_change_pct": -41.0,
+            "days_tracked": 45,
+        }, (1, 2, 3)),
+        _insight("period_performance", {"sales_this": 2, "sales_last": 0}),  # sparse/zero-baseline case
     ]
     for insight in cases:
         png_bytes = card_renderer.render(insight, "Boonies", {})
         assert Image.open(io.BytesIO(png_bytes)).format == "PNG"
+
+
+# ── period_performance stat lines ────────────────────────────────────────
+
+def test_period_performance_stat_lines_include_all_available_metrics() -> None:
+    lines = card_renderer._period_performance_stat_lines({
+        "sales_this": 880, "sales_last": 620, "sales_change_pct": 41.94,
+        "volume_this": 21.88, "volume_last": 15.2, "volume_change_pct": 44.0,
+        "floor_this": 0.024, "floor_last": 0.018, "floor_change_pct": 33.3,
+        "listed_this": 184, "listed_last": 312, "listed_change_pct": -41.0,
+    })
+    assert len(lines) == 4
+    assert any("620" in l and "880" in l for l in lines)
+    assert any("+42%" in l for l in lines)  # sales_change_pct rounds to 42
+    assert any("-41%" in l for l in lines)  # listed_change_pct
+
+
+def test_period_performance_stat_lines_include_avg_price_when_present() -> None:
+    lines = card_renderer._period_performance_stat_lines({
+        "avg_price_this": 0.25, "avg_price_last": 0.1, "avg_price_change_pct": 150.0,
+    })
+    assert len(lines) == 1
+    assert "Avg sale" in lines[0]
+    assert "0.1" in lines[0] and "0.25" in lines[0]
+    assert "+150%" in lines[0]
+
+
+def test_period_performance_stat_lines_omits_metrics_not_present() -> None:
+    lines = card_renderer._period_performance_stat_lines({"sales_this": 4, "sales_last": 0})
+    assert len(lines) == 1
+    assert "Sales" in lines[0]
+
+
+def test_period_performance_stat_lines_empty_data_yields_no_lines() -> None:
+    assert card_renderer._period_performance_stat_lines({}) == []
 
 
 # ── fetch_nft_image ───────────────────────────────────────────────────────

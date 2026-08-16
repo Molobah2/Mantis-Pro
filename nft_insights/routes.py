@@ -72,6 +72,11 @@ def api_scan() -> Response:
         "collection": collection,
         "stats": result["scan"]["stats"],
         "fetched_at": result["fetched_at"],
+        # How long we've had ANY history for this collection — lets the
+        # frontend show "based on N days tracked" instead of implying
+        # deeper history than actually exists (see history.py/insights.py's
+        # no-fabrication rule).
+        "days_tracked": round(result["scan"].get("days_tracked", 0.0), 1),
         "insights": [_serialize_insight(i, collection_name, images) for i in result["insights"]],
     })
 

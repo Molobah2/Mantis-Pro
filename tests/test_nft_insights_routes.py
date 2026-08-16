@@ -42,6 +42,7 @@ def _stub_scan(monkeypatch: pytest.MonkeyPatch, *, with_nft_images: bool = True)
         "stats": {"floor_price": 0.1, "floor_price_symbol": "ETH"},
         "listings": [{"token_id": 1, "price": 0.1, "currency": "ETH"}],
         "nfts": [nft],
+        "days_tracked": 12.4,
     }
 
     def fake_fetch(slug):
@@ -68,6 +69,13 @@ def test_api_scan_returns_ranked_insights(client: FlaskClient, monkeypatch: pyte
     assert body["insights"][0]["is_best"] is True
     best = body["insights"][0]
     assert "headline" in best and "captions" in best
+
+
+def test_api_scan_includes_days_tracked(client: FlaskClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_scan(monkeypatch)
+    resp = client.get("/api/insights/scan?slug=boonies")
+    body = resp.get_json()
+    assert body["days_tracked"] == 12.4
 
 
 def test_api_scan_resolves_nft_image_urls(client: FlaskClient, monkeypatch: pytest.MonkeyPatch) -> None:

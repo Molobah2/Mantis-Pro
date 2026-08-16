@@ -83,12 +83,53 @@ def _cheap_listings_lines(d: dict, name: str) -> tuple[str, list[str]]:
     return headline, captions
 
 
+def _period_performance_lines(d: dict, name: str) -> tuple[str, list[str]]:
+    # Headline on whichever metric is available, in order of what's usually
+    # the most-watched number — floor, then volume, then sales, then listings.
+    for key, label in (
+        ("floor_change_pct", "floor"), ("volume_change_pct", "volume"),
+        ("sales_change_pct", "sales"), ("avg_price_change_pct", "average sale price"),
+        ("listed_change_pct", "listings"),
+    ):
+        if key in d:
+            pct = d[key]
+            direction = "up" if pct >= 0 else "down"
+            headline = f"{name} {label} is {direction} {abs(pct):.1f}% this week"
+            break
+    else:
+        headline = f"{name}: this week vs last week" if "sales_this" not in d else f"{name}: {d['sales_this']} sales this week"
+
+    parts = []
+    if "sales_this" in d:
+        parts.append(f"Sales: {d['sales_last']} → {d['sales_this']}")
+    if "volume_this" in d:
+        parts.append(f"Volume: {_fmt_price(d['volume_last'], 'ETH')} → {_fmt_price(d['volume_this'], 'ETH')}")
+    if "avg_price_this" in d:
+        parts.append(f"Avg sale: {_fmt_price(d['avg_price_last'], 'ETH')} → {_fmt_price(d['avg_price_this'], 'ETH')}")
+    if "floor_this" in d:
+        parts.append(f"Floor: {_fmt_price(d['floor_last'], 'ETH')} → {_fmt_price(d['floor_this'], 'ETH')}")
+    if "listed_this" in d:
+        parts.append(f"Listed: {d['listed_last']} → {d['listed_this']}")
+    summary = " · ".join(parts) if parts else "no notable change"
+
+    days_tracked = d.get("days_tracked", 0)
+    confidence_bit = f" (based on {days_tracked:.0f}d of tracked history)" if days_tracked >= 1 else ""
+
+    captions = [
+        f"Last week vs this week for {name}: {summary}.{confidence_bit}",
+        f"{summary}. That's {name} this week.",
+        f"Something's changing with {name}. {summary}. What do you make of it?",
+    ]
+    return headline, captions
+
+
 _BUILDERS = {
     "market_snapshot": _market_snapshot_lines,
     "listing_scarcity": _listing_scarcity_lines,
     "rarest_listed_nft": _rarest_listed_nft_lines,
     "rarest_listed_trait": _rarest_listed_trait_lines,
     "cheap_listings": _cheap_listings_lines,
+    "period_performance": _period_performance_lines,
 }
 
 

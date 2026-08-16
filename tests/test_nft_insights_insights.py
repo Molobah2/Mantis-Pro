@@ -1,3 +1,5 @@
+import pytest
+
 from nft_insights import config, insights
 
 
@@ -400,3 +402,158 @@ def test_complete_data_still_produces_full_insight_set() -> None:
     assert "cheap_listings" in types
     snapshot = next(i for i in result if i.type == "market_snapshot")
     assert "listed_pct" in snapshot.data
+
+
+# ── period performance ────────────────────────────────────────────────
+
+def _sale(token_id: int, price: float, symbol: str = "ETH") -> dict:
+    return {"token_id": token_id, "price": price, "symbol": symbol, "timestamp": 0, "name": None, "image_url": None}
+
+
+def test_period_performance_not_emitted_with_no_sales_and_no_history() -> None:
+    scan = {"collection": {}, "stats": {}, "listings": [], "nfts": [],
+            "sales_this_period": [], "sales_last_period": []}
+    result = insights.generate(scan)
+    assert all(i.type != "period_performance" for i in result)
+
+
+def test_period_performance_emitted_from_sales_alone_no_snapshot_needed() -> None:
+    """The whole point: this works retroactively via /events, no prior
+    snapshot required."""
+    scan = {
+        "collection": {}, "stats": {}, "listings": [], "nfts": [],
+        "sales_this_period": [_sale(1, 0.1), _sale(2, 0.12)],
+        "sales_last_period": [_sale(3, 0.08)],
+    }
+    result = insights.generate(scan)
+    perf = next((i for i in result if i.type == "period_performance"), None)
+    assert perf is not None
+    assert perf.data["sales_this"] == 2
+    assert perf.data["sales_last"] == 1
+    assert perf.data["sales_change_pct"] == 100.0
+    assert "floor_change_pct" not in perf.data
+    assert "listed_change_pct" not in perf.data
+
+
+def test_period_performance_not_emitted_when_sales_windows_incomplete() -> None:
+    scan = {
+        "collection": {}, "stats": {}, "listings": [], "nfts": [],
+        "sales_this_period": [_sale(1, 0.1)],
+        "sales_this_period_complete": False,
+        "sales_last_period": [_sale(2, 0.1)],
+    }
+    result = insights.generate(scan)
+    assert all(i.type != "period_performance" for i in result)
+
+
+def test_period_performance_includes_floor_and_listed_when_snapshot_available() -> None:
+    scan = {
+        "collection": {}, "stats": {"floor_price": 0.12}, "listings": [_listing(1, 0.12)],
+        "listings_complete": True, "nfts": [],
+        "sales_this_period": [], "sales_last_period": [],
+        "snapshot_week_ago": {"floor_price": 0.09, "listed_count": 3},
+        "days_tracked": 8.2,
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert perf.data["floor_this"] == 0.12
+    assert perf.data["floor_last"] == 0.09
+    assert perf.data["floor_change_pct"] == pytest.approx(33.33, abs=0.01)
+    assert perf.data["listed_this"] == 1
+    assert perf.data["listed_last"] == 3
+    assert perf.data["listed_change_pct"] == pytest.approx(-66.67, abs=0.01)
+    assert perf.data["days_tracked"] == 8.2
+
+
+def test_period_performance_omits_listed_change_when_listings_incomplete() -> None:
+    scan = {
+        "collection": {}, "stats": {"floor_price": 0.12}, "listings": [_listing(1, 0.12)],
+        "listings_complete": False, "nfts": [],
+        "sales_this_period": [], "sales_last_period": [],
+        "snapshot_week_ago": {"floor_price": 0.09, "listed_count": 3},
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert "listed_change_pct" not in perf.data
+    assert "floor_change_pct" in perf.data  # unaffected by listings completeness
+
+
+def test_period_performance_keeps_raw_listed_values_when_baseline_is_zero() -> None:
+    """Regression: going from 0 listed a week ago to N listed now is a real,
+    non-fabricated finding — _pct_change can't express it as a %, but the
+    raw before/after values must still surface rather than being dropped
+    entirely (mirrors how the sales block already handles a 0 baseline)."""
+    scan = {
+        "collection": {}, "stats": {}, "listings": [_listing(1, 0.1), _listing(2, 0.2)],
+        "listings_complete": True, "nfts": [],
+        "sales_this_period": [], "sales_last_period": [],
+        "snapshot_week_ago": {"floor_price": None, "listed_count": 0},
+    }
+    result = insights.generate(scan)
+    perf = next((i for i in result if i.type == "period_performance"), None)
+    assert perf is not None
+    assert perf.data["listed_this"] == 2
+    assert perf.data["listed_last"] == 0
+    assert "listed_change_pct" not in perf.data  # no defined % from a zero baseline
+
+
+def test_period_performance_includes_avg_price_when_both_windows_have_priced_sales() -> None:
+    scan = {
+        "collection": {}, "stats": {}, "listings": [], "nfts": [],
+        "sales_this_period": [_sale(1, 0.2), _sale(2, 0.3)],
+        "sales_last_period": [_sale(3, 0.1)],
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert perf.data["avg_price_this"] == pytest.approx(0.25)
+    assert perf.data["avg_price_last"] == pytest.approx(0.1)
+    assert perf.data["avg_price_change_pct"] == pytest.approx(150.0)
+
+
+def test_period_performance_omits_avg_price_when_one_window_has_no_priced_sales() -> None:
+    scan = {
+        "collection": {}, "stats": {}, "listings": [], "nfts": [],
+        "sales_this_period": [_sale(1, 0.2)],
+        "sales_last_period": [],
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert "avg_price_this" not in perf.data
+    assert "avg_price_change_pct" not in perf.data
+
+
+def test_period_performance_uses_sold_nfts_as_proof_grid() -> None:
+    scan = {
+        "collection": {}, "stats": {}, "listings": [], "nfts": [],
+        "sales_this_period": [_sale(5, 0.1), _sale(6, 0.2)],
+        "sales_last_period": [],
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert perf.nft_token_ids == (5, 6)
+
+
+def test_period_performance_falls_back_to_listings_when_nothing_sold_this_period() -> None:
+    scan = {
+        "collection": {}, "stats": {}, "listings": [_listing(1, 0.1), _listing(2, 0.2)],
+        "listings_complete": True, "nfts": [],
+        "sales_this_period": [], "sales_last_period": [_sale(9, 0.1)],
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert set(perf.nft_token_ids) == {1, 2}
+
+
+def test_period_performance_zero_baseline_omits_pct_but_keeps_raw_values() -> None:
+    """Going from 0 sales last period to N this period is a real story
+    ("first sales in a week") but has no defined percentage change."""
+    scan = {
+        "collection": {}, "stats": {}, "listings": [], "nfts": [],
+        "sales_this_period": [_sale(1, 0.1)],
+        "sales_last_period": [],
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert perf.data["sales_this"] == 1
+    assert perf.data["sales_last"] == 0
+    assert "sales_change_pct" not in perf.data

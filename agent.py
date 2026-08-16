@@ -1909,6 +1909,41 @@ try:
 except ImportError:
     print("[opensea-automint] APScheduler not installed — drops will only refresh via admin endpoint, firing watcher will not run")
 
+# ── NFT MARKET INTELLIGENCE — HISTORICAL SNAPSHOTS ────────────────────
+# get_scan() already records a "free" snapshot on every cache miss, but
+# that only happens when someone actually scans a collection — a
+# collection nobody revisits for a week would otherwise never accumulate
+# the history period_performance comparisons need. This job snapshots
+# every previously-scanned collection on a fixed cadence regardless of
+# whether anyone's actively looking at it. Own scheduler instance
+# (not opensea_automint's) — nft_insights stays self-contained, same
+# reasoning as its own Blueprint registration above. Own try/except
+# ImportError too, in case this ever runs somewhere without APScheduler
+# even when opensea_automint's block above already imported it fine.
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler as _BS4
+
+    from nft_insights import config as _nft_insights_config
+    from nft_insights import scan as _nft_insights_scan
+
+    def _run_nft_insights_snapshot():
+        try:
+            _nft_insights_scan.snapshot_tracked_collections()
+        except Exception as e:
+            print(f"[nft-insights] background snapshot tick failed: {e}")
+
+    _nft_insights_scheduler = _BS4(timezone="UTC")
+    _nft_insights_scheduler.add_job(
+        _run_nft_insights_snapshot, "interval",
+        hours=_nft_insights_config.SNAPSHOT_INTERVAL_HOURS,
+        id="nft_insights_snapshot", replace_existing=True,
+    )
+    _nft_insights_scheduler.start()
+    threading.Thread(target=_run_nft_insights_snapshot, daemon=True).start()
+    print(f"[nft-insights] APScheduler started — snapshot every {_nft_insights_config.SNAPSHOT_INTERVAL_HOURS}h")
+except ImportError:
+    print("[nft-insights] APScheduler not installed — historical snapshots will only be taken on-demand via scan requests")
+
 @app.route("/portal-upvote")
 def portal_upvote_page():
     import json as _json

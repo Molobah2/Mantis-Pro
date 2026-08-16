@@ -79,7 +79,58 @@ def test_unknown_insight_type_never_raises() -> None:
         "threshold_price": 0.1, "multiple": 1.1, "currency": "ETH",
         "matched_count": 3, "total_listed": 10, "anchor_is_floor": True,
     }),
+    ("period_performance", {"sales_this": 5, "sales_last": 3, "sales_change_pct": 66.67, "days_tracked": 30}),
 ])
 def test_every_insight_type_produces_exactly_three_captions(insight_type, data) -> None:
     insight = _insight(insight_type, data)
     assert len(captions.caption_options(insight, "Boonies")) == 3
+
+
+# ── period performance ────────────────────────────────────────────────
+
+def test_period_performance_headline_prioritizes_floor_over_other_metrics() -> None:
+    insight = _insight("period_performance", {
+        "floor_change_pct": 31.0, "volume_change_pct": 84.0, "sales_change_pct": 57.0,
+    })
+    headline = captions.headline(insight, "GOD PULL")
+    assert "floor" in headline
+    assert "up 31.0%" in headline
+
+
+def test_period_performance_headline_negative_change_says_down() -> None:
+    insight = _insight("period_performance", {"floor_change_pct": -12.5})
+    headline = captions.headline(insight, "Boonies")
+    assert "down 12.5%" in headline
+
+
+def test_period_performance_headline_falls_back_to_sales_count_when_no_pct_available() -> None:
+    insight = _insight("period_performance", {"sales_this": 4, "sales_last": 0})
+    headline = captions.headline(insight, "Boonies")
+    assert "4 sales this week" in headline
+
+
+def test_period_performance_captions_include_before_after_values() -> None:
+    insight = _insight("period_performance", {
+        "sales_this": 880, "sales_last": 620, "sales_change_pct": 41.94,
+        "volume_this": 21.88, "volume_last": 15.2, "volume_change_pct": 44.0,
+        "days_tracked": 45,
+    })
+    caps = captions.caption_options(insight, "GOD PULL")
+    assert any("620" in c and "880" in c for c in caps)
+    assert any("tracked history" in c for c in caps)
+
+
+def test_period_performance_headline_and_captions_surface_avg_price() -> None:
+    insight = _insight("period_performance", {
+        "avg_price_this": 0.25, "avg_price_last": 0.1, "avg_price_change_pct": 150.0,
+    })
+    headline = captions.headline(insight, "GOD PULL")
+    assert "average sale price" in headline
+    caps = captions.caption_options(insight, "GOD PULL")
+    assert any("Avg sale" in c for c in caps)
+
+
+def test_period_performance_omits_confidence_note_when_days_tracked_below_one() -> None:
+    insight = _insight("period_performance", {"sales_this": 2, "sales_last": 1, "days_tracked": 0.2})
+    caps = captions.caption_options(insight, "Boonies")
+    assert not any("tracked history" in c for c in caps)

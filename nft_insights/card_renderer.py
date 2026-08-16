@@ -280,7 +280,29 @@ def _stat_lines(insight: Insight) -> list[str]:
         return [f"{d['count']} / {d['total']} have this trait  ·  {d['listed_count']} listed"]
     if insight.type == "cheap_listings":
         return [f"{d['matched_count']} listed under {d['threshold_price']} {d['currency']}"]
+    if insight.type == "period_performance":
+        return _period_performance_stat_lines(d)
     return []
+
+
+def _period_performance_stat_lines(d: dict) -> list[str]:
+    lines = []
+    if "sales_this" in d:
+        pct = f"  ({d['sales_change_pct']:+.0f}%)" if "sales_change_pct" in d else ""
+        lines.append(f"Sales: {d['sales_last']} → {d['sales_this']}{pct}")
+    if "volume_this" in d:
+        pct = f"  ({d['volume_change_pct']:+.0f}%)" if "volume_change_pct" in d else ""
+        lines.append(f"Volume: {d['volume_last']} → {d['volume_this']} ETH{pct}")
+    if "avg_price_this" in d:
+        pct = f"  ({d['avg_price_change_pct']:+.0f}%)" if "avg_price_change_pct" in d else ""
+        lines.append(f"Avg sale: {d['avg_price_last']} → {d['avg_price_this']} ETH{pct}")
+    if "floor_this" in d:
+        pct = f"  ({d['floor_change_pct']:+.0f}%)" if "floor_change_pct" in d else ""
+        lines.append(f"Floor: {d['floor_last']} → {d['floor_this']} ETH{pct}")
+    if "listed_this" in d:
+        pct = f"  ({d['listed_change_pct']:+.0f}%)" if "listed_change_pct" in d else ""
+        lines.append(f"Listed: {d['listed_last']} → {d['listed_this']}{pct}")
+    return lines
 
 
 def _thin_gap(span: int) -> int:
