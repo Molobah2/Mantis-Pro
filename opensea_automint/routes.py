@@ -92,7 +92,20 @@ def api_track_drop() -> Response:
     return jsonify({"drop": drops.to_display_dict(drop)}), 200
 
 
-_COLLECTION_DETAILS_RATE_LIMIT = 30
+# Raised from 30 — the tracked-drops list has grown to 140+ (68+ upcoming
+# at once from the on-chain discovery job), and the ENTIRE grant/arm flow
+# depends on this endpoint succeeding (contract_address is only ever
+# exposed here, never in /api/opensea/drops' display dict — see
+# api_collection_details below). 30/hour was tuned for a much smaller
+# tracked list; at the current scale, ordinary interactive use (checking
+# a handful of drops in a session) could exhaust it on its own, before
+# ever accounting for Live Drops' schedule prefetch (now separately
+# capped — see the dashboard's prefetchLiveSchedules). This is a
+# single-operator tool, not a public API, so the real constraint is
+# Playwright scrape load, not abuse — get_collection_details' own
+# 30-minute per-slug cache already bounds repeat cost for the same
+# collection either way.
+_COLLECTION_DETAILS_RATE_LIMIT = 90
 _COLLECTION_DETAILS_RATE_WINDOW_SECONDS = 3600
 _COLLECTION_DETAILS_RATE_KEY = "collection-details"
 

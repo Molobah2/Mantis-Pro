@@ -320,7 +320,7 @@ def test_api_collection_details_rate_limits_after_threshold(
     )
 
     last_resp = None
-    for _ in range(31):
+    for _ in range(routes._COLLECTION_DETAILS_RATE_LIMIT + 1):
         last_resp = client.get("/api/opensea/collection/cheap-shot")
 
     assert last_resp.status_code == 429

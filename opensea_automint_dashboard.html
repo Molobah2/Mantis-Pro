@@ -1447,10 +1447,25 @@ function renderLiveDrops() {
 // slug already known: scheduleCache is checked first, and is itself warmed
 // from sessionStorage on page load so a reload doesn't reset that memory
 // and re-spend the budget for collections we already resolved minutes ago.
+// Hard cap on how many schedule lookups one tab-open can fire at once. The
+// tracked list has grown past 140 drops (68+ upcoming at once) — an
+// unbounded forEach here fired one request per upcoming drop simultaneously
+// and blew through the entire collection-details rate limit in a single
+// click, starving the detail modal of the one request it needs to arm a
+// mint (confirmed live 2026-08-16: opening Live Drops with 68 upcoming
+// drops tracked produced a burst of 68 concurrent requests in the Railway
+// logs). The modal is the priority consumer of this budget, not the
+// countdown display — a drop this cap skips just shows no live countdown
+// until its schedule gets resolved some other way (e.g. opening its modal).
+var LIVE_SCHEDULE_PREFETCH_LIMIT = 6;
+
 function prefetchLiveSchedules() {
-  allDrops.forEach(function (drop) {
-    if (drop.status !== 'upcoming' || !drop.collection_slug) return;
-    if (scheduleCache.hasOwnProperty(drop.collection_slug)) return;
+  var candidates = allDrops.filter(function (drop) {
+    return drop.status === 'upcoming' && drop.collection_slug &&
+      !scheduleCache.hasOwnProperty(drop.collection_slug);
+  });
+
+  candidates.slice(0, LIVE_SCHEDULE_PREFETCH_LIMIT).forEach(function (drop) {
     scheduleCache[drop.collection_slug] = null; // claim it so we never double-fetch
     fetch('/api/opensea/collection/' + encodeURIComponent(drop.collection_slug))
       .then(function (res) { return res.ok ? res.json() : null; })
