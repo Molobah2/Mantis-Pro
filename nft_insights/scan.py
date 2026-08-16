@@ -39,18 +39,26 @@ def _fetch(slug: str) -> dict:
     stats = opensea_client.get_collection_stats(slug) or {}
     listings_result = opensea_client.get_listings(slug)
 
+    # Sales-history calls run BEFORE the NFT/trait fetch below (which can be
+    # up to MAX_NFT_PAGES=100 sequential requests on its own for a large
+    # collection) rather than after — a single scan can add up to ~160
+    # sequential OpenSea calls, and whichever calls run last are the ones
+    # most likely to get rate-limited if OpenSea throttles a burst from one
+    # key. period_performance's retroactive comparison is the whole point
+    # of this fetch; it shouldn't lose the rate-limit budget race to the
+    # NFT pagination that only rarity-dependent insights need.
+    now = time.time()
+    window = config.PERIOD_PERFORMANCE_WINDOW_S
+    this_period = sales_history.get_sales_in_range(slug, now - window, now)
+    last_period = sales_history.get_sales_in_range(slug, now - 2 * window, now - window)
+    snapshot_week_ago = history.get_snapshot_near(slug, now - window, config.SNAPSHOT_STALENESS_TOLERANCE_S)
+
     supply = collection.get("total_supply")
     # complete=False by default: if the supply-cap check below skips the
     # fetch entirely, "complete" doesn't apply — we never attempted it.
     nfts_result = opensea_client.PaginatedResult(items=[], complete=False)
     if supply is None or supply <= config.MAX_SUPPLY_FOR_RARITY:
         nfts_result = opensea_client.get_collection_nfts(slug)
-
-    now = time.time()
-    window = config.PERIOD_PERFORMANCE_WINDOW_S
-    this_period = sales_history.get_sales_in_range(slug, now - window, now)
-    last_period = sales_history.get_sales_in_range(slug, now - 2 * window, now - window)
-    snapshot_week_ago = history.get_snapshot_near(slug, now - window, config.SNAPSHOT_STALENESS_TOLERANCE_S)
 
     scan_data = {
         "collection": collection,
