@@ -203,39 +203,58 @@ def test_render_never_raises_for_every_insight_type() -> None:
         assert Image.open(io.BytesIO(png_bytes)).format == "PNG"
 
 
-# ── period_performance stat lines ────────────────────────────────────────
+# ── period_performance line segments (colored % rendering) ──────────────
 
-def test_period_performance_stat_lines_include_all_available_metrics() -> None:
-    lines = card_renderer._period_performance_stat_lines({
+def test_period_performance_segments_include_all_available_metrics() -> None:
+    segments = card_renderer._period_performance_line_segments({
         "sales_this": 880, "sales_last": 620, "sales_change_pct": 41.94,
         "volume_this": 21.88, "volume_last": 15.2, "volume_change_pct": 44.0,
         "floor_this": 0.024, "floor_last": 0.018, "floor_change_pct": 33.3,
         "listed_this": 184, "listed_last": 312, "listed_change_pct": -41.0,
     })
-    assert len(lines) == 4
-    assert any("620" in l and "880" in l for l in lines)
-    assert any("+42%" in l for l in lines)  # sales_change_pct rounds to 42
-    assert any("-41%" in l for l in lines)  # listed_change_pct
+    assert len(segments) == 4
+    prefixes = [s[0] for s in segments]
+    assert any("620" in p and "880" in p for p in prefixes)
+
+    sales_seg = next(s for s in segments if "Sales" in s[0])
+    assert sales_seg[1] == "(+42%)"  # sales_change_pct rounds to 42
+    assert sales_seg[2] == pytest.approx(41.94)
+
+    listed_seg = next(s for s in segments if "Listed" in s[0])
+    assert listed_seg[1] == "(-41%)"
+    assert listed_seg[2] < 0
 
 
-def test_period_performance_stat_lines_include_avg_price_when_present() -> None:
-    lines = card_renderer._period_performance_stat_lines({
+def test_period_performance_segments_include_avg_price_when_present() -> None:
+    segments = card_renderer._period_performance_line_segments({
         "avg_price_this": 0.25, "avg_price_last": 0.1, "avg_price_change_pct": 150.0,
     })
-    assert len(lines) == 1
-    assert "Avg sale" in lines[0]
-    assert "0.1" in lines[0] and "0.25" in lines[0]
-    assert "+150%" in lines[0]
+    assert len(segments) == 1
+    prefix, pct_text, pct_value = segments[0]
+    assert "Avg sale" in prefix
+    assert "0.1" in prefix and "0.25" in prefix
+    assert pct_text == "(+150%)"
+    assert pct_value == 150.0
 
 
-def test_period_performance_stat_lines_omits_metrics_not_present() -> None:
-    lines = card_renderer._period_performance_stat_lines({"sales_this": 4, "sales_last": 0})
-    assert len(lines) == 1
-    assert "Sales" in lines[0]
+def test_period_performance_segments_omit_metrics_not_present() -> None:
+    segments = card_renderer._period_performance_line_segments({"sales_this": 4, "sales_last": 0})
+    assert len(segments) == 1
+    assert "Sales" in segments[0][0]
 
 
-def test_period_performance_stat_lines_empty_data_yields_no_lines() -> None:
-    assert card_renderer._period_performance_stat_lines({}) == []
+def test_period_performance_segments_no_pct_when_zero_baseline() -> None:
+    """A 0 -> N story has no defined %, so pct_text/pct_value must both be
+    None — render() then draws the whole line in the plain accent color
+    with no red/green segment, rather than crashing on `pct_value >= 0`."""
+    segments = card_renderer._period_performance_line_segments({"sales_this": 4, "sales_last": 0})
+    prefix, pct_text, pct_value = segments[0]
+    assert pct_text is None
+    assert pct_value is None
+
+
+def test_period_performance_segments_empty_data_yields_no_segments() -> None:
+    assert card_renderer._period_performance_line_segments({}) == []
 
 
 # ── fetch_nft_image ───────────────────────────────────────────────────────

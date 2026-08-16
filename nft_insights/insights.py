@@ -45,6 +45,12 @@ _MAX_PROOF_TOKENS = 60
 # looking broken. A larger, purely illustrative sample fits that role.
 _SNAPSHOT_SAMPLE_SIZE = 50
 
+# period_performance's proof grid is illustrative context for the headline
+# stat, not a claim about a specific matched set — kept small on purpose so
+# the images stay large and legible instead of shrinking to fit dozens of
+# tiny tiles.
+_PERIOD_PERFORMANCE_GRID_SIZE = 13
+
 
 @dataclass(frozen=True)
 class Insight:
@@ -317,9 +323,9 @@ def _period_performance(scan: dict) -> Insight | None:
     # back to a sample of what's currently listed rather than an empty grid.
     token_ids = tuple(dict.fromkeys(
         s["token_id"] for s in sales_this if s.get("token_id") is not None
-    ))[:_MAX_PROOF_TOKENS]
+    ))[:_PERIOD_PERFORMANCE_GRID_SIZE]
     if not token_ids:
-        token_ids = tuple(_cheapest_price_by_token(listings))[:_SNAPSHOT_SAMPLE_SIZE]
+        token_ids = tuple(_cheapest_price_by_token(listings))[:_PERIOD_PERFORMANCE_GRID_SIZE]
 
     return Insight(id="period_performance", type="period_performance", data=data, nft_token_ids=token_ids, score=score)
 

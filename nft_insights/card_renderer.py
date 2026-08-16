@@ -33,6 +33,8 @@ _TEXT_PRIMARY = (245, 245, 250)
 _TEXT_MUTED = (150, 150, 165)
 _ACCENT = (124, 140, 255)
 _PANEL = (255, 255, 255, 15)
+_POSITIVE = (110, 205, 145)  # up
+_NEGATIVE = (225, 95, 95)    # down
 
 # Pure flat grid, no rounded corners — a plain tiled photo-grid, not a
 # "designed" card element.
@@ -232,7 +234,6 @@ def render(
     draw = ImageDraw.Draw(canvas)
 
     headline_text = captions.headline(insight, collection_name)
-    stat_lines = _stat_lines(insight)
 
     headline_size = round(w * 0.045)
     stat_size = round(w * 0.02)
@@ -245,9 +246,20 @@ def render(
         cursor_y += round(headline_size * 1.25)
 
     cursor_y += round(headline_size * 0.3)
-    for line in stat_lines:
-        draw.text((margin, cursor_y), line, font=stat_font, fill=_ACCENT)
-        cursor_y += round(stat_size * 1.6)
+    if insight.type == "period_performance":
+        # Each line's % change gets its own color (green = up, red = down)
+        # instead of the flat accent color every other insight type uses.
+        for prefix, pct_text, pct_value in _period_performance_line_segments(insight.data):
+            draw.text((margin, cursor_y), prefix, font=stat_font, fill=_ACCENT)
+            if pct_text is not None:
+                prefix_width = draw.textlength(prefix, font=stat_font)
+                pct_color = _POSITIVE if pct_value >= 0 else _NEGATIVE
+                draw.text((margin + prefix_width, cursor_y), pct_text, font=stat_font, fill=pct_color)
+            cursor_y += round(stat_size * 1.6)
+    else:
+        for line in _stat_lines(insight):
+            draw.text((margin, cursor_y), line, font=stat_font, fill=_ACCENT)
+            cursor_y += round(stat_size * 1.6)
 
     # Pure grid, edge-to-edge (no inset, no rounded corners) — only the
     # headline/stat text above gets the card's margin treatment.
@@ -280,29 +292,35 @@ def _stat_lines(insight: Insight) -> list[str]:
         return [f"{d['count']} / {d['total']} have this trait  ·  {d['listed_count']} listed"]
     if insight.type == "cheap_listings":
         return [f"{d['matched_count']} listed under {d['threshold_price']} {d['currency']}"]
-    if insight.type == "period_performance":
-        return _period_performance_stat_lines(d)
     return []
 
 
-def _period_performance_stat_lines(d: dict) -> list[str]:
-    lines = []
+def _period_performance_line_segments(d: dict) -> list[tuple[str, str | None, float | None]]:
+    """One (prefix_text, pct_text, pct_value) tuple per available metric —
+    prefix renders in the normal stat color, pct_text (when not None) is
+    the part render() colors green/red by direction. pct_value is the raw
+    number driving that color choice; pct_text/pct_value are both None for
+    a metric with no defined % (e.g. a 0-baseline story), which just
+    renders as a plain, uncolored line."""
+    segments: list[tuple[str, str | None, float | None]] = []
+
+    def add(label: str, last, this, pct_key: str, suffix: str = "") -> None:
+        prefix = f"{label}: {last} → {this}{suffix}  "
+        pct = d.get(pct_key)
+        pct_text = f"({pct:+.0f}%)" if pct is not None else None
+        segments.append((prefix, pct_text, pct))
+
     if "sales_this" in d:
-        pct = f"  ({d['sales_change_pct']:+.0f}%)" if "sales_change_pct" in d else ""
-        lines.append(f"Sales: {d['sales_last']} → {d['sales_this']}{pct}")
+        add("Sales", d["sales_last"], d["sales_this"], "sales_change_pct")
     if "volume_this" in d:
-        pct = f"  ({d['volume_change_pct']:+.0f}%)" if "volume_change_pct" in d else ""
-        lines.append(f"Volume: {d['volume_last']} → {d['volume_this']} ETH{pct}")
+        add("Volume", d["volume_last"], d["volume_this"], "volume_change_pct", " ETH")
     if "avg_price_this" in d:
-        pct = f"  ({d['avg_price_change_pct']:+.0f}%)" if "avg_price_change_pct" in d else ""
-        lines.append(f"Avg sale: {d['avg_price_last']} → {d['avg_price_this']} ETH{pct}")
+        add("Avg sale", d["avg_price_last"], d["avg_price_this"], "avg_price_change_pct", " ETH")
     if "floor_this" in d:
-        pct = f"  ({d['floor_change_pct']:+.0f}%)" if "floor_change_pct" in d else ""
-        lines.append(f"Floor: {d['floor_last']} → {d['floor_this']} ETH{pct}")
+        add("Floor", d["floor_last"], d["floor_this"], "floor_change_pct", " ETH")
     if "listed_this" in d:
-        pct = f"  ({d['listed_change_pct']:+.0f}%)" if "listed_change_pct" in d else ""
-        lines.append(f"Listed: {d['listed_last']} → {d['listed_this']}{pct}")
-    return lines
+        add("Listed", d["listed_last"], d["listed_this"], "listed_change_pct")
+    return segments
 
 
 def _thin_gap(span: int) -> int:

@@ -544,6 +544,31 @@ def test_period_performance_falls_back_to_listings_when_nothing_sold_this_period
     assert set(perf.nft_token_ids) == {1, 2}
 
 
+def test_period_performance_proof_grid_capped_at_thirteen() -> None:
+    """The grid is illustrative context, not a claim about a matched set —
+    kept small so images stay large, unlike cheap_listings/rarest_listed_trait
+    which show every match."""
+    scan = {
+        "collection": {}, "stats": {}, "listings": [], "nfts": [],
+        "sales_this_period": [_sale(i, 0.1) for i in range(1, 51)],
+        "sales_last_period": [],
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert len(perf.nft_token_ids) == 13
+
+
+def test_period_performance_listings_fallback_also_capped_at_thirteen() -> None:
+    scan = {
+        "collection": {}, "stats": {}, "listings": [_listing(i, 0.1) for i in range(1, 51)],
+        "listings_complete": True, "nfts": [],
+        "sales_this_period": [], "sales_last_period": [_sale(9, 0.1)],
+    }
+    result = insights.generate(scan)
+    perf = next(i for i in result if i.type == "period_performance")
+    assert len(perf.nft_token_ids) == 13
+
+
 def test_period_performance_zero_baseline_omits_pct_but_keeps_raw_values() -> None:
     """Going from 0 sales last period to N this period is a real story
     ("first sales in a week") but has no defined percentage change."""
