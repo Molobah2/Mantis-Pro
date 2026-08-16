@@ -26,7 +26,14 @@ SCAN_CACHE_TTL_S = 20 * 60
 CARD_CACHE_TTL_S = 10 * 60
 
 SALES_EVENT_PAGE_SIZE = 100
-MAX_SALES_EVENT_PAGES = 30  # up to 3,000 sales per requested date window
+# Up to 6,000 sales per requested date window. Verified live against a real
+# high-volume collection (godpull) whose prior-7-day window alone exceeded
+# the original 30-page/3,000-sale cap, silently suppressing
+# period_performance entirely (the insight correctly refuses to compare
+# against a truncated window rather than understate it — see insights.py's
+# no-fabrication rule) — raised from 30 to give real headroom above an
+# observed real-world peak, not just a guess.
+MAX_SALES_EVENT_PAGES = 60
 
 # Weekly period-performance comparison windows.
 PERIOD_PERFORMANCE_WINDOW_S = 7 * 86400
