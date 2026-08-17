@@ -300,6 +300,104 @@ def test_get_tracked_drop_by_contract_address_returns_none_when_not_found() -> N
     assert store.get_tracked_drop_by_contract_address("0xNeverTracked000000000000000000000000") is None
 
 
+def test_tracked_drop_user_tracked_defaults_to_false() -> None:
+    # A background discovery job's upsert (TrackedDropInput's own default)
+    # must never masquerade as something the owner explicitly tracked.
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="discovered-only", name="Discovered Only",
+        contract_address="0xContractDiscovered",
+        mint_page_url="https://opensea.io/collection/discovered-only",
+        source="playwright", stage_data="{}",
+    ))
+
+    assert store.get_tracked_drop_by_slug("discovered-only")["user_tracked"] == 0
+    assert store.get_active_user_tracked_drops(max_age_seconds=999999) == []
+
+
+def test_tracked_drop_user_tracked_upgrades_from_discovery_to_manual() -> None:
+    # A background job discovers it first (user_tracked=0); the owner later
+    # tracks the same slug themselves — the row must upgrade, not need a
+    # second row or silently stay hidden.
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="later-tracked", name="Later Tracked",
+        contract_address="0xContractLater",
+        mint_page_url="https://opensea.io/collection/later-tracked",
+        source="playwright", stage_data="{}", user_tracked=False,
+    ))
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="later-tracked", name="Later Tracked",
+        contract_address="0xContractLater",
+        mint_page_url="https://opensea.io/collection/later-tracked",
+        source="manual", stage_data="{}", user_tracked=True,
+    ))
+
+    assert store.get_tracked_drop_by_slug("later-tracked")["user_tracked"] == 1
+    slugs = {d["collection_slug"] for d in store.get_active_user_tracked_drops(max_age_seconds=999999)}
+    assert "later-tracked" in slugs
+
+
+def test_tracked_drop_user_tracked_never_downgrades() -> None:
+    # A later non-user upsert of an already-owner-tracked row (e.g. a
+    # refresh) must not silently hide it again.
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="stays-visible", name="Stays Visible",
+        contract_address="0xContractStays",
+        mint_page_url="https://opensea.io/collection/stays-visible",
+        source="manual", stage_data="{}", user_tracked=True,
+    ))
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="stays-visible", name="Stays Visible",
+        contract_address="0xContractStays",
+        mint_page_url="https://opensea.io/collection/stays-visible",
+        source="playwright", stage_data="{}", user_tracked=False,
+    ))
+
+    assert store.get_tracked_drop_by_slug("stays-visible")["user_tracked"] == 1
+
+
+def test_get_active_user_tracked_drops_excludes_expired_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = 1_000_000.0
+    monkeypatch.setattr(store.time, "time", lambda: now)
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="aging-out", name="Aging Out",
+        contract_address="0xContractAging",
+        mint_page_url="https://opensea.io/collection/aging-out",
+        source="manual", stage_data="{}", user_tracked=True,
+    ))
+
+    fifteen_days_seconds = 15 * 24 * 3600
+    monkeypatch.setattr(store.time, "time", lambda: now + fifteen_days_seconds)
+
+    slugs = {d["collection_slug"] for d in store.get_active_user_tracked_drops(max_age_seconds=14 * 24 * 3600)}
+    assert "aging-out" not in slugs
+
+
+def test_upsert_tracked_drop_refreshes_discovered_at_on_re_track(monkeypatch: pytest.MonkeyPatch) -> None:
+    # discovered_at is what the 14-day expiry counts from — re-tracking a
+    # slug must restart that clock, not leave it pinned to whenever the
+    # row first entered the DB (possibly under a background job, long
+    # before the owner ever asked for it).
+    first_seen = 1_000_000.0
+    monkeypatch.setattr(store.time, "time", lambda: first_seen)
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="re-tracked", name="Re-tracked",
+        contract_address="0xContractRetrack",
+        mint_page_url="https://opensea.io/collection/re-tracked",
+        source="playwright", stage_data="{}", user_tracked=False,
+    ))
+
+    re_tracked_at = first_seen + (10 * 24 * 3600)
+    monkeypatch.setattr(store.time, "time", lambda: re_tracked_at)
+    store.upsert_tracked_drop(store.TrackedDropInput(
+        collection_slug="re-tracked", name="Re-tracked",
+        contract_address="0xContractRetrack",
+        mint_page_url="https://opensea.io/collection/re-tracked",
+        source="manual", stage_data="{}", user_tracked=True,
+    ))
+
+    assert store.get_tracked_drop_by_slug("re-tracked")["discovered_at"] == re_tracked_at
+
+
 # ── App state ────────────────────────────────────────────────────────
 
 def test_get_state_returns_none_when_never_set() -> None:

@@ -73,7 +73,10 @@ def _upcoming_row() -> dict:
 
 
 def test_api_drops_returns_expected_shape(client, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(store, "get_tracked_drops", lambda: [_minting_now_row(), _upcoming_row()])
+    monkeypatch.setattr(
+        store, "get_active_user_tracked_drops",
+        lambda max_age_seconds: [_minting_now_row(), _upcoming_row()],
+    )
 
     resp = client.get("/api/opensea/drops")
 
@@ -107,8 +110,8 @@ def test_api_drops_excludes_not_minting_and_unknown_status(
         "updated_at": 1000.0,
     }
     monkeypatch.setattr(
-        store, "get_tracked_drops",
-        lambda: [_minting_now_row(), _not_minting_row(), unknown_status_row],
+        store, "get_active_user_tracked_drops",
+        lambda max_age_seconds: [_minting_now_row(), _not_minting_row(), unknown_status_row],
     )
 
     resp = client.get("/api/opensea/drops")
@@ -132,7 +135,9 @@ def test_api_drops_handles_missing_stage_data_field(client, monkeypatch: pytest.
         "stage_data": None,
         "updated_at": 1000.0,
     }
-    monkeypatch.setattr(store, "get_tracked_drops", lambda: [row_without_stage_data])
+    monkeypatch.setattr(
+        store, "get_active_user_tracked_drops", lambda max_age_seconds: [row_without_stage_data]
+    )
 
     resp = client.get("/api/opensea/drops")
 
@@ -144,7 +149,7 @@ def test_api_drops_handles_missing_stage_data_field(client, monkeypatch: pytest.
 def test_api_drops_returns_empty_list_when_no_drops_tracked(
     client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(store, "get_tracked_drops", lambda: [])
+    monkeypatch.setattr(store, "get_active_user_tracked_drops", lambda max_age_seconds: [])
 
     resp = client.get("/api/opensea/drops")
 
@@ -186,7 +191,9 @@ def test_refresh_with_valid_admin_auth_calls_get_drops_force_refresh_and_returns
         return [_minting_now_row()]
 
     monkeypatch.setattr(drops, "get_drops", fake_get_drops)
-    monkeypatch.setattr(store, "get_tracked_drops", lambda: [_minting_now_row()])
+    monkeypatch.setattr(
+        store, "get_active_user_tracked_drops", lambda max_age_seconds: [_minting_now_row()]
+    )
 
     resp = client.post(
         "/api/opensea/drops/refresh", headers={"X-Admin-Key": "supersecret"}

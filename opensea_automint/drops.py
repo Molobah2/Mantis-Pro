@@ -274,13 +274,20 @@ def to_display_dict(drop_row: dict) -> dict:
     }
 
 
-def track_drop_by_slug(collection_slug: str) -> dict | None:
+def track_drop_by_slug(collection_slug: str, user_tracked: bool = True) -> dict | None:
     """Manually adds (or refreshes) ONE collection as a tracked drop by its
     known slug — bypasses the bulk /drops discovery scrape entirely, which
     only ever surfaces whatever OpenSea's own listing page happens to
     feature (a curated/trending subset, not every collection with a
     scheduled mint). Uses collection_details.get_collection_details for
     the real name/contract_address/mint_schedule.
+
+    user_tracked defaults to True because the primary caller is the
+    dashboard's own "track a collection" action — a real person choosing
+    this slug. Pass False when calling this on a caller's behalf (e.g. a
+    background discovery job resolving a contract to a slug) so it doesn't
+    masquerade as something the owner asked for and show up in
+    store.get_active_user_tracked_drops.
 
     Status is derived from the schedule's stages (the earliest one that's
     either currently running or hasn't started yet) rather than scraped
@@ -328,6 +335,7 @@ def track_drop_by_slug(collection_slug: str) -> dict | None:
             "image_url": details.get("image_url"),
         }),
         chain=details.get("chain") or "ethereum",
+        user_tracked=user_tracked,
     ))
     return store.get_tracked_drop_by_slug(collection_slug)
 
@@ -411,7 +419,7 @@ def discover_new_seadrop_collections() -> int:
             continue
 
         try:
-            tracked = track_drop_by_slug(slug)
+            tracked = track_drop_by_slug(slug, user_tracked=False)
         except ValueError:
             continue  # resolved slug somehow failed SLUG_RE — skip, don't crash the scan
         if tracked:

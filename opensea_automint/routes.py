@@ -21,12 +21,21 @@ opensea_automint_bp = Blueprint("opensea_automint", __name__)
 
 _DASHBOARD_HTML_FILENAME = "opensea_automint_dashboard.html"
 
+# Drops the owner hasn't touched in this long quietly drop off the
+# dashboard — an explicit choice, not just cleanup: this is a single-
+# operator watchlist, not an archive, so a slug tracked two weeks ago and
+# never revisited is more likely forgotten than still wanted.
+_TRACKED_DROP_MAX_AGE_SECONDS = 14 * 24 * 3600
+
 
 def _displayable_drops() -> list[dict]:
-    """Tracked drops shaped for the frontend, excluding ones that aren't
-    currently or soon minting (already-minted / secondary-market-only
-    collections) — the dashboard only shows actionable drops."""
-    rows = store.get_tracked_drops()
+    """Drops the owner explicitly tracked themselves, shaped for the
+    frontend, excluding ones that aren't currently or soon minting
+    (already-minted / secondary-market-only collections) and ones past the
+    14-day tracking window — the dashboard only shows actionable drops the
+    owner actually asked to watch, never anything a background discovery
+    job added on its own (see store.get_active_user_tracked_drops)."""
+    rows = store.get_active_user_tracked_drops(_TRACKED_DROP_MAX_AGE_SECONDS)
     shaped = [drops.to_display_dict(row) for row in rows]
     return [d for d in shaped if d["status"] in drops.DISPLAYABLE_STATUSES]
 

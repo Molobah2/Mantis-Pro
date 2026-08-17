@@ -102,6 +102,19 @@ def _init_schema(c: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass  # column already exists
     try:
+        # Distinguishes a drop the owner explicitly tracked (by slug/link)
+        # from one a bulk-discovery job added on its own — 'source' can't be
+        # trusted for this: discover_new_seadrop_collections() reused
+        # track_drop_by_slug internally and both paths ended up tagged
+        # "manual". The dashboard's drop list now only shows user_tracked=1
+        # rows (see get_active_user_tracked_drops) so discovery noise never
+        # reaches it regardless of whether those background jobs are ever
+        # re-enabled. Defaults to 0 so every pre-existing row (indistinguishable
+        # after the fact) starts hidden rather than wrongly assumed manual.
+        c.execute("ALTER TABLE tracked_drops ADD COLUMN user_tracked INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    try:
         # A DB created before the ERC-4337-to-direct-transaction rewrite
         # still has the old column name — rename it in place rather than
         # requiring a fresh DB (no real user funds/grants existed under the
@@ -198,6 +211,11 @@ class TrackedDropInput:
     # — see wallet-helper/ethClient.ts's ChainName. Defaults to "ethereum"
     # to match this column's own DB-level default for pre-multi-chain rows.
     chain: str = "ethereum"
+    # True only when the owner themselves requested this (pasted a slug/
+    # link into the dashboard) — see drops.track_drop_by_slug's user_tracked
+    # param. False for anything a background discovery job added on its
+    # own. Drives get_active_user_tracked_drops' visibility filter.
+    user_tracked: bool = False
 
 
 @dataclass(frozen=True)
@@ -366,25 +384,38 @@ def _session_grant_row_to_dict(row: tuple) -> dict:
 # ── Tracked drops ─────────────────────────────────────────────────────
 
 def upsert_tracked_drop(drop: TrackedDropInput) -> int:
-    """Insert a newly-discovered drop or refresh an existing one, keyed by collection_slug.
-    Returns the row id either way."""
+    """Insert a newly-discovered drop or refresh an existing one, keyed by
+    collection_slug. Returns the row id either way.
+
+    discovered_at is refreshed on every upsert (not just the first insert)
+    — it's what get_active_user_tracked_drops' 14-day expiry counts from,
+    so re-tracking a drop (or a drop moving from discovered to user_tracked)
+    correctly restarts its clock rather than expiring based on whenever it
+    first entered the DB, possibly under a background job before the owner
+    ever asked for it.
+
+    user_tracked only ever upgrades (0->1), never downgrades: once the
+    owner has explicitly tracked a slug, a later non-user upsert of the
+    same row (e.g. a refresh) must not silently hide it again."""
     now = time.time()
     with _lock, closing(_conn()) as c:
         c.execute("""
             INSERT INTO tracked_drops (
                 collection_slug, name, contract_address, mint_page_url,
-                discovered_at, source, stage_data, updated_at, chain
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                discovered_at, source, stage_data, updated_at, chain, user_tracked
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(collection_slug) DO UPDATE SET
                 name=excluded.name,
                 contract_address=excluded.contract_address,
                 mint_page_url=excluded.mint_page_url,
+                discovered_at=excluded.discovered_at,
                 source=excluded.source,
                 stage_data=excluded.stage_data,
                 updated_at=excluded.updated_at,
-                chain=excluded.chain
+                chain=excluded.chain,
+                user_tracked=MAX(user_tracked, excluded.user_tracked)
         """, (drop.collection_slug, drop.name, drop.contract_address, drop.mint_page_url,
-              now, drop.source, drop.stage_data, now, drop.chain))
+              now, drop.source, drop.stage_data, now, drop.chain, int(drop.user_tracked)))
         c.commit()
         row = c.execute(
             "SELECT id FROM tracked_drops WHERE collection_slug=?", (drop.collection_slug,)
@@ -393,13 +424,33 @@ def upsert_tracked_drop(drop: TrackedDropInput) -> int:
 
 
 def get_tracked_drops() -> list[dict]:
-    """All currently tracked drops, oldest first."""
+    """All currently tracked drops, oldest first — includes background-
+    discovered ones. See get_active_user_tracked_drops for what the
+    dashboard actually displays."""
     with _lock, closing(_conn()) as c:
         rows = c.execute("""
             SELECT id, collection_slug, name, contract_address, chain, mint_page_url,
-                   discovered_at, source, stage_data, updated_at
+                   discovered_at, source, stage_data, updated_at, user_tracked
             FROM tracked_drops ORDER BY id
         """).fetchall()
+    return [_tracked_drop_row_to_dict(r) for r in rows]
+
+
+def get_active_user_tracked_drops(max_age_seconds: float) -> list[dict]:
+    """Drops the owner explicitly tracked themselves (user_tracked=1),
+    tracked within the last max_age_seconds — what the dashboard actually
+    shows. Excludes anything a background discovery job added on its own,
+    and anything old enough to have auto-expired. Oldest first, matching
+    get_tracked_drops' ordering."""
+    cutoff = time.time() - max_age_seconds
+    with _lock, closing(_conn()) as c:
+        rows = c.execute("""
+            SELECT id, collection_slug, name, contract_address, chain, mint_page_url,
+                   discovered_at, source, stage_data, updated_at, user_tracked
+            FROM tracked_drops
+            WHERE user_tracked=1 AND discovered_at > ?
+            ORDER BY id
+        """, (cutoff,)).fetchall()
     return [_tracked_drop_row_to_dict(r) for r in rows]
 
 
@@ -411,7 +462,7 @@ def get_tracked_drop_by_slug(collection_slug: str) -> dict | None:
     with _lock, closing(_conn()) as c:
         row = c.execute("""
             SELECT id, collection_slug, name, contract_address, chain, mint_page_url,
-                   discovered_at, source, stage_data, updated_at
+                   discovered_at, source, stage_data, updated_at, user_tracked
             FROM tracked_drops WHERE collection_slug=?
         """, (collection_slug,)).fetchone()
     if not row:
@@ -424,7 +475,7 @@ def get_tracked_drop(drop_id: int) -> dict | None:
     with _lock, closing(_conn()) as c:
         row = c.execute("""
             SELECT id, collection_slug, name, contract_address, chain, mint_page_url,
-                   discovered_at, source, stage_data, updated_at
+                   discovered_at, source, stage_data, updated_at, user_tracked
             FROM tracked_drops WHERE id=?
         """, (drop_id,)).fetchone()
     if not row:
@@ -442,7 +493,7 @@ def get_tracked_drop_by_contract_address(contract_address: str) -> dict | None:
     with _lock, closing(_conn()) as c:
         row = c.execute("""
             SELECT id, collection_slug, name, contract_address, chain, mint_page_url,
-                   discovered_at, source, stage_data, updated_at
+                   discovered_at, source, stage_data, updated_at, user_tracked
             FROM tracked_drops WHERE LOWER(contract_address)=LOWER(?)
         """, (contract_address,)).fetchone()
     if not row:
@@ -455,7 +506,7 @@ def _tracked_drop_row_to_dict(row: tuple) -> dict:
         "id": row[0], "collection_slug": row[1], "name": row[2],
         "contract_address": row[3], "chain": row[4], "mint_page_url": row[5],
         "discovered_at": row[6], "source": row[7], "stage_data": row[8],
-        "updated_at": row[9],
+        "updated_at": row[9], "user_tracked": row[10],
     }
 
 

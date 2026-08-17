@@ -1839,25 +1839,19 @@ app.register_blueprint(opensea_automint_bp)
 from nft_insights.routes import nft_insights_bp
 app.register_blueprint(nft_insights_bp)
 
-# Background refresh: the public GET /api/opensea/drops route deliberately
-# never triggers a live scrape itself (that's admin-gated on the /refresh
-# route, to stop anonymous visitors from spamming real browser automation
-# against opensea.io). Something still has to populate the DB periodically —
-# this interval job is that "something". Immediate one-off thread on top so
-# the dashboard isn't empty for the first 15 minutes after a deploy.
+# Background refresh and on-chain discovery are intentionally NOT scheduled
+# here — the dashboard now only ever shows drops the owner explicitly
+# tracked themselves (store.get_active_user_tracked_drops), auto-expiring 14
+# days after being tracked. Both jobs used to auto-populate the tracked list
+# with whatever they found (bulk /drops scrape, on-chain SeaDrop discovery)
+# — that's exactly the noise this change turns off. The underlying
+# drops.get_drops(force_refresh=True) / drops.discover_new_seadrop_
+# collections() still exist in opensea_automint/drops.py if bulk discovery
+# is ever wanted again — only the scheduler wiring that called them is gone.
 try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BS3
-    from opensea_automint import drops as _opensea_drops
-
-    def _run_opensea_refresh():
-        try:
-            _opensea_drops.get_drops(force_refresh=True)
-        except Exception as e:
-            print(f"[opensea-automint] background refresh failed: {e}")
 
     _opensea_scheduler = _BS3(timezone="UTC")
-    _opensea_scheduler.add_job(_run_opensea_refresh, "interval", minutes=15,
-                                id="opensea_automint_refresh", replace_existing=True)
 
     # The firing watcher — checks every armed request against the real
     # on-chain public-mint window. Actual firing precision comes from a
@@ -1882,32 +1876,14 @@ try:
                                 id="opensea_automint_firing", replace_existing=True,
                                 max_instances=1, coalesce=True)
 
-    # On-chain discovery: OpenSea's own /drops listing page only ever shows
-    # a curated/featured subset — plenty of real, imminent SeaDrop mints
-    # never appear there at all. This polls SeaDrop's PublicDropUpdated
-    # event directly (the real source of truth for which collections are
-    # using it) so a new drop gets tracked automatically, without needing
-    # to already know its slug. 3 minutes keeps each poll's block range
-    # small — verified live that this RPC's eth_getLogs support degrades
-    # unpredictably on larger ranges (see ethClient.ts's
-    # GET_LOGS_CHUNK_BLOCKS comment).
-    def _run_opensea_seadrop_discovery():
-        try:
-            count = _opensea_drops.discover_new_seadrop_collections()
-            if count:
-                print(f"[opensea-automint] on-chain discovery: {count} new collection(s) tracked")
-        except Exception as e:
-            print(f"[opensea-automint] on-chain discovery failed: {e}")
-
-    _opensea_scheduler.add_job(_run_opensea_seadrop_discovery, "interval", minutes=3,
-                                id="opensea_automint_seadrop_discovery", replace_existing=True)
+    # Bulk /drops scrape and on-chain SeaDrop discovery (PublicDropUpdated
+    # polling) are intentionally not scheduled here — see the comment above
+    # this try block.
 
     _opensea_scheduler.start()
-    threading.Thread(target=_run_opensea_refresh, daemon=True).start()
-    threading.Thread(target=_run_opensea_seadrop_discovery, daemon=True).start()
-    print("[opensea-automint] APScheduler started — drop refresh every 15 min, on-chain discovery every 3 min, firing watcher every 5s (+ countdown threads near go-live)")
+    print("[opensea-automint] APScheduler started — firing watcher every 5s (+ countdown threads near go-live); drop discovery disabled, tracked list is manual-only")
 except ImportError:
-    print("[opensea-automint] APScheduler not installed — drops will only refresh via admin endpoint, firing watcher will not run")
+    print("[opensea-automint] APScheduler not installed — firing watcher will not run")
 
 # ── NFT MARKET INTELLIGENCE — HISTORICAL SNAPSHOTS ────────────────────
 # get_scan() already records a "free" snapshot on every cache miss, but
